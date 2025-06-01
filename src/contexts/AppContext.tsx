@@ -53,12 +53,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loadingAuth, setLoadingAuth] = useState(true);
   
   const [stores, setStores] = useState<Store[]>(initialStoresSeedData);
-  const [loadingStores, setLoadingStores] = useState(true); // Start as true
+  const [loadingStores, setLoadingStores] = useState(true); 
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  // Initialize selectedStore to null for SSR compatibility.
-  // It will be populated by the useEffect hook on the client.
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
@@ -72,84 +70,82 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const storesSnapshot = await getDocs(storesColCheck);
         const productsSnapshot = await getDocs(productsColCheck);
         if (storesSnapshot.empty || productsSnapshot.empty) {
+          console.log("Attempting to seed initial data as collections seem empty or partially empty...");
           await seedInitialData();
+        } else {
+          console.log("Stores and Products collections are not empty. Skipping seed.");
         }
       }
     };
-    doSeed();
+    doSeed().catch(err => console.error("Error during initial data seed:", err));
   }, []);
 
-  // Fetch stores from Firestore and determine initial selected store (client-side)
   useEffect(() => {
-    setLoadingStores(true); // Ensure loading state is true when this effect starts
+    setLoadingStores(true); 
     const storesCol = collection(db, 'stores');
     const unsubscribe = onSnapshot(storesCol, (snapshot) => {
-      let currentStoresList = initialStoresSeedData; // Start with seed as fallback
+      let currentStoresList = initialStoresSeedData; 
 
       if (!snapshot.empty) {
         const firestoreStores = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Store));
         if (firestoreStores.length > 0) {
           currentStoresList = firestoreStores;
-          setStores(firestoreStores); // Update state with Firestore stores
+          setStores(firestoreStores); 
         }
       } else if (snapshot.empty && !snapshot.metadata.hasPendingWrites) {
-        // Firestore is confirmed empty, ensure stores state is the seed data
         setStores(initialStoresSeedData);
       }
-      // If snapshot is empty but hasPendingWrites, it might be seeding, currentStoresList (seed data) will be used for now.
-
-      // ---- Client-side only logic for selected store, AFTER stores list is determined ----
-      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-      let storeToSelectFinally: Store | null = null;
-
-      if (savedStoreId) {
-        storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
-      }
       
-      setSelectedStoreState(storeToSelectFinally); // Set selected store (could be null)
+      if (typeof window !== 'undefined') { // Ensure localStorage is accessed only on client
+        const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+        let storeToSelectFinally: Store | null = null;
 
-      if (!storeToSelectFinally && currentStoresList.length > 0) {
-        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        setStoreSelectorOpen(true); // Prompt user to select
-      } else if (!storeToSelectFinally && currentStoresList.length === 0) {
-        setStores([]); 
-        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        setStoreSelectorOpen(true); 
-      } else if (storeToSelectFinally) {
-        setStoreSelectorOpen(false);
+        if (savedStoreId) {
+          storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
+        }
+        
+        setSelectedStoreState(storeToSelectFinally); 
+
+        if (!storeToSelectFinally && currentStoresList.length > 0) {
+          localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+          setStoreSelectorOpen(true); 
+        } else if (!storeToSelectFinally && currentStoresList.length === 0) {
+          setStores([]); 
+          localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+          setStoreSelectorOpen(true); 
+        } else if (storeToSelectFinally) {
+          setStoreSelectorOpen(false);
+        }
       }
-      // ---- End client-side only logic ----
-
-      setLoadingStores(false); // Stores are loaded (or fallback determined)
+      setLoadingStores(false); 
     }, (error) => {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
       
-      // On error, attempt to use localStorage with initial seed data
-      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-      let storeToSelectOnError: Store | null = null;
-      if (savedStoreId) {
-          storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
+      if (typeof window !== 'undefined') {
+        const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+        let storeToSelectOnError: Store | null = null;
+        if (savedStoreId) {
+            storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
+        }
+        setSelectedStoreState(storeToSelectOnError); 
       }
+      setStores(initialStoresSeedData); 
       
-      setSelectedStoreState(storeToSelectOnError); // May be null
-      setStores(initialStoresSeedData); // Fallback to seed data for the stores list
-      
-      if (!storeToSelectOnError && initialStoresSeedData.length > 0) {
+      if (typeof window !== 'undefined' && !selectedStore && initialStoresSeedData.length > 0) {
           setStoreSelectorOpen(true);
-      } else if (storeToSelectOnError) {
+      } else if (typeof window !== 'undefined' && selectedStore) {
           setStoreSelectorOpen(false);
-      } else { 
+      } else if (typeof window !== 'undefined') { 
           setStoreSelectorOpen(true);
       }
       setLoadingStores(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, []); // Removed selectedStore from deps to avoid re-runs that might interfere with dialog
 
 
-  // Fetch all products from Firestore
   useEffect(() => {
     setLoadingProducts(true);
     const productsCol = collection(db, 'products');
@@ -168,81 +164,111 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
     const userRef = doc(db, "users", firebaseUser.uid);
-    const userSnap = await getDoc(userRef);
-    const isInitialAdmin = firebaseUser.email === ADMIN_EMAIL;
+    let userSnap;
+    try {
+        userSnap = await getDoc(userRef);
+    } catch (error) {
+        console.error(`Error fetching user profile for ${firebaseUser.uid}:`, error);
+        toast({ title: "Profile Error", description: "Could not load user profile.", variant: "destructive" });
+        return null;
+    }
+
+    const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
+    let finalIsAdminValue = false;
+    const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
 
     if (!userSnap.exists()) {
-      const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
+      console.log(`[AuthContext] Creating new user profile for ${firebaseUser.email}. Email matches ADMIN_EMAIL: ${isTheAdminEmail}`);
+      finalIsAdminValue = isTheAdminEmail;
       try {
         await setDoc(userRef, {
           email: firebaseUser.email,
           name: displayName,
           points: 0,
-          isAdmin: isInitialAdmin, 
+          isAdmin: finalIsAdminValue,
           createdAt: new Date().toISOString(),
         });
-        if (name && firebaseUser.displayName !== name) {
-            await updateProfile(firebaseUser, { displayName: name });
+        console.log(`[AuthContext] New user profile CREATED for ${firebaseUser.email} with isAdmin: ${finalIsAdminValue}`);
+        if (firebaseUser.displayName !== displayName) {
+            await updateProfile(firebaseUser, { displayName: displayName });
         }
-        return {
-          id: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: displayName,
-          points: 0,
-          avatarUrl: firebaseUser.photoURL || undefined,
-          isAdmin: isInitialAdmin,
-        };
       } catch (error) {
-        console.error("Error creating user profile in Firestore: ", error);
-        return null;
+        console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}:`, error);
+        toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
+        return null; // Critical error, profile not saved
       }
     } else {
-      const existingData = userSnap.data() as User; 
-      let userProfileData: User = { 
-          ...existingData, 
-          id: firebaseUser.uid, 
-          email: firebaseUser.email || existingData.email, 
-          name: firebaseUser.displayName || existingData.name, 
-          avatarUrl: firebaseUser.photoURL || existingData.avatarUrl,
-          isAdmin: existingData.isAdmin 
-      };
+      const existingData = userSnap.data() as User;
+      finalIsAdminValue = existingData.isAdmin || false; // Use existing value, default to false if undefined
+      console.log(`[AuthContext] Existing user profile found for ${firebaseUser.email}. Current DB isAdmin: ${existingData.isAdmin}. Email matches ADMIN_EMAIL: ${isTheAdminEmail}`);
 
-      if (isInitialAdmin && !existingData.isAdmin) {
+      if (isTheAdminEmail && !existingData.isAdmin) {
+        console.warn(`[AuthContext] Admin email ${firebaseUser.email} logged in, but Firestore isAdmin is ${existingData.isAdmin}. Attempting to correct.`);
         try {
           await updateDoc(userRef, { isAdmin: true });
-          userProfileData.isAdmin = true; 
-        } catch (error) {
-          console.error("Error updating admin status: ", error);
+          finalIsAdminValue = true; // Update local value after successful DB update
+          console.log(`[AuthContext] Successfully UPDATED isAdmin to true for ${firebaseUser.email} in Firestore.`);
+        } catch (error: any) {
+          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}`);
+          console.error("[AuthContext] This usually means security rules are preventing self-elevation of admin status OR a general Firestore error. The user will NOT have admin privileges from this session if update failed, local isAdmin will reflect DB state.");
+          // Keep finalIsAdminValue reflecting the (failed to update) database state.
+          finalIsAdminValue = existingData.isAdmin || false; // Re-affirm based on DB as update failed
+          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database.", variant: "destructive" });
         }
       }
-      return userProfileData;
+       // Ensure local displayName is consistent with Firebase Auth profile if available
+      if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
+        try {
+            await updateDoc(userRef, { name: firebaseUser.displayName });
+             console.log(`[AuthContext] Updated Firestore name for ${firebaseUser.email} to match Auth profile.`);
+        } catch (error) {
+            console.error(`[AuthContext] Failed to update Firestore name for ${firebaseUser.email}:`, error);
+        }
+      }
     }
+    
+    const profileToReturn: User = {
+      id: firebaseUser.uid,
+      email: firebaseUser.email || '',
+      name: displayName, // Use a consistent displayName
+      points: userSnap.exists() ? (userSnap.data() as User).points : 0,
+      avatarUrl: firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
+      isAdmin: finalIsAdminValue,
+    };
+    console.log(`[AuthContext] Final user profile data for ${firebaseUser.email}: `, profileToReturn);
+    return profileToReturn;
   };
+
 
   useEffect(() => {
     setLoadingAuth(true);
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
+          console.log("[AuthContext] onAuthStateChanged: User is LOGGED IN", firebaseUser.email);
           const userProfile = await createUserProfile(firebaseUser, firebaseUser.displayName || undefined);
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
+             console.log("[AuthContext] User profile processed. isAdmin:", userProfile.isAdmin);
           } else {
+            console.warn("[AuthContext] onAuthStateChanged: User profile could not be created/fetched. Logging out.");
             setUser(null);
             setIsAuthenticated(false);
             await firebaseSignOut(auth); 
           }
         } else {
+          console.log("[AuthContext] onAuthStateChanged: User is LOGGED OUT");
           setUser(null);
           setIsAuthenticated(false);
         }
       } catch (error) {
-        console.error("Error during auth state change or profile handling:", error);
+        console.error("[AuthContext] Error during auth state change or profile handling:", error);
         setUser(null);
         setIsAuthenticated(false);
       } finally {
         setLoadingAuth(false);
+         console.log("[AuthContext] onAuthStateChanged: loadingAuth set to false");
       }
     });
     return () => unsubscribe();
@@ -250,7 +276,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    if (selectedStore) {
+    if (typeof window !== 'undefined' && selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       const storedCart = localStorage.getItem(cartKey);
       if (storedCart) {
@@ -263,16 +289,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCart([]);
       }
-    } else {
+    } else if (typeof window !== 'undefined' && !selectedStore) {
        setCart([]);
     }
   }, [selectedStore]);
 
   useEffect(() => {
-    if (selectedStore && cart.length > 0) { 
+    if (typeof window !== 'undefined' && selectedStore && cart.length > 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.setItem(cartKey, JSON.stringify(cart));
-    } else if (selectedStore && cart.length === 0) { 
+    } else if (typeof window !== 'undefined' && selectedStore && cart.length === 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.removeItem(cartKey);
     }
@@ -287,19 +313,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
-        localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
+        if (typeof window !== 'undefined') localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
         setStoreSelectorOpen(false);
       }
     } else {
       setSelectedStoreState(null);
-      localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+      if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
       setCart([]);
       setStoreSelectorOpen(true);
     }
   }, [stores, selectedStore]); 
 
   const login = useCallback(async (email: string, pass: string) => {
-    setLoadingAuth(true);
+    setLoadingAuth(true); // Keep this to manage login button state if needed
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       toast({ title: "Login Successful", description: "Welcome back!" });
@@ -307,17 +333,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
+      setLoadingAuth(false); // Explicitly set loading false on error for login page
       return false; 
-    } finally {
-       // setLoadingAuth(false); // Handled by onAuthStateChanged
-    }
+    } 
+    // setLoadingAuth(false) will be handled by onAuthStateChanged on success
   }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
-    setLoadingAuth(true);
+    setLoadingAuth(true); // Keep this
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      if (name) {
+      // User profile creation (including isAdmin) is now handled by onAuthStateChanged calling createUserProfile
+      if (name && userCredential.user.displayName !== name) { // Update Firebase Auth profile name if provided
         await updateProfile(userCredential.user, { displayName: name });
       }
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
@@ -333,18 +360,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
+      setLoadingAuth(false); // Explicitly set loading false on error for register page
       return false;
-    } finally {
-      // setLoadingAuth(false); // Handled by onAuthStateChanged
     }
+     // setLoadingAuth(false) will be handled by onAuthStateChanged on success
   }, []);
 
   const logout = useCallback(async () => {
-    setLoadingAuth(true);
+    // setLoadingAuth(true) will be handled by onAuthStateChanged
     try {
       await firebaseSignOut(auth);
       setCart([]); 
-      if (selectedStore) {
+      if (typeof window !== 'undefined' && selectedStore) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
@@ -353,9 +380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Firebase logout error:", error);
       toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
-    } finally {
-      // setLoadingAuth(false) handled by onAuthStateChanged
-    }
+    } 
   }, [router, selectedStore]);
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
@@ -460,3 +485,5 @@ export function useAppContext() {
   }
   return context;
 }
+
+    
