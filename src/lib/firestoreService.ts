@@ -101,6 +101,7 @@ export async function deleteStore(storeId: string): Promise<void> {
   console.log('--- Server Action: deleteStore ---');
   if (auth.currentUser) {
     console.log('[firestoreService][deleteStore] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+    console.log('[firestoreService][deleteStore] Server Action auth.currentUser.email:', auth.currentUser.email);
   } else {
     console.log('[firestoreService][deleteStore] Server Action auth.currentUser is NULL.');
   }
@@ -124,33 +125,62 @@ export async function getProductsByStore(storeId: string): Promise<Product[]> {
 }
 
 export async function addProduct(productData: Omit<Product, 'id'>): Promise<string> {
-  console.log('[firestoreService] addProduct called with data:', productData);
+  console.log('--- Server Action: addProduct ---');
+  if (auth.currentUser) {
+    console.log('[firestoreService][addProduct] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+  } else {
+    console.log('[firestoreService][addProduct] Server Action auth.currentUser is NULL.');
+  }
+  console.log('[firestoreService][addProduct] Called with data:', productData);
   const productsCol = collection(db, 'products');
   const docRef = await addDoc(productsCol, productData);
   return docRef.id;
 }
 
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<void> {
-  console.log('[firestoreService] updateProduct called with id and data:', productId, productData);
+  console.log('--- Server Action: updateProduct ---');
+  if (auth.currentUser) {
+    console.log('[firestoreService][updateProduct] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+  } else {
+    console.log('[firestoreService][updateProduct] Server Action auth.currentUser is NULL.');
+  }
+  console.log('[firestoreService][updateProduct] Called with id and data:', productId, productData);
   const productRef = doc(db, 'products', productId);
   await updateDoc(productRef, productData);
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
-  console.log('[firestoreService] deleteProduct called with id:', productId);
+  console.log('--- Server Action: deleteProduct ---');
+  if (auth.currentUser) {
+    console.log('[firestoreService][deleteProduct] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+  } else {
+    console.log('[firestoreService][deleteProduct] Server Action auth.currentUser is NULL.');
+  }
+  console.log('[firestoreService][deleteProduct] Called with id:', productId);
   const productRef = doc(db, 'products', productId);
   await deleteDoc(productRef);
 }
 
 export async function getAllUsers(): Promise<User[]> {
-    console.log('[firestoreService] getAllUsers called');
+    console.log('--- Server Action: getAllUsers ---');
+    if (auth.currentUser) {
+      console.log('[firestoreService][getAllUsers] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+    } else {
+      console.log('[firestoreService][getAllUsers] Server Action auth.currentUser is NULL.');
+    }
     const usersCol = collection(db, 'users');
     const snapshot = await getDocs(usersCol);
     return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as User));
 }
 
 export async function updateUserAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
-    console.log('[firestoreService] updateUserAdminStatus called for userId:', userId, 'isAdmin:', isAdmin);
+    console.log('--- Server Action: updateUserAdminStatus ---');
+    if (auth.currentUser) {
+      console.log('[firestoreService][updateUserAdminStatus] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+    } else {
+      console.log('[firestoreService][updateUserAdminStatus] Server Action auth.currentUser is NULL.');
+    }
+    console.log('[firestoreService][updateUserAdminStatus] Called for userId:', userId, 'isAdmin:', isAdmin);
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { isAdmin });
 }
