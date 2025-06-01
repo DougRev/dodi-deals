@@ -5,13 +5,19 @@ import type { App } from 'firebase-admin/app';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Auth as AdminAuth } from 'firebase-admin/auth';
 
-let adminAppInstance: App | null = null;
-let adminDbInstance: Firestore | null = null;
-let adminAuthInstance: AdminAuth | null = null;
+interface FirebaseAdminSDKs {
+  db: Firestore;
+  auth: AdminAuth;
+  adminNamespace: typeof admin;
+}
 
-function initializeFirebaseAdmin() {
-  console.log('[firebaseAdmin] Initializing Firebase Admin SDK...');
-  let credentialsTypeUsed = "None"; // To track which method was attempted
+let adminSDKsInternal: FirebaseAdminSDKs | null = null;
+let adminInitializationErrorInternal: Error | null = null;
+
+function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
+  console.log('[firebaseAdmin] Attempting to initialize Firebase Admin SDK...');
+  let adminAppInstance: App;
+  let credentialsTypeUsed = "None";
 
   // Log all relevant environment variables at the start for diagnostics
   console.log('[firebaseAdmin] Environment Variable Check for Admin SDK Initialization:');
@@ -23,7 +29,6 @@ function initializeFirebaseAdmin() {
   console.log(`  - FUNCTIONS_EMULATOR: ${process.env.FUNCTIONS_EMULATOR || 'Not set'}`);
   console.log(`  - K_SERVICE (Cloud Run): ${process.env.K_SERVICE || 'Not set'}`);
   console.log(`  - GOOGLE_CLOUD_PROJECT (GCP Default): ${process.env.GOOGLE_CLOUD_PROJECT || 'Not set'}`);
-
 
   if (admin.apps.length > 0) {
     adminAppInstance = admin.apps[0]!;
@@ -52,9 +57,8 @@ function initializeFirebaseAdmin() {
       } else if (isFirebaseOrGCPlikeEnvironment) {
         credentialsTypeUsed = "Default GCP/Firebase Environment Credentials";
         console.log(`[firebaseAdmin] Attempting initialization with ${credentialsTypeUsed} (detected via FIREBASE_CONFIG, FUNCTIONS_EMULATOR, K_SERVICE, or GOOGLE_CLOUD_PROJECT).`);
-        admin.initializeApp(); // For Firebase Hosting (Next.js SSR), Cloud Functions, Cloud Run etc.
+        admin.initializeApp();
       } else {
-        // This block is reached if NONE of the above conditions for attempting initialization are met.
         const noMethodAttemptedErrorMsg = `[firebaseAdmin] CRITICAL FAILURE: No Firebase Admin SDK initialization method was attempted.
         None of the expected credential environment variables or indicators were found. Review the 'Environment Variable Check' logs above.
         Common Fixes:
@@ -65,13 +69,10 @@ function initializeFirebaseAdmin() {
         throw new Error(`Firebase Admin SDK failed to initialize: No credential detection method was triggered. Check server logs for environment variable status and setup guides.`);
       }
 
-      // Check if initialization was successful by seeing if an app now exists
       if (admin.apps.length > 0) {
         adminAppInstance = admin.apps[0]!;
         console.log(`[firebaseAdmin] Firebase Admin SDK initialized successfully using ${credentialsTypeUsed}.`);
       } else {
-        // This should ideally not be reached if initializeApp() throws on failure,
-        // but as a safeguard if it somehow failed silently or a condition was missed.
         const postAttemptFailureMsg = `[firebaseAdmin] CRITICAL FAILURE: Firebase Admin SDK initialization was attempted with '${credentialsTypeUsed}', but no app instance was created. This usually means the specific initialization call itself failed internally. Check for previous errors from Firebase Admin SDK libraries.`;
         console.error(postAttemptFailureMsg);
         throw new Error(`Firebase Admin SDK failed after attempting initialization with ${credentialsTypeUsed}. Check server logs for underlying Firebase errors.`);
@@ -82,12 +83,10 @@ function initializeFirebaseAdmin() {
         if (admin.apps.length > 0) {
           adminAppInstance = admin.apps[0]!;
         } else {
-          // This state is highly unlikely but indicates a serious inconsistency.
           console.error('[firebaseAdmin] Firebase Admin SDK: Caught duplicate-app error, but admin.apps array is empty. This is unexpected.');
           throw new Error('Firebase Admin SDK initialization error: Inconsistent state after duplicate-app error (no app found).');
         }
       } else {
-        // Log the specific error that occurred during initializeApp
         console.error(`[firebaseAdmin] Error during Firebase Admin SDK initializeApp call (attempted with ${credentialsTypeUsed}):`, error);
         throw new Error(`Firebase Admin SDK initialization failed (using ${credentialsTypeUsed}): ${error.message || 'Unknown error during initializeApp'}. Check server logs.`);
       }
@@ -95,30 +94,26 @@ function initializeFirebaseAdmin() {
   }
 
   if (!adminAppInstance) {
-    // This should ideally be caught by the throws within the try-catch block,
-    // but serves as a final safeguard.
-    const finalErrorMsg = '[firebaseAdmin] CRITICAL: Firebase Admin SDK app instance (adminAppInstance) is null after all initialization attempts. This indicates a fundamental failure in the initialization process. Firestore and Auth services will not be available.';
+    const finalErrorMsg = `[firebaseAdmin] CRITICAL: Firebase Admin SDK app instance (adminAppInstance) is null after all initialization attempts. This indicates a fundamental failure in the initialization process. Firestore and Auth services will not be available. Review the 'Environment Variable Check' logs.`;
     console.error(finalErrorMsg);
     throw new Error(finalErrorMsg);
   }
 
-  // Initialize Firestore and Auth services only if the app instance is valid
-  adminDbInstance = admin.firestore(adminAppInstance);
-  adminAuthInstance = admin.auth(adminAppInstance);
+  return {
+    db: admin.firestore(adminAppInstance),
+    auth: admin.auth(adminAppInstance),
+    adminNamespace: admin,
+  };
 }
 
-// Eagerly initialize when the module is first imported.
 try {
-  initializeFirebaseAdmin();
-} catch (e: any) {
-  console.error("[firebaseAdmin] FATAL: Unrecoverable error during the initial call to initializeFirebaseAdmin(). The application's admin capabilities (server-side Firestore operations) will likely not function.", e.message);
-  // The error thrown from initializeFirebaseAdmin will propagate and should be visible in Next.js error overlays.
-  // No need to re-throw 'e' here if the goal is just to log, as the original throw from initializeFirebaseAdmin should halt.
+  adminSDKsInternal = initializeAndGetAdminSDKs();
+} catch (e) {
+  adminInitializationErrorInternal = e as Error;
+  console.error(`[firebaseAdmin] Captured FATAL INITIALIZATION ERROR: ${adminInitializationErrorInternal.message}. Firestore and Auth services via Admin SDK will be unavailable.`);
 }
 
-// Export the initialized instances.
-// If initializeFirebaseAdmin() threw an error, these exports might be of null if accessed directly
-// before the error halts execution. The `!` asserts they are non-null, relying on the throw to prevent use if null.
-export const adminDb = adminDbInstance!;
-export const adminAuth = adminAuthInstance!;
-export { admin }; // Export the admin namespace
+export const adminDb: Firestore | undefined = adminSDKsInternal?.db;
+export const adminAuth: AdminAuth | undefined = adminSDKsInternal?.auth;
+export const adminSDK: typeof admin | undefined = adminSDKsInternal?.adminNamespace; // Renamed to avoid conflict with 'admin' import
+export const adminInitializationError: Error | null = adminInitializationErrorInternal;
