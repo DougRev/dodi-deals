@@ -52,19 +52,16 @@ export async function getStores(): Promise<Store[]> {
 
 export async function addStore(storeData: StoreFormData): Promise<string> {
   console.log('[firestoreService] addStore called with data:', JSON.stringify(storeData));
-  // Note: auth.currentUser is not directly available in server actions in the same way as client-side.
-  // The authentication is part of the request context that Firestore rules will use.
-
   const storesCol = collection(db, 'stores');
 
-  // Temporarily removing duplicate name check to isolate addDoc permission issue.
-  // const q = query(storesCol, where("name", "==", storeData.name));
-  // const querySnapshot = await getDocs(q);
-  // if (!querySnapshot.empty) {
-  //   const errorMsg = `Store with name "${storeData.name}" already exists.`;
-  //   console.error(`[firestoreService] ${errorMsg}`);
-  //   throw new Error(errorMsg);
-  // }
+  // Check for duplicate store name before adding
+  const q = query(storesCol, where("name", "==", storeData.name));
+  const querySnapshot = await getDocs(q);
+  if (!querySnapshot.empty) {
+    const errorMsg = `Store with name "${storeData.name}" already exists.`;
+    console.error(`[firestoreService] ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
 
   try {
     console.log('[firestoreService] Attempting to add document to stores collection...');
@@ -73,7 +70,7 @@ export async function addStore(storeData: StoreFormData): Promise<string> {
     return docRef.id;
   } catch (error) {
     console.error('[firestoreService] Error during addDoc operation:', error);
-    throw error; 
+    throw error;
   }
 }
 
