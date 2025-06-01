@@ -35,6 +35,7 @@ export interface User {
   email: string; // Firebase email
   points: number; // From Firestore
   avatarUrl?: string; // Optional: URL for user's avatar from Firebase Storage/Firestore
+  isAdmin: boolean; // True if the user is an administrator
 }
 
 export interface CartItem {

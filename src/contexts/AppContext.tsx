@@ -5,106 +5,234 @@ import type React from 'react';
 import { createContext, useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from "@/hooks/use-toast";
-import { auth } from '@/lib/firebase'; // Import Firebase auth
-import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase'; // Import db
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore'; // Firestore imports
 
 import type { Product, User, CartItem, Store, Deal } from '@/lib/types';
-import { initialProducts as allInitialProducts } from '@/data/products';
-import { initialStores } from '@/data/stores';
-import { dailyDeals as allInitialDeals } from '@/data/deals';
+import { initialProducts as allInitialProductsSeed } from '@/data/products';
+import { initialStores as initialStoresSeed } from '@/data/stores';
+import { dailyDeals as allInitialDealsSeed } from '@/data/deals';
+import { seedInitialData } from '@/lib/firestoreService';
+
 
 interface AppContextType {
   isAuthenticated: boolean;
   user: User | null;
   login: (email: string, pass: string) => Promise<boolean>;
-  register: (email: string, pass: string) => Promise<boolean>;
+  register: (email: string, pass: string, name?: string) => Promise<boolean>;
   logout: () => void;
   cart: CartItem[];
   addToCart: (product: Product, quantity?: number) => void;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  products: Product[];
-  deals: Deal[];
+  products: Product[]; // Products for selected store
+  allProducts: Product[]; // All products from all stores (from Firestore)
+  deals: Deal[]; // Deals for selected store
   getCartTotal: () => number;
   stores: Store[];
   selectedStore: Store | null;
   selectStore: (storeId: string | null) => void;
   isStoreSelectorOpen: boolean;
   setStoreSelectorOpen: (isOpen: boolean) => void;
-  loadingAuth: boolean; // To indicate auth state is being determined
+  loadingAuth: boolean;
+  loadingStores: boolean;
+  loadingProducts: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const DODI_CART_KEY_PREFIX = 'dodiCart_';
 const DODI_SELECTED_STORE_KEY = 'dodiSelectedStoreId';
+const ADMIN_EMAIL = 'admin@test.com';
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [loadingAuth, setLoadingAuth] = useState(true); 
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loadingStores, setLoadingStores] = useState(true);
+  const [allProducts, setAllProducts] = useState<Product[]>([]); // All products from Firestore
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
-  const [stores] = useState<Store[]>(initialStores);
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
   const router = useRouter();
 
+  // Seed initial data if Firestore is empty
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        setIsAuthenticated(true);
-        setUser({
-          id: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User',
-          points: 0, 
-          avatarUrl: firebaseUser.photoURL || undefined,
-        });
+    const seed = async () => {
+      await seedInitialData(db);
+    };
+    seed();
+  }, []);
+
+  // Fetch stores from Firestore
+  useEffect(() => {
+    setLoadingStores(true);
+    const storesCol = collection(db, 'stores');
+    const unsubscribe = onSnapshot(storesCol, (snapshot) => {
+      const fetchedStores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Store));
+      setStores(fetchedStores);
+      setLoadingStores(false);
+
+      // After stores are loaded, determine initial selected store
+      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      if (savedStoreId) {
+        const store = fetchedStores.find(s => s.id === savedStoreId);
+        if (store) {
+          setSelectedStoreState(store);
+        } else {
+          if (fetchedStores.length > 0) {
+             // setSelectedStoreState(fetchedStores[0]); // Default to first store if saved one not found
+             // localStorage.setItem(DODI_SELECTED_STORE_KEY, fetchedStores[0].id);
+             setStoreSelectorOpen(true); // Or prompt user to select
+          } else {
+            setStoreSelectorOpen(true); // No stores, prompt user
+          }
+        }
       } else {
-        setIsAuthenticated(false);
-        setUser(null);
+         if (fetchedStores.length > 0) {
+            // setSelectedStoreState(fetchedStores[0]); // Default to first store
+            // localStorage.setItem(DODI_SELECTED_STORE_KEY, fetchedStores[0].id);
+            setStoreSelectorOpen(true);
+         } else {
+            setStoreSelectorOpen(true); // No stores, prompt to select (though none exist yet)
+         }
       }
-      setLoadingAuth(false); 
+    }, (error) => {
+      console.error("Error fetching stores: ", error);
+      toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
+      setLoadingStores(false);
     });
     return () => unsubscribe();
   }, []);
 
+  // Fetch all products from Firestore
   useEffect(() => {
-    const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-    if (savedStoreId) {
-      const store = stores.find(s => s.id === savedStoreId);
-      if (store) {
-        setSelectedStoreState(store);
-      } else {
-        setStoreSelectorOpen(true);
+    setLoadingProducts(true);
+    const productsCol = collection(db, 'products');
+    const unsubscribe = onSnapshot(productsCol, (snapshot) => {
+      const fetchedProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+      setAllProducts(fetchedProducts);
+      setLoadingProducts(false);
+    }, (error) => {
+      console.error("Error fetching products: ", error);
+      toast({ title: "Error", description: "Could not load product information.", variant: "destructive" });
+      setLoadingProducts(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+
+  const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
+    const userRef = doc(db, "users", firebaseUser.uid);
+    const userSnap = await getDoc(userRef);
+    const isInitialAdmin = firebaseUser.email === ADMIN_EMAIL;
+
+    if (!userSnap.exists()) {
+      const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
+      try {
+        await setDoc(userRef, {
+          email: firebaseUser.email,
+          name: displayName,
+          points: 0,
+          isAdmin: isInitialAdmin, // Set admin status
+          createdAt: new Date().toISOString(),
+        });
+        if (name && firebaseUser.displayName !== name) {
+            await updateProfile(firebaseUser, { displayName: name });
+        }
+        return {
+          id: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          name: displayName,
+          points: 0,
+          avatarUrl: firebaseUser.photoURL || undefined,
+          isAdmin: isInitialAdmin,
+        };
+      } catch (error) {
+        console.error("Error creating user profile in Firestore: ", error);
+        return null;
       }
     } else {
-      setStoreSelectorOpen(true);
+      // User profile exists, ensure admin status is correct for ADMIN_EMAIL
+      const existingData = userSnap.data() as User;
+      if (isInitialAdmin && !existingData.isAdmin) {
+        try {
+          await updateDoc(userRef, { isAdmin: true });
+          return { ...existingData, id: firebaseUser.uid, isAdmin: true };
+        } catch (error) {
+          console.error("Error updating admin status: ", error);
+          return { ...existingData, id: firebaseUser.uid }; // Return existing data if update fails
+        }
+      }
+      return { ...existingData, id: firebaseUser.uid };
     }
-  }, [stores]);
+  };
+
+  useEffect(() => {
+    setLoadingAuth(true);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      try {
+        if (firebaseUser) {
+          const userProfile = await createUserProfile(firebaseUser, firebaseUser.displayName || undefined);
+          if (userProfile) {
+            setUser(userProfile);
+            setIsAuthenticated(true);
+          } else {
+            // Handle case where profile creation/fetch failed
+            setUser(null);
+            setIsAuthenticated(false);
+            await firebaseSignOut(auth); // Log out if profile is inconsistent
+          }
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error("Error during auth state change or profile handling:", error);
+        setUser(null);
+        setIsAuthenticated(false);
+      } finally {
+        setLoadingAuth(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
 
   useEffect(() => {
     if (selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       const storedCart = localStorage.getItem(cartKey);
       if (storedCart) {
-        setCart(JSON.parse(storedCart));
+        try {
+          setCart(JSON.parse(storedCart));
+        } catch (e) {
+          setCart([]);
+          localStorage.removeItem(cartKey);
+        }
       } else {
         setCart([]);
       }
-      setStoreSelectorOpen(false);
+      // setStoreSelectorOpen(false); // Potentially closes dialog too early if stores are still loading
     } else {
        setCart([]);
     }
   }, [selectedStore]);
 
   useEffect(() => {
-    if (selectedStore) {
+    if (selectedStore && cart.length > 0) { // Only save if cart is not empty
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.setItem(cartKey, JSON.stringify(cart));
+    } else if (selectedStore && cart.length === 0) { // Remove if cart becomes empty
+      const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
+      localStorage.removeItem(cartKey);
     }
   }, [cart, selectedStore]);
   
@@ -113,7 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const store = stores.find(s => s.id === storeId);
       if (store) {
         if (selectedStore?.id !== store.id) {
-          setCart([]);
+          setCart([]); 
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
@@ -129,23 +257,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [stores, selectedStore]);
 
   const login = useCallback(async (email: string, pass: string) => {
+    setLoadingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
+      // onAuthStateChanged will handle setting user and isAuthenticated
       toast({ title: "Login Successful", description: "Welcome back!" });
       return true;
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
       return false;
+    } finally {
+       // setLoadingAuth(false); // onAuthStateChanged handles this
     }
   }, []);
 
-  const register = useCallback(async (email: string, pass: string) => {
+  const register = useCallback(async (email: string, pass: string, name?: string) => {
+    setLoadingAuth(true);
     try {
-      await createUserWithEmailAndPassword(auth, email, pass);
-      // `onAuthStateChanged` will handle setting the user and redirecting
-      // Optionally, you could set user display name here with `updateProfile`
-      // For now, it defaults to email prefix
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      // createUserProfile will be called by onAuthStateChanged
+      // If name is provided, update Firebase Auth profile display name
+      if (name) {
+        await updateProfile(userCredential.user, { displayName: name });
+      }
+      // The onAuthStateChanged listener will then call createUserProfile
+      // which handles Firestore document creation.
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -160,10 +297,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
       return false;
+    } finally {
+      // setLoadingAuth(false); // onAuthStateChanged handles this
     }
   }, []);
 
   const logout = useCallback(async () => {
+    setLoadingAuth(true);
     try {
       await firebaseSignOut(auth);
       setCart([]); 
@@ -171,11 +311,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
+      // User will be set to null by onAuthStateChanged
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/'); 
     } catch (error: any) {
       console.error("Firebase logout error:", error);
       toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
+    } finally {
+      // setLoadingAuth(false); // onAuthStateChanged handles this
     }
   }, [router, selectedStore]);
 
@@ -214,7 +357,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         item.product.id === productId
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
-      ).filter(item => item.quantity > 0)
+      ).filter(item => item.quantity > 0) // Remove if quantity becomes 0
     );
   }, []);
 
@@ -228,14 +371,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [cart]);
 
   const products = useMemo(() => {
-    if (!selectedStore) return [];
-    return allInitialProducts.filter(p => p.storeId === selectedStore.id);
-  }, [selectedStore]);
+    if (!selectedStore || loadingProducts) return [];
+    return allProducts.filter(p => p.storeId === selectedStore.id);
+  }, [selectedStore, allProducts, loadingProducts]);
 
   const deals = useMemo(() => {
-    if (!selectedStore) return [];
-    return allInitialDeals.filter(d => d.storeId === selectedStore.id);
-  }, [selectedStore]);
+    if (!selectedStore || loadingProducts) return []; // Deals depend on products
+    // Filter seed deals based on products available in the selected store
+    return allInitialDealsSeed.filter(d => {
+        const productExistsInStore = allProducts.some(p => p.id === d.product.id && p.storeId === selectedStore.id);
+        return productExistsInStore && d.storeId === selectedStore.id; // Ensure deal itself is for the store
+    });
+  }, [selectedStore, allProducts, loadingProducts]);
+
 
   const contextValue = useMemo(() => ({
     isAuthenticated,
@@ -249,6 +397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity,
     clearCart,
     products,
+    allProducts,
     deals,
     getCartTotal,
     stores,
@@ -257,10 +406,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isStoreSelectorOpen,
     setStoreSelectorOpen,
     loadingAuth,
+    loadingStores,
+    loadingProducts,
   }), [
     isAuthenticated, user, login, register, logout, cart, addToCart, removeFromCart, 
-    updateCartQuantity, clearCart, products, deals, getCartTotal, stores, 
-    selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, loadingAuth
+    updateCartQuantity, clearCart, products, allProducts, deals, getCartTotal, stores, 
+    selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
+    loadingAuth, loadingStores, loadingProducts
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
