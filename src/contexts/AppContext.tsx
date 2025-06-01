@@ -6,11 +6,9 @@ import { createContext, useState, useEffect, useMemo, useCallback, useContext } 
 import { useRouter } from 'next/navigation';
 import { toast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import Firebase auth
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 
 import type { Product, User, CartItem, Store, Deal } from '@/lib/types';
-// Remove mockUser import as Firebase will handle user state
-// import { mockUser as defaultMockUser } from '@/data/user'; 
 import { initialProducts as allInitialProducts } from '@/data/products';
 import { initialStores } from '@/data/stores';
 import { dailyDeals as allInitialDeals } from '@/data/deals';
@@ -19,6 +17,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   user: User | null;
   login: (email: string, pass: string) => Promise<boolean>;
+  register: (email: string, pass: string) => Promise<boolean>;
   logout: () => void;
   cart: CartItem[];
   addToCart: (product: Product, quantity?: number) => void;
@@ -38,7 +37,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Removed DODI_AUTH_KEY as Firebase handles auth persistence
 const DODI_CART_KEY_PREFIX = 'dodiCart_';
 const DODI_SELECTED_STORE_KEY = 'dodiSelectedStoreId';
 
@@ -46,7 +44,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [loadingAuth, setLoadingAuth] = useState(true); // Start loading auth state
+  const [loadingAuth, setLoadingAuth] = useState(true); 
 
   const [stores] = useState<Store[]>(initialStores);
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
@@ -54,28 +52,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const router = useRouter();
 
-  // Firebase Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         setIsAuthenticated(true);
-        // Create a basic User object. Name and points would ideally come from Firestore.
         setUser({
           id: firebaseUser.uid,
           email: firebaseUser.email || '',
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User', // Use email part or default
-          points: 0, // Placeholder: Points would come from Firestore
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User',
+          points: 0, 
+          avatarUrl: firebaseUser.photoURL || undefined,
         });
       } else {
         setIsAuthenticated(false);
         setUser(null);
       }
-      setLoadingAuth(false); // Auth state determined
+      setLoadingAuth(false); 
     });
-    return () => unsubscribe(); // Cleanup subscription
+    return () => unsubscribe();
   }, []);
 
-  // Load selected store from localStorage
   useEffect(() => {
     const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
     if (savedStoreId) {
@@ -90,7 +86,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [stores]);
 
-  // Load cart when selectedStore changes
   useEffect(() => {
     if (selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
@@ -106,7 +101,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [selectedStore]);
 
-  // Persist cart to localStorage
   useEffect(() => {
     if (selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
@@ -137,7 +131,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, pass: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      // onAuthStateChanged will handle setting user state
       toast({ title: "Login Successful", description: "Welcome back!" });
       return true;
     } catch (error: any) {
@@ -147,11 +140,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const register = useCallback(async (email: string, pass: string) => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, pass);
+      // `onAuthStateChanged` will handle setting the user and redirecting
+      // Optionally, you could set user display name here with `updateProfile`
+      // For now, it defaults to email prefix
+      toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
+      return true;
+    } catch (error: any) {
+      console.error("Firebase registration error:", error);
+      let errorMessage = "Could not create account. Please try again.";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "This email address is already in use.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "Password should be at least 6 characters.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
+      return false;
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await firebaseSignOut(auth);
-      // onAuthStateChanged will handle clearing user state
-      // Cart clearing logic remains the same
       setCart([]); 
       if (selectedStore) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
@@ -227,6 +241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated,
     user,
     login,
+    register,
     logout,
     cart,
     addToCart,
@@ -243,7 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setStoreSelectorOpen,
     loadingAuth,
   }), [
-    isAuthenticated, user, login, logout, cart, addToCart, removeFromCart, 
+    isAuthenticated, user, login, register, logout, cart, addToCart, removeFromCart, 
     updateCartQuantity, clearCart, products, deals, getCartTotal, stores, 
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, loadingAuth
   ]);

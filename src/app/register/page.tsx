@@ -3,20 +3,21 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppContext } from '@/hooks/useAppContext';
-import { LogIn, UserPlus } from 'lucide-react';
+import { UserPlus, LogIn } from 'lucide-react';
 
-export default function LoginPage() {
-  const { login, isAuthenticated, loadingAuth } = useAppContext(); 
+export default function RegisterPage() {
+  const { register, isAuthenticated, loadingAuth } = useAppContext();
   const router = useRouter();
-  const searchParams = useSearchParams(); 
-  const [email, setEmail] = useState('user@example.com'); 
-  const [password, setPassword] = useState('password'); 
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,24 +26,34 @@ export default function LoginPage() {
       const redirectUrl = searchParams.get('redirect') || '/profile';
       router.push(redirectUrl);
     }
-  }, [isAuthenticated, router, searchParams, loadingAuth]);
+  }, [isAuthenticated, router, loadingAuth, searchParams]);
 
-  if (loadingAuth || (!loadingAuth && isAuthenticated)) { 
-    return <div className="text-center py-10">Loading...</div>; 
+  if (loadingAuth || (!loadingAuth && isAuthenticated)) {
+    return <div className="text-center py-10">Loading...</div>;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password should be at least 6 characters long.');
+      return;
+    }
+
     setLoading(true);
-    const success = await login(email, password);
+    const success = await register(email, password);
     setLoading(false);
     if (success) {
-      // Redirect is handled by useEffect
-      // const redirectUrl = searchParams.get('redirect') || '/profile';
-      // router.push(redirectUrl);
+      // Redirect is handled by useEffect based on isAuthenticated state change
+      // router.push('/profile'); // No need to push here, useEffect will handle it
     } else {
-      // Error is handled by the context's toast
+      // Error messages are handled by the context's toast, local setError can be used for form-specific errors
+      // setError('Failed to create account. Please try again.'); // Context usually handles this
     }
   };
 
@@ -50,8 +61,8 @@ export default function LoginPage() {
     <div className="flex items-center justify-center py-12">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-headline text-primary">Welcome Back!</CardTitle>
-          <CardDescription>Log in to access your Dodi Deals account, points, and cart.</CardDescription>
+          <CardTitle className="text-3xl font-headline text-primary">Create Account</CardTitle>
+          <CardDescription>Join Dodi Deals to start earning points and enjoy exclusive deals.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -72,26 +83,38 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="•••••••• (min. 6 characters)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="focus:ring-accent"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="focus:ring-accent"
+              />
+            </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={loading}>
-              <LogIn className="mr-2 h-4 w-4" />
-              {loading ? 'Logging in...' : 'Log In'}
+              <UserPlus className="mr-2 h-4 w-4" />
+              {loading ? 'Creating Account...' : 'Create Account'}
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex flex-col items-center text-sm space-y-2">
+        <CardFooter className="text-center text-sm">
           <p className="text-muted-foreground">
-            Don't have an account?{' '}
+            Already have an account?{' '}
             <Button variant="link" asChild className="p-0 h-auto text-accent">
-              <Link href={`/register${searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}` : ''}`}>
-                 Register here
+              <Link href={`/login${searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}` : ''}`}>
+                Log In
               </Link>
             </Button>
           </p>
