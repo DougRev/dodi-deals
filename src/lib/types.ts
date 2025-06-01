@@ -1,4 +1,17 @@
 
+import { z } from 'zod';
+
+// Zod schema for store form validation
+export const StoreSchema = z.object({
+  name: z.string().min(3, { message: "Store name must be at least 3 characters." }),
+  address: z.string().min(5, { message: "Address must be at least 5 characters." }),
+  city: z.string().min(2, { message: "City must be at least 2 characters." }),
+  hours: z.string().min(5, { message: "Operating hours must be specified." }),
+});
+
+// Type inferred from the Zod schema for form data
+export type StoreFormData = z.infer<typeof StoreSchema>;
+
 export interface Store {
   id: string;
   name: string;
@@ -15,18 +28,18 @@ export interface Product {
   imageUrl: string;
   category: 'Vape' | 'THCa' | 'Accessory';
   stock: number;
-  storeId: string; 
+  storeId: string;
   dataAiHint?: string;
 }
 
 export interface Deal {
   id: string;
-  product: Product; 
+  product: Product;
   dealPrice: number;
-  expiresAt: string; 
+  expiresAt: string;
   title: string;
   description?: string;
-  storeId: string; 
+  storeId: string;
 }
 
 export interface User {
