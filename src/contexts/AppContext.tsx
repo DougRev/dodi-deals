@@ -5,13 +5,12 @@ import type React from 'react';
 import { createContext, useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from "@/hooks/use-toast";
-import { auth, db } from '@/lib/firebase'; // Import db
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore'; // Firestore imports
+import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
 import type { Product, User, CartItem, Store, Deal } from '@/lib/types';
-// Removed: import { initialProducts as allInitialProductsSeed } from '@/data/products';
-// Removed: import { initialStores as initialStoresSeed } from '@/data/stores';
+import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { dailyDeals as allInitialDealsSeed } from '@/data/deals';
 import { seedInitialData } from '@/lib/firestoreService';
 
@@ -27,9 +26,9 @@ interface AppContextType {
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  products: Product[]; // Products for selected store
-  allProducts: Product[]; // All products from all stores (from Firestore)
-  deals: Deal[]; // Deals for selected store
+  products: Product[];
+  allProducts: Product[];
+  deals: Deal[];
   getCartTotal: () => number;
   stores: Store[];
   selectedStore: Store | null;
@@ -53,22 +52,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
   
-  const [stores, setStores] = useState<Store[]>([]);
+  const [stores, setStores] = useState<Store[]>(initialStoresSeedData); // Initialize with hardcoded seed data
   const [loadingStores, setLoadingStores] = useState(true);
-  const [allProducts, setAllProducts] = useState<Product[]>([]); // All products from Firestore
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
+  const [selectedStore, setSelectedStoreState] = useState<Store | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+    if (savedStoreId) {
+      return initialStoresSeedData.find(s => s.id === savedStoreId) || null;
+    }
+    return null;
+  });
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
   const router = useRouter();
 
-  // Seed initial data if Firestore is empty
   useEffect(() => {
-    const seed = async () => {
-      await seedInitialData(); // Call it directly
+    const doSeed = async () => {
+      if (db) { // Ensure db is initialized
+        const storesColCheck = collection(db, 'stores');
+        const productsColCheck = collection(db, 'products');
+        const storesSnapshot = await getDocs(storesColCheck);
+        const productsSnapshot = await getDocs(productsColCheck);
+        if (storesSnapshot.empty || productsSnapshot.empty) {
+          await seedInitialData();
+        }
+      }
     };
-    seed();
+    doSeed();
   }, []);
 
   // Fetch stores from Firestore
@@ -76,37 +89,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingStores(true);
     const storesCol = collection(db, 'stores');
     const unsubscribe = onSnapshot(storesCol, (snapshot) => {
-      const fetchedStores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Store));
-      setStores(fetchedStores);
-      setLoadingStores(false);
+      const firestoreStores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Store));
+      let storesToUse = initialStoresSeedData; // Fallback to seed data
 
-      // After stores are loaded, determine initial selected store
-      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-      if (savedStoreId) {
-        const store = fetchedStores.find(s => s.id === savedStoreId);
-        if (store) {
-          setSelectedStoreState(store);
-        } else {
-          if (fetchedStores.length > 0) {
-             setStoreSelectorOpen(true); 
-          } else {
-            setStoreSelectorOpen(true); 
-          }
-        }
-      } else {
-         if (fetchedStores.length > 0) {
-            setStoreSelectorOpen(true);
-         } else {
-            setStoreSelectorOpen(true); 
-         }
+      if (firestoreStores.length > 0) {
+        storesToUse = firestoreStores; // Firestore is source of truth if available
+        setStores(firestoreStores);
+      } else if (snapshot.empty && !snapshot.metadata.hasPendingWrites) {
+        // Firestore is confirmed empty, continue using initialStoresSeedData (already set in useState)
+        setStores(initialStoresSeedData); // Explicitly set to seed data if FS is empty
       }
+      // If firestoreStores is empty, `stores` state remains `initialStoresSeedData` or is reset to it.
+
+      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      let storeToSelect: Store | null = null;
+
+      // Try to maintain current selection if valid, else try saved, else null
+      if (selectedStore && storesToUse.some(s => s.id === selectedStore.id)) {
+        storeToSelect = selectedStore;
+      } else if (savedStoreId) {
+        storeToSelect = storesToUse.find(s => s.id === savedStoreId) || null;
+      }
+
+      if (storeToSelect) {
+        setSelectedStoreState(storeToSelect);
+        if (storeToSelect.id !== localStorage.getItem(DODI_SELECTED_STORE_KEY)) {
+             localStorage.setItem(DODI_SELECTED_STORE_KEY, storeToSelect.id);
+        }
+        setStoreSelectorOpen(false);
+      } else if (storesToUse.length > 0) { // Stores available, but none selected/valid
+        setSelectedStoreState(null);
+        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        setStoreSelectorOpen(true);
+      } else { // No stores available at all (neither FS nor seed)
+        setStores([]); // Ensure stores state is empty if seed data was also empty
+        setSelectedStoreState(null);
+        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        setStoreSelectorOpen(true);
+      }
+      setLoadingStores(false);
     }, (error) => {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
+      // On error, `stores` state remains `initialStoresSeedData` (from useState).
+      // Re-evaluate selectedStore based on `initialStoresSeedData`.
+      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      let storeToSelectOnError: Store | null = null;
+       if (selectedStore && initialStoresSeedData.some(s => s.id === selectedStore.id)) {
+          storeToSelectOnError = selectedStore;
+      } else if (savedStoreId) {
+          storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
+      }
+
+      if (storeToSelectOnError) {
+          setSelectedStoreState(storeToSelectOnError);
+          setStoreSelectorOpen(false);
+      } else if (initialStoresSeedData.length > 0) {
+          setSelectedStoreState(null);
+          setStoreSelectorOpen(true);
+      } else { // No fallback stores available
+          setSelectedStoreState(null);
+          setStoreSelectorOpen(true);
+      }
       setLoadingStores(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, []); // Runs once on mount
+
 
   // Fetch all products from Firestore
   useEffect(() => {
@@ -156,8 +205,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     } else {
-      const existingData = userSnap.data() as User;
-      let userProfileData = { ...existingData, id: firebaseUser.uid, avatarUrl: firebaseUser.photoURL || existingData.avatarUrl };
+      const existingData = userSnap.data() as User; // Cast to User
+      let userProfileData: User = { // Ensure type compatibility
+          ...existingData, 
+          id: firebaseUser.uid, 
+          email: firebaseUser.email || existingData.email, // Prefer Firebase email
+          name: firebaseUser.displayName || existingData.name, // Prefer Firebase display name
+          avatarUrl: firebaseUser.photoURL || existingData.avatarUrl,
+          isAdmin: existingData.isAdmin // Keep existing isAdmin unless logic below changes it
+      };
 
       if (isInitialAdmin && !existingData.isAdmin) {
         try {
@@ -232,7 +288,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const selectStore = useCallback((storeId: string | null) => {
     if (storeId) {
-      const store = stores.find(s => s.id === storeId);
+      const store = stores.find(s => s.id === storeId); // `stores` could be initialSeedData or from Firestore
       if (store) {
         if (selectedStore?.id !== store.id) {
           setCart([]); 
@@ -248,7 +304,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCart([]);
       setStoreSelectorOpen(true);
     }
-  }, [stores, selectedStore]);
+  }, [stores, selectedStore]); // `stores` dependency is important here
 
   const login = useCallback(async (email: string, pass: string) => {
     setLoadingAuth(true);
@@ -259,20 +315,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
-      setLoadingAuth(false); // Explicitly set loading to false on error
-      return false;
+      return false; // setLoadingAuth(false) is handled by onAuthStateChanged or finally block of onAuthStateChanged
+    } finally {
+       // setLoadingAuth(false); // Let onAuthStateChanged handle this to avoid race conditions
     }
-    // setLoadingAuth(false) is handled by onAuthStateChanged in success case
   }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      // createUserProfile will be called by onAuthStateChanged, which also sets displayName if name is provided
+      // We can explicitly update the profile here if `name` is provided to ensure it's set before onAuthStateChanged might run with old data
       if (name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // createUserProfile will be called by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -286,10 +343,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
-      setLoadingAuth(false); // Explicitly set loading to false on error
       return false;
+    } finally {
+      // setLoadingAuth(false); // Let onAuthStateChanged handle this
     }
-     // setLoadingAuth(false) is handled by onAuthStateChanged in success case
   }, []);
 
   const logout = useCallback(async () => {
@@ -301,6 +358,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
+      // No need to manually set selectedStore to null or open dialog on logout,
+      // existing logic in store fetching useEffect should handle it based on available stores.
+      // However, if we want to force re-selection:
+      // setSelectedStoreState(null);
+      // localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+      // setStoreSelectorOpen(true); 
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/'); 
     } catch (error: any) {
@@ -388,7 +451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     allProducts,
     deals,
     getCartTotal,
-    stores,
+    stores, // This will be the initially hardcoded, then Firestore-updated list
     selectedStore,
     selectStore,
     isStoreSelectorOpen,
@@ -414,3 +477,4 @@ export function useAppContext() {
   return context;
 }
 
+    
