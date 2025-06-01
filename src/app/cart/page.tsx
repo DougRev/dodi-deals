@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect } from 'react';
@@ -9,10 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Trash2, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { Trash2, ShoppingBag, ArrowLeft, MapPin } from 'lucide-react';
 
 export default function CartPage() {
-  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart } = useAppContext();
+  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen } = useAppContext();
   const router = useRouter();
 
   useEffect(() => {
@@ -22,7 +23,26 @@ export default function CartPage() {
   }, [isAuthenticated, router]);
 
   if (!isAuthenticated) {
-    return <div className="text-center py-10">Redirecting to login...</div>; // Or a loading spinner
+    return <div className="text-center py-10">Redirecting to login...</div>;
+  }
+
+  if (!selectedStore) {
+     return (
+      <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
+        <Card className="p-8 shadow-xl max-w-md">
+          <CardContent className="flex flex-col items-center">
+            <MapPin className="h-16 w-16 text-primary mb-6" />
+            <h1 className="text-2xl font-bold font-headline mb-4 text-primary">View Your Cart</h1>
+            <p className="text-muted-foreground mb-6">
+              Please select a store to view or modify your cart.
+            </p>
+            <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+              Select Store
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const handleQuantityChange = (productId: string, newQuantity: number) => {
@@ -37,7 +57,7 @@ export default function CartPage() {
     <div className="space-y-8">
       <header className="text-center">
         <h1 className="text-4xl font-bold font-headline text-primary">Your Shopping Cart</h1>
-        <p className="text-lg text-muted-foreground">Review your items for in-store pickup.</p>
+        <p className="text-lg text-muted-foreground">Review your items for in-store pickup at <span className="font-semibold text-accent">{selectedStore.name}</span>.</p>
       </header>
 
       {cart.length === 0 ? (
@@ -45,9 +65,9 @@ export default function CartPage() {
           <CardContent className="flex flex-col items-center">
             <ShoppingBag className="h-24 w-24 text-muted-foreground mb-6" />
             <h2 className="text-2xl font-semibold mb-2">Your cart is empty.</h2>
-            <p className="text-muted-foreground mb-6">Looks like you haven't added anything yet.</p>
+            <p className="text-muted-foreground mb-6">Looks like you haven't added anything from {selectedStore.name} yet.</p>
             <Button asChild className="bg-accent hover:bg-accent/90 text-accent-foreground">
-              <Link href="/products">Start Shopping</Link>
+              <Link href="/products">Start Shopping at {selectedStore.name.replace('Dodi Deals - ','')}</Link>
             </Button>
           </CardContent>
         </Card>
@@ -94,6 +114,7 @@ export default function CartPage() {
             <Card className="sticky top-24 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-2xl font-headline text-primary">Order Summary</CardTitle>
+                 <CardDescription>For pickup at {selectedStore.name}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
@@ -110,11 +131,11 @@ export default function CartPage() {
                   <span className="text-primary">${cartTotal.toFixed(2)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Final payment and applicable taxes will be handled in-store upon pickup.
+                  Final payment and applicable taxes will be handled at {selectedStore.name} upon pickup.
                 </p>
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="lg" onClick={() => alert('Proceeding to in-store pickup! Please visit us to complete your order.')}>
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="lg" onClick={() => alert(`Proceeding to in-store pickup at ${selectedStore.name}! Please visit us to complete your order.`)}>
                   Confirm for In-Store Pickup
                 </Button>
                 <Button asChild variant="outline" className="w-full">

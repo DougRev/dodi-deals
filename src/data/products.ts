@@ -1,3 +1,4 @@
+
 import type { Product } from '@/lib/types';
 
 export const initialProducts: Product[] = [
@@ -9,6 +10,7 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'Vape',
     stock: 50,
+    storeId: 'store_001',
     dataAiHint: 'vape pen',
   },
   {
@@ -19,6 +21,7 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'THCa',
     stock: 30,
+    storeId: 'store_002',
     dataAiHint: 'cannabis flower',
   },
   {
@@ -29,6 +32,7 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'Vape',
     stock: 75,
+    storeId: 'store_003',
     dataAiHint: 'vape cartridge',
   },
   {
@@ -39,6 +43,7 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'THCa',
     stock: 40,
+    storeId: 'store_003',
     dataAiHint: 'cannabis pre-roll',
   },
   {
@@ -49,6 +54,7 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'Accessory',
     stock: 100,
+    storeId: 'store_001', // Accessories available at Store 1
     dataAiHint: 'herb grinder',
   },
   {
@@ -59,6 +65,29 @@ export const initialProducts: Product[] = [
     imageUrl: 'https://placehold.co/600x400.png',
     category: 'Vape',
     stock: 60,
+    storeId: 'store_002',
     dataAiHint: 'vape juice',
+  },
+   {
+    id: 'prod_007',
+    name: 'Indy Special THCa Crumble (1g)',
+    description: 'Potent THCa crumble, perfect for dabbing. Sourced locally for Indianapolis.',
+    price: 55.00,
+    imageUrl: 'https://placehold.co/600x400.png',
+    category: 'THCa',
+    stock: 20,
+    storeId: 'store_001',
+    dataAiHint: 'cannabis crumble',
+  },
+  {
+    id: 'prod_008',
+    name: 'Fort Wayne Finest Vape Battery',
+    description: 'High-performance 510-thread battery, a favorite in Fort Wayne.',
+    price: 18.00,
+    imageUrl: 'https://placehold.co/600x400.png',
+    category: 'Accessory',
+    stock: 45,
+    storeId: 'store_002',
+    dataAiHint: 'vape battery',
   }
 ];

@@ -1,27 +1,56 @@
-import { dailyDeals } from '@/data/deals';
-import { initialProducts } from '@/data/products';
+
+"use client";
+
+import { useAppContext } from '@/hooks/useAppContext';
 import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, MapPin } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 export default function HomePage() {
-  const featuredProducts = initialProducts.slice(0, 3); // Show first 3 products as featured
+  const { deals, products, selectedStore, setStoreSelectorOpen } = useAppContext();
+  
+  // Show only a few featured products from the current store's products
+  const featuredProducts = products.slice(0, 3);
+
+  if (!selectedStore) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
+        <Card className="p-8 shadow-xl max-w-md">
+          <CardContent className="flex flex-col items-center">
+            <MapPin className="h-16 w-16 text-primary mb-6" />
+            <h1 className="text-2xl font-bold font-headline mb-4 text-primary">Welcome to Dodi Deals!</h1>
+            <p className="text-muted-foreground mb-6">
+              Please select your preferred store to view deals and products available for pickup.
+            </p>
+            <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+              Select Store
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-12">
       <section>
-        <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals</h1>
+        <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h1>
         <p className="text-center text-muted-foreground mb-8">Don't miss out on these limited-time offers!</p>
-        {dailyDeals.length > 0 ? (
+        {deals.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {dailyDeals.map((deal) => (
+            {deals.map((deal) => (
               <DealCard key={deal.id} deal={deal} />
             ))}
           </div>
         ) : (
-          <p className="text-center text-lg text-muted-foreground">No active deals right now. Check back soon!</p>
+          <Card className="text-center py-12 shadow-lg">
+            <CardContent>
+              <p className="text-lg text-muted-foreground">No active deals at {selectedStore.name} right now. Check back soon!</p>
+            </CardContent>
+          </Card>
         )}
       </section>
 
@@ -41,19 +70,23 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-           <p className="text-center text-lg text-muted-foreground">No featured products available at the moment.</p>
+           <Card className="text-center py-12 shadow-lg">
+            <CardContent>
+              <p className="text-center text-lg text-muted-foreground">No featured products available at {selectedStore.name} at the moment.</p>
+            </CardContent>
+          </Card>
         )}
       </section>
 
       <section className="text-center p-8 bg-muted/50 rounded-lg">
-        <h2 className="text-3xl font-bold font-headline text-primary mb-4">Welcome to Dodi Deals!</h2>
+        <h2 className="text-3xl font-bold font-headline text-primary mb-4">Welcome to {selectedStore.name}!</h2>
         <p className="text-lg text-foreground mb-6 max-w-2xl mx-auto">
-          Your premium destination in Indiana for the finest selection of vapes and THCa products. 
+          Your premium destination at {selectedStore.city} for the finest selection of vapes and THCa products. 
           Explore our daily deals and extensive product catalog. Order online for convenient in-store pickup.
         </p>
         <Button asChild size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
           <Link href="/products">
-            Shop All Products
+            Shop All Products at this Store
           </Link>
         </Button>
       </section>
