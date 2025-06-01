@@ -51,58 +51,66 @@ export async function getStores(): Promise<Store[]> {
 }
 
 export async function addStore(storeData: StoreFormData): Promise<string> {
-  console.log('[firestoreService] addStore Server Action invoked for store:', storeData.name);
-  // Diagnostic log: Check current Firebase user from client SDK within Server Action
+  console.log('--- Server Action: addStore ---');
   if (auth.currentUser) {
-    console.log('[firestoreService] auth.currentUser.uid in Server Action:', auth.currentUser.uid);
-    console.log('[firestoreService] auth.currentUser.email in Server Action:', auth.currentUser.email);
+    console.log('[firestoreService][addStore] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+    console.log('[firestoreService][addStore] Server Action auth.currentUser.email:', auth.currentUser.email);
   } else {
-    console.log('[firestoreService] auth.currentUser in Server Action is NULL.');
+    console.log('[firestoreService][addStore] Server Action auth.currentUser is NULL.');
   }
+  console.log('[firestoreService][addStore] Attempting to add store:', storeData.name);
 
   const storesCol = collection(db, 'stores');
-
-  // Check for duplicate store name before adding
   const q = query(storesCol, where("name", "==", storeData.name));
   const querySnapshot = await getDocs(q);
   if (!querySnapshot.empty) {
     const errorMsg = `Store with name "${storeData.name}" already exists.`;
-    console.error(`[firestoreService] ${errorMsg}`);
+    console.error(`[firestoreService][addStore] ${errorMsg}`);
     throw new Error(errorMsg);
   }
 
   try {
-    console.log('[firestoreService] Attempting to add document to stores collection...');
     const docRef = await addDoc(storesCol, storeData);
-    console.log('[firestoreService] Store added successfully with ID:', docRef.id);
+    console.log('[firestoreService][addStore] Store added successfully with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
-    console.error('[firestoreService] Error during addDoc operation:', error);
-    // Re-throw the error to be caught by the calling UI, which will show a toast
+    console.error('[firestoreService][addStore] Error during addDoc operation:', error);
     throw error;
   }
 }
 
 export async function updateStore(storeId: string, storeData: Partial<StoreFormData>): Promise<void> {
-  console.log(`[firestoreService] updateStore called for ID: ${storeId} with data:`, JSON.stringify(storeData));
+  console.log('--- Server Action: updateStore ---');
+   if (auth.currentUser) {
+    console.log('[firestoreService][updateStore] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+  } else {
+    console.log('[firestoreService][updateStore] Server Action auth.currentUser is NULL.');
+  }
+  console.log(`[firestoreService][updateStore] Called for ID: ${storeId} with data:`, JSON.stringify(storeData));
   const storeRef = doc(db, 'stores', storeId);
   try {
     await updateDoc(storeRef, storeData);
-    console.log(`[firestoreService] Store ${storeId} updated successfully.`);
+    console.log(`[firestoreService][updateStore] Store ${storeId} updated successfully.`);
   } catch (error) {
-    console.error(`[firestoreService] Error updating store ${storeId}:`, error);
+    console.error(`[firestoreService][updateStore] Error updating store ${storeId}:`, error);
     throw error;
   }
 }
 
 export async function deleteStore(storeId: string): Promise<void> {
-  console.log(`[firestoreService] deleteStore called for ID: ${storeId}`);
+  console.log('--- Server Action: deleteStore ---');
+  if (auth.currentUser) {
+    console.log('[firestoreService][deleteStore] Server Action auth.currentUser.uid:', auth.currentUser.uid);
+  } else {
+    console.log('[firestoreService][deleteStore] Server Action auth.currentUser is NULL.');
+  }
+  console.log(`[firestoreService][deleteStore] Called for ID: ${storeId}`);
   const storeRef = doc(db, 'stores', storeId);
   try {
     await deleteDoc(storeRef);
-    console.log(`[firestoreService] Store ${storeId} deleted successfully.`);
+    console.log(`[firestoreService][deleteStore] Store ${storeId} deleted successfully.`);
   } catch (error) {
-    console.error(`[firestoreService] Error deleting store ${storeId}:`, error);
+    console.error(`[firestoreService][deleteStore] Error deleting store ${storeId}:`, error);
     throw error;
   }
 }
@@ -146,4 +154,3 @@ export async function updateUserAdminStatus(userId: string, isAdmin: boolean): P
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { isAdmin });
 }
-
