@@ -3,12 +3,8 @@
 # dependencies
 /node_modules
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
+.yarn/install-state.gz
 
 # testing
 /coverage
@@ -16,9 +12,6 @@
 # next.js
 /.next/
 /out/
-
-# production
-/build
 
 # misc
 .DS_Store
@@ -28,7 +21,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+# TODO: Review if these should be ignored by default
+# /sdk-config.ts
 
 # vercel
 .vercel
@@ -37,9 +31,24 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.genkit/*
-.env*
+# environment variables
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# firebase
+# Local Firebaser Emulator Data
+.firebase/emulators/
 firebase-debug.log
 firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+*.snapshot
+
+# Firebase config files that might contain sensitive information if not handled carefully
+# firebase-service-account-key.json # Or any specific name you use for your service account key
+
+# Crashlytics
+crashlytics.properties
