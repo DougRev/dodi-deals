@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,21 +11,23 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { LogIn } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAppContext();
+  const { login, isAuthenticated, loadingAuth } = useAppContext(); // Added loadingAuth
   const router = useRouter();
-  const [email, setEmail] = useState('user@example.com'); // Pre-fill for demo
-  const [password, setPassword] = useState('password'); // Pre-fill for demo
+  const searchParams = useSearchParams(); // For redirect
+  const [email, setEmail] = useState('user@example.com'); 
+  const [password, setPassword] = useState('password'); 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push('/profile'); // Redirect if already logged in
+    if (!loadingAuth && isAuthenticated) {
+      const redirectUrl = searchParams.get('redirect') || '/profile';
+      router.push(redirectUrl);
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, searchParams, loadingAuth]);
 
-  if (isAuthenticated) {
-    return null; // Or a loading spinner, or just null if redirect is fast
+  if (loadingAuth || (!loadingAuth && isAuthenticated)) { // Show loading or null if auth check ongoing or already logged in
+    return <div className="text-center py-10">Loading...</div>; 
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,9 +37,12 @@ export default function LoginPage() {
     const success = await login(email, password);
     setLoading(false);
     if (success) {
-      router.push('/profile');
+      const redirectUrl = searchParams.get('redirect') || '/profile';
+      router.push(redirectUrl);
     } else {
-      setError('Invalid email or password. Please try again.');
+      // Error is handled by the context's toast for Firebase, but we can keep a local one too if needed
+      // For now, context handles the toast. If you want specific local error messages, uncomment below.
+      // setError('Invalid email or password. Please try again.'); 
     }
   };
 
@@ -81,11 +86,11 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="text-center text-sm">
+        {/* <CardFooter className="text-center text-sm">
           <p className="text-muted-foreground">
-            Demo credentials: user@example.com / password
+            Enter your Dodi Deals credentials.
           </p>
-        </CardFooter>
+        </CardFooter> */}
       </Card>
     </div>
   );

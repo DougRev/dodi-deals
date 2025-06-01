@@ -15,25 +15,26 @@ export interface Product {
   imageUrl: string;
   category: 'Vape' | 'THCa' | 'Accessory';
   stock: number;
-  storeId: string; // Added storeId
+  storeId: string; 
   dataAiHint?: string;
 }
 
 export interface Deal {
   id: string;
-  product: Product; // Product already has storeId
+  product: Product; 
   dealPrice: number;
-  expiresAt: string; // ISO date string
+  expiresAt: string; 
   title: string;
   description?: string;
-  storeId: string; // Added storeId for explicit association
+  storeId: string; 
 }
 
 export interface User {
-  id: string;
-  name: string;
-  email: string;
-  points: number; // Points remain global for now
+  id: string; // Firebase UID
+  name: string; // displayName from Firebase or custom from Firestore
+  email: string; // Firebase email
+  points: number; // From Firestore
+  avatarUrl?: string; // Optional: URL for user's avatar from Firebase Storage/Firestore
 }
 
 export interface CartItem {

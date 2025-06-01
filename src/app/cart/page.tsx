@@ -4,26 +4,28 @@
 import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Trash2, ShoppingBag, ArrowLeft, MapPin } from 'lucide-react';
 
 export default function CartPage() {
-  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen } = useAppContext();
+  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen, loadingAuth } = useAppContext(); // Added loadingAuth
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login?redirect=/cart');
+    if (!loadingAuth && !isAuthenticated) { // Check loadingAuth
+      const redirect = searchParams.get('redirect');
+      router.push(redirect ? `/login?redirect=${redirect}` : '/login?redirect=/cart');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, loadingAuth, searchParams]);
 
-  if (!isAuthenticated) {
-    return <div className="text-center py-10">Redirecting to login...</div>;
+  if (loadingAuth || (!loadingAuth && !isAuthenticated)) { // Show loading or redirect text
+    return <div className="text-center py-10">Loading cart...</div>;
   }
 
   if (!selectedStore) {

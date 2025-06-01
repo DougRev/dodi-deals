@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -12,19 +13,25 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAppContext } from '@/hooks/useAppContext';
-import { LogIn, UserCircle2, Award, LogOut, ShoppingCart } from 'lucide-react';
+import { LogIn, UserCircle2, Award, LogOut, ShoppingCart, UserCircle } from 'lucide-react'; // Added UserCircle
 
 export function AuthButton() {
-  const { isAuthenticated, user, logout } = useAppContext();
+  const { isAuthenticated, user, logout, loadingAuth } = useAppContext(); // Added loadingAuth
+
+  if (loadingAuth) {
+    return <Button variant="outline" className="border-primary text-primary" disabled>Loading...</Button>;
+  }
 
   if (isAuthenticated && user) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={`https://placehold.co/100x100.png?text=${user.name.charAt(0)}`} alt={user.name} data-ai-hint="profile avatar" />
-              <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+            <Avatar className="h-10 w-10 border-2 border-primary/50">
+              <AvatarImage src={user.avatarUrl || `https://placehold.co/100x100.png?text=${user.name.charAt(0)}`} alt={user.name} data-ai-hint="profile avatar" />
+              <AvatarFallback>
+                {user.name ? user.name.charAt(0).toUpperCase() : <UserCircle className="h-5 w-5" />}
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
