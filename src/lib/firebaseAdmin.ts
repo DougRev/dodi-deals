@@ -14,7 +14,7 @@ interface FirebaseAdminSDKs {
 let adminSDKsInternal: FirebaseAdminSDKs | null = null;
 let adminInitializationErrorInternal: Error | null = null;
 
-function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
+function initializeFirebaseAdmin(): FirebaseAdminSDKs {
   console.log('[firebaseAdmin] Attempting to initialize Firebase Admin SDK...');
   let adminAppInstance: App;
   let credentialsTypeUsed = "None";
@@ -28,7 +28,8 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
   console.log(`  - FIREBASE_CONFIG: ${process.env.FIREBASE_CONFIG || 'Not set'}`);
   console.log(`  - FUNCTIONS_EMULATOR: ${process.env.FUNCTIONS_EMULATOR || 'Not set'}`);
   console.log(`  - K_SERVICE (Cloud Run): ${process.env.K_SERVICE || 'Not set'}`);
-  console.log(`  - GOOGLE_CLOUD_PROJECT (GCP Default): ${process.env.GOOGLE_CLOUD_PROJECT || 'Not set'}`);
+  console.log(`  - GOOGLE_CLOUD_PROJECT (GCP Default for ADC): ${process.env.GOOGLE_CLOUD_PROJECT || 'Not set'}`);
+
 
   if (admin.apps.length > 0) {
     adminAppInstance = admin.apps[0]!;
@@ -37,7 +38,8 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
     console.log('[firebaseAdmin] No Firebase Admin app found. Attempting to initialize a new one...');
 
     const explicitServiceAccountEnv = process.env.SERVICE_ACCOUNT_PROJECT_ID && process.env.SERVICE_ACCOUNT_CLIENT_EMAIL && process.env.SERVICE_ACCOUNT_PRIVATE_KEY;
-    const isFirebaseOrGCPlikeEnvironment = process.env.FIREBASE_CONFIG || process.env.FUNCTIONS_EMULATOR === 'true' || process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT;
+    // For ADC to work, GOOGLE_CLOUD_PROJECT is often a key indicator, or running in a known GCP environment.
+    const isLikelyADCEnvironment = process.env.GOOGLE_CLOUD_PROJECT || process.env.FIREBASE_CONFIG || process.env.FUNCTIONS_EMULATOR === 'true' || process.env.K_SERVICE;
 
     try {
       if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -54,28 +56,31 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
             privateKey: process.env.SERVICE_ACCOUNT_PRIVATE_KEY!.replace(/\\n/g, '\n'),
           }),
         });
-      } else if (isFirebaseOrGCPlikeEnvironment) {
-        credentialsTypeUsed = "Default GCP/Firebase Environment Credentials";
-        console.log(`[firebaseAdmin] Attempting initialization with ${credentialsTypeUsed} (detected via FIREBASE_CONFIG, FUNCTIONS_EMULATOR, K_SERVICE, or GOOGLE_CLOUD_PROJECT).`);
-        admin.initializeApp();
+      } else if (isLikelyADCEnvironment) {
+        credentialsTypeUsed = "Application Default Credentials (ADC)";
+        console.log(`[firebaseAdmin] Attempting initialization with ${credentialsTypeUsed} (detected via GOOGLE_CLOUD_PROJECT, FIREBASE_CONFIG, FUNCTIONS_EMULATOR, or K_SERVICE).`);
+        admin.initializeApp(); // Relies on ADC
       } else {
         const noMethodAttemptedErrorMsg = `[firebaseAdmin] CRITICAL FAILURE: No Firebase Admin SDK initialization method was attempted.
-        None of the expected credential environment variables or indicators were found. Review the 'Environment Variable Check' logs above.
+        None of the expected credential environment variables or indicators were found (see 'Environment Variable Check' logs).
         Common Fixes:
-        - Local Development: Ensure GOOGLE_APPLICATION_CREDENTIALS environment variable points to your service account key JSON file.
-        - Deployed Environments (e.g., Cloud Run, App Engine, Firebase Hosting for Next.js SSR): Ensure the runtime service account has appropriate IAM permissions and that Application Default Credentials can be discovered.
-        - Explicit Variables: If using SERVICE_ACCOUNT_PROJECT_ID, etc., ensure all are correctly set.`;
+        - Local Development: Ensure GOOGLE_APPLICATION_CREDENTIALS env var points to your service account key JSON file.
+        - Deployed GCP Environments (Cloud Workstations, Cloud Run, etc.): 
+          - Ensure the GOOGLE_CLOUD_PROJECT env var is automatically set by the environment.
+          - Ensure the runtime service account associated with this environment has appropriate Firebase/IAM permissions.
+          - Application Default Credentials (ADC) should then be discoverable.
+        - Explicit ENV VARS: If using SERVICE_ACCOUNT_PROJECT_ID, etc., ensure all three (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY) are correctly set.`;
         console.error(noMethodAttemptedErrorMsg);
-        throw new Error(`Firebase Admin SDK failed to initialize: No credential detection method was triggered. Check server logs for environment variable status and setup guides.`);
+        throw new Error(`Firebase Admin SDK failed to initialize: No credential detection method was triggered. Check server logs for environment variable status and setup guides for your specific environment (e.g., Cloud Workstations).`);
       }
 
       if (admin.apps.length > 0) {
         adminAppInstance = admin.apps[0]!;
         console.log(`[firebaseAdmin] Firebase Admin SDK initialized successfully using ${credentialsTypeUsed}.`);
       } else {
-        const postAttemptFailureMsg = `[firebaseAdmin] CRITICAL FAILURE: Firebase Admin SDK initialization was attempted with '${credentialsTypeUsed}', but no app instance was created. This usually means the specific initialization call itself failed internally. Check for previous errors from Firebase Admin SDK libraries.`;
+        const postAttemptFailureMsg = `[firebaseAdmin] CRITICAL FAILURE: Firebase Admin SDK initialization was attempted with '${credentialsTypeUsed}', but no app instance was created. This usually means the specific initialization call itself failed internally (e.g., ADC not found/configured, service account permissions issue). Check for previous errors from Firebase Admin SDK libraries or detailed logs for '${credentialsTypeUsed}'.`;
         console.error(postAttemptFailureMsg);
-        throw new Error(`Firebase Admin SDK failed after attempting initialization with ${credentialsTypeUsed}. Check server logs for underlying Firebase errors.`);
+        throw new Error(`Firebase Admin SDK failed after attempting initialization with ${credentialsTypeUsed}. Check server logs for underlying Firebase errors or ADC setup for your environment.`);
       }
     } catch (error: any) {
       if (error.code === 'app/duplicate-app') {
@@ -83,6 +88,7 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
         if (admin.apps.length > 0) {
           adminAppInstance = admin.apps[0]!;
         } else {
+          // This state should ideally not be reached if duplicate-app is caught and admin.apps is empty.
           console.error('[firebaseAdmin] Firebase Admin SDK: Caught duplicate-app error, but admin.apps array is empty. This is unexpected.');
           throw new Error('Firebase Admin SDK initialization error: Inconsistent state after duplicate-app error (no app found).');
         }
@@ -94,7 +100,8 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
   }
 
   if (!adminAppInstance) {
-    const finalErrorMsg = `[firebaseAdmin] CRITICAL: Firebase Admin SDK app instance (adminAppInstance) is null after all initialization attempts. This indicates a fundamental failure in the initialization process. Firestore and Auth services will not be available. Review the 'Environment Variable Check' logs.`;
+    // This should ideally be caught by the specific throw statements above.
+    const finalErrorMsg = `[firebaseAdmin] CRITICAL: Firebase Admin SDK app instance (adminAppInstance) is null after all initialization attempts. This indicates a fundamental failure in the initialization process. Firestore and Auth services will not be available. Review 'Environment Variable Check' logs and prior error messages.`;
     console.error(finalErrorMsg);
     throw new Error(finalErrorMsg);
   }
@@ -106,14 +113,19 @@ function initializeAndGetAdminSDKs(): FirebaseAdminSDKs {
   };
 }
 
-try {
-  adminSDKsInternal = initializeAndGetAdminSDKs();
-} catch (e) {
-  adminInitializationErrorInternal = e as Error;
-  console.error(`[firebaseAdmin] Captured FATAL INITIALIZATION ERROR: ${adminInitializationErrorInternal.message}. Firestore and Auth services via Admin SDK will be unavailable.`);
+// Attempt to initialize and capture any error.
+if (!adminSDKsInternal && !adminInitializationErrorInternal) {
+  try {
+    adminSDKsInternal = initializeFirebaseAdmin();
+  } catch (e) {
+    adminInitializationErrorInternal = e as Error;
+    console.error(`[firebaseAdmin] Captured FATAL INITIALIZATION ERROR during initial call: ${adminInitializationErrorInternal.message}. Firestore and Auth services via Admin SDK will be unavailable. Ensure your server environment has valid Firebase Admin credentials.`);
+  }
 }
 
 export const adminDb: Firestore | undefined = adminSDKsInternal?.db;
 export const adminAuth: AdminAuth | undefined = adminSDKsInternal?.auth;
-export const adminSDK: typeof admin | undefined = adminSDKsInternal?.adminNamespace; // Renamed to avoid conflict with 'admin' import
+export const adminSDK: typeof admin | undefined = adminSDKsInternal?.adminNamespace;
 export const adminInitializationError: Error | null = adminInitializationErrorInternal;
+
+    
