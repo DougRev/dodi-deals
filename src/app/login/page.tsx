@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,9 +18,14 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/profile'); // Redirect if already logged in
+    }
+  }, [isAuthenticated, router]);
+
   if (isAuthenticated) {
-    router.push('/profile'); // Redirect if already logged in
-    return null; 
+    return null; // Or a loading spinner, or just null if redirect is fast
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
