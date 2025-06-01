@@ -1,7 +1,7 @@
 
 'use server';
 
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase'; // Ensure auth is imported
 import { collection, getDocs, writeBatch, doc, addDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import type { Store, Product, User } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
@@ -51,7 +51,15 @@ export async function getStores(): Promise<Store[]> {
 }
 
 export async function addStore(storeData: StoreFormData): Promise<string> {
-  console.log('[firestoreService] addStore called with data:', JSON.stringify(storeData));
+  console.log('[firestoreService] addStore Server Action invoked for store:', storeData.name);
+  // Diagnostic log: Check current Firebase user from client SDK within Server Action
+  if (auth.currentUser) {
+    console.log('[firestoreService] auth.currentUser.uid in Server Action:', auth.currentUser.uid);
+    console.log('[firestoreService] auth.currentUser.email in Server Action:', auth.currentUser.email);
+  } else {
+    console.log('[firestoreService] auth.currentUser in Server Action is NULL.');
+  }
+
   const storesCol = collection(db, 'stores');
 
   // Check for duplicate store name before adding
@@ -70,6 +78,7 @@ export async function addStore(storeData: StoreFormData): Promise<string> {
     return docRef.id;
   } catch (error) {
     console.error('[firestoreService] Error during addDoc operation:', error);
+    // Re-throw the error to be caught by the calling UI, which will show a toast
     throw error;
   }
 }
@@ -137,3 +146,4 @@ export async function updateUserAdminStatus(userId: string, isAdmin: boolean): P
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { isAdmin });
 }
+
