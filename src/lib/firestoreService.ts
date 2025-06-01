@@ -6,118 +6,137 @@ import { collection, getDocs, writeBatch, doc, addDoc, updateDoc, deleteDoc, que
 import type { Store, Product, User } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
-import type { StoreFormData } from '@/lib/types'; // For addStore/updateStore
+import type { StoreFormData } from '@/lib/types';
 
 export async function seedInitialData() {
   try {
-    // Seed Stores
     const storesCollection = collection(db, 'stores');
     const storesSnapshot = await getDocs(storesCollection);
     if (storesSnapshot.empty) {
       const batch = writeBatch(db);
       initialStoresSeedData.forEach(store => {
-        const docRef = doc(storesCollection, store.id); // Use predefined ID
+        const docRef = doc(storesCollection, store.id);
         batch.set(docRef, store);
       });
       await batch.commit();
-      console.log('Successfully seeded initial stores.');
+      console.log('[firestoreService] Successfully seeded initial stores.');
     } else {
-      console.log('Stores collection is not empty. Skipping seed.');
+      console.log('[firestoreService] Stores collection is not empty. Skipping seed.');
     }
 
-    // Seed Products
     const productsCollection = collection(db, 'products');
     const productsSnapshot = await getDocs(productsCollection);
     if (productsSnapshot.empty) {
       const batch = writeBatch(db);
       initialProductsSeedData.forEach(product => {
-        const docRef = doc(productsCollection, product.id); // Use predefined ID
+        const docRef = doc(productsCollection, product.id);
         batch.set(docRef, product);
       });
       await batch.commit();
-      console.log('Successfully seeded initial products.');
+      console.log('[firestoreService] Successfully seeded initial products.');
     } else {
-      console.log('Products collection is not empty. Skipping seed.');
+      console.log('[firestoreService] Products collection is not empty. Skipping seed.');
     }
 
   } catch (error) {
-    console.error("Error seeding initial data:", error);
-    // Depending on the app, you might want to throw the error or handle it gracefully
+    console.error("[firestoreService] Error seeding initial data:", error);
   }
 }
 
 
-// Store Management Functions
 export async function getStores(): Promise<Store[]> {
   const storesCol = collection(db, 'stores');
   const snapshot = await getDocs(storesCol);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Store));
+  return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Store));
 }
 
 export async function addStore(storeData: StoreFormData): Promise<string> {
+  console.log('[firestoreService] addStore called with data:', JSON.stringify(storeData));
+  // Note: auth.currentUser is not directly available in server actions in the same way as client-side.
+  // The authentication is part of the request context that Firestore rules will use.
+
   const storesCol = collection(db, 'stores');
-  // Check if store with same name already exists (optional, good practice)
-  const q = query(storesCol, where("name", "==", storeData.name));
-  const querySnapshot = await getDocs(q);
-  if (!querySnapshot.empty) {
-    throw new Error(`Store with name "${storeData.name}" already exists.`);
+
+  // Temporarily removing duplicate name check to isolate addDoc permission issue.
+  // const q = query(storesCol, where("name", "==", storeData.name));
+  // const querySnapshot = await getDocs(q);
+  // if (!querySnapshot.empty) {
+  //   const errorMsg = `Store with name "${storeData.name}" already exists.`;
+  //   console.error(`[firestoreService] ${errorMsg}`);
+  //   throw new Error(errorMsg);
+  // }
+
+  try {
+    console.log('[firestoreService] Attempting to add document to stores collection...');
+    const docRef = await addDoc(storesCol, storeData);
+    console.log('[firestoreService] Store added successfully with ID:', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error('[firestoreService] Error during addDoc operation:', error);
+    throw error; 
   }
-  const docRef = await addDoc(storesCol, storeData);
-  return docRef.id;
 }
 
 export async function updateStore(storeId: string, storeData: Partial<StoreFormData>): Promise<void> {
+  console.log(`[firestoreService] updateStore called for ID: ${storeId} with data:`, JSON.stringify(storeData));
   const storeRef = doc(db, 'stores', storeId);
-  await updateDoc(storeRef, storeData);
+  try {
+    await updateDoc(storeRef, storeData);
+    console.log(`[firestoreService] Store ${storeId} updated successfully.`);
+  } catch (error) {
+    console.error(`[firestoreService] Error updating store ${storeId}:`, error);
+    throw error;
+  }
 }
 
 export async function deleteStore(storeId: string): Promise<void> {
+  console.log(`[firestoreService] deleteStore called for ID: ${storeId}`);
   const storeRef = doc(db, 'stores', storeId);
-  await deleteDoc(storeRef);
+  try {
+    await deleteDoc(storeRef);
+    console.log(`[firestoreService] Store ${storeId} deleted successfully.`);
+  } catch (error) {
+    console.error(`[firestoreService] Error deleting store ${storeId}:`, error);
+    throw error;
+  }
 }
 
 
-// Product Management Functions (Placeholders)
 export async function getProductsByStore(storeId: string): Promise<Product[]> {
-  // Placeholder: Implement Firestore query
-  console.log('getProductsByStore called with storeId:', storeId);
-  return [];
+  console.log('[firestoreService] getProductsByStore called with storeId:', storeId);
+  const q = query(collection(db, 'products'), where('storeId', '==', storeId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Product));
 }
 
 export async function addProduct(productData: Omit<Product, 'id'>): Promise<string> {
-  // Placeholder: Implement Firestore add
-  console.log('addProduct called with data:', productData);
+  console.log('[firestoreService] addProduct called with data:', productData);
   const productsCol = collection(db, 'products');
   const docRef = await addDoc(productsCol, productData);
   return docRef.id;
 }
 
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<void> {
-  // Placeholder: Implement Firestore update
-  console.log('updateProduct called with id and data:', productId, productData);
+  console.log('[firestoreService] updateProduct called with id and data:', productId, productData);
   const productRef = doc(db, 'products', productId);
   await updateDoc(productRef, productData);
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
-  // Placeholder: Implement Firestore delete
-  console.log('deleteProduct called with id:', productId);
+  console.log('[firestoreService] deleteProduct called with id:', productId);
   const productRef = doc(db, 'products', productId);
   await deleteDoc(productRef);
 }
 
-// User Management Functions (Placeholders for Admin)
 export async function getAllUsers(): Promise<User[]> {
-    // Placeholder: Implement Firestore query to get all users (ensure admin-only access via rules)
-    console.log('getAllUsers called');
+    console.log('[firestoreService] getAllUsers called');
     const usersCol = collection(db, 'users');
     const snapshot = await getDocs(usersCol);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as User));
 }
 
 export async function updateUserAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
-    // Placeholder: Implement Firestore update (ensure admin-only access via rules)
-    console.log('updateUserAdminStatus called for userId:', userId, 'isAdmin:', isAdmin);
+    console.log('[firestoreService] updateUserAdminStatus called for userId:', userId, 'isAdmin:', isAdmin);
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, { isAdmin });
 }
