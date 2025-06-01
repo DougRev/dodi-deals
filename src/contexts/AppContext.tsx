@@ -81,69 +81,65 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setLoadingStores(true); 
+    setLoadingStores(true);
     const storesCol = collection(db, 'stores');
     const unsubscribe = onSnapshot(storesCol, (snapshot) => {
-      let currentStoresList = initialStoresSeedData; 
+      let currentStoresList = initialStoresSeedData;
 
       if (!snapshot.empty) {
         const firestoreStores = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Store));
         if (firestoreStores.length > 0) {
           currentStoresList = firestoreStores;
-          setStores(firestoreStores); 
+          setStores(firestoreStores);
         }
       } else if (snapshot.empty && !snapshot.metadata.hasPendingWrites) {
         setStores(initialStoresSeedData);
       }
       
-      if (typeof window !== 'undefined') { // Ensure localStorage is accessed only on client
-        const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-        let storeToSelectFinally: Store | null = null;
+      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      let storeToSelectFinally: Store | null = null;
 
-        if (savedStoreId) {
-          storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
-        }
-        
-        setSelectedStoreState(storeToSelectFinally); 
+      if (savedStoreId) {
+        storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
+      }
+      
+      setSelectedStoreState(storeToSelectFinally); 
 
-        if (!storeToSelectFinally && currentStoresList.length > 0) {
-          localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-          setStoreSelectorOpen(true); 
-        } else if (!storeToSelectFinally && currentStoresList.length === 0) {
-          setStores([]); 
-          localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-          setStoreSelectorOpen(true); 
-        } else if (storeToSelectFinally) {
-          setStoreSelectorOpen(false);
-        }
+      if (!storeToSelectFinally && currentStoresList.length > 0) {
+        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        setStoreSelectorOpen(true); 
+      } else if (!storeToSelectFinally && currentStoresList.length === 0) {
+        setStores([]); 
+        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        setStoreSelectorOpen(true); 
+      } else if (storeToSelectFinally) {
+        setStoreSelectorOpen(false);
       }
       setLoadingStores(false); 
     }, (error) => {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
       
-      if (typeof window !== 'undefined') {
-        const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
-        let storeToSelectOnError: Store | null = null;
-        if (savedStoreId) {
-            storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
-        }
-        setSelectedStoreState(storeToSelectOnError); 
+      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      let storeToSelectOnError: Store | null = null;
+      if (savedStoreId) {
+          storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
       }
+      setSelectedStoreState(storeToSelectOnError); 
       setStores(initialStoresSeedData); 
       
-      if (typeof window !== 'undefined' && !selectedStore && initialStoresSeedData.length > 0) {
+      if (!selectedStore && initialStoresSeedData.length > 0) {
           setStoreSelectorOpen(true);
-      } else if (typeof window !== 'undefined' && selectedStore) {
+      } else if (selectedStore) {
           setStoreSelectorOpen(false);
-      } else if (typeof window !== 'undefined') { 
+      } else { 
           setStoreSelectorOpen(true);
       }
       setLoadingStores(false);
     });
 
     return () => unsubscribe();
-  }, []); // Removed selectedStore from deps to avoid re-runs that might interfere with dialog
+  }, []);
 
 
   useEffect(() => {
@@ -168,7 +164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
         userSnap = await getDoc(userRef);
     } catch (error) {
-        console.error(`Error fetching user profile for ${firebaseUser.uid}:`, error);
+        console.error(`[AuthContext] Error fetching user profile for ${firebaseUser.uid}:`, error);
         toast({ title: "Profile Error", description: "Could not load user profile.", variant: "destructive" });
         return null;
     }
@@ -179,8 +175,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (!userSnap.exists()) {
       console.log(`[AuthContext] Creating new user profile for ${firebaseUser.email}. Email matches ADMIN_EMAIL: ${isTheAdminEmail}`);
-      finalIsAdminValue = isTheAdminEmail;
+      finalIsAdminValue = isTheAdminEmail; // This should be true if isTheAdminEmail is true
       try {
+        console.log(`[AuthContext] Attempting to setDoc for new user ${firebaseUser.email} with isAdmin: ${finalIsAdminValue}`);
         await setDoc(userRef, {
           email: firebaseUser.email,
           name: displayName,
@@ -188,35 +185,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           isAdmin: finalIsAdminValue,
           createdAt: new Date().toISOString(),
         });
-        console.log(`[AuthContext] New user profile CREATED for ${firebaseUser.email} with isAdmin: ${finalIsAdminValue}`);
+        console.log(`[AuthContext] New user profile CREATED for ${firebaseUser.email}. isAdmin in written data: ${finalIsAdminValue}`);
         if (firebaseUser.displayName !== displayName) {
             await updateProfile(firebaseUser, { displayName: displayName });
         }
-      } catch (error) {
-        console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}:`, error);
+      } catch (error: any) {
+        console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        return null; // Critical error, profile not saved
+        finalIsAdminValue = false; // Explicitly set to false if creation failed
       }
     } else {
       const existingData = userSnap.data() as User;
-      finalIsAdminValue = existingData.isAdmin || false; // Use existing value, default to false if undefined
-      console.log(`[AuthContext] Existing user profile found for ${firebaseUser.email}. Current DB isAdmin: ${existingData.isAdmin}. Email matches ADMIN_EMAIL: ${isTheAdminEmail}`);
+      // Start with the assumption from existing data, or false if not present
+      finalIsAdminValue = existingData.isAdmin === true; // Ensure it's a boolean true
+      
+      console.log(`[AuthContext] Existing user profile found for ${firebaseUser.email}. DB isAdmin: ${existingData.isAdmin}. Initial finalIsAdminValue: ${finalIsAdminValue}. Is this the admin email: ${isTheAdminEmail}`);
 
-      if (isTheAdminEmail && !existingData.isAdmin) {
-        console.warn(`[AuthContext] Admin email ${firebaseUser.email} logged in, but Firestore isAdmin is ${existingData.isAdmin}. Attempting to correct.`);
+      if (isTheAdminEmail && !finalIsAdminValue) {
+        console.warn(`[AuthContext] Admin email ${firebaseUser.email} logged in, but effective isAdmin is ${finalIsAdminValue}. Attempting to correct in Firestore.`);
         try {
           await updateDoc(userRef, { isAdmin: true });
-          finalIsAdminValue = true; // Update local value after successful DB update
+          finalIsAdminValue = true; 
           console.log(`[AuthContext] Successfully UPDATED isAdmin to true for ${firebaseUser.email} in Firestore.`);
         } catch (error: any) {
-          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}`);
-          console.error("[AuthContext] This usually means security rules are preventing self-elevation of admin status OR a general Firestore error. The user will NOT have admin privileges from this session if update failed, local isAdmin will reflect DB state.");
-          // Keep finalIsAdminValue reflecting the (failed to update) database state.
-          finalIsAdminValue = existingData.isAdmin || false; // Re-affirm based on DB as update failed
-          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database.", variant: "destructive" });
+          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}. This usually means security rules are preventing self-elevation.`);
+          // finalIsAdminValue remains what it was before the failed update (false)
+          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database (likely due to security rules). Manually verify Firestore data for this user.", variant: "destructive" });
         }
       }
-       // Ensure local displayName is consistent with Firebase Auth profile if available
       if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
         try {
             await updateDoc(userRef, { name: firebaseUser.displayName });
@@ -227,15 +223,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
     
+    console.log(`[AuthContext] PRE-RETURN CHECK for ${firebaseUser.email}: finalIsAdminValue determined to be ${finalIsAdminValue}`);
     const profileToReturn: User = {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
-      name: displayName, // Use a consistent displayName
-      points: userSnap.exists() ? (userSnap.data() as User).points : 0,
+      name: displayName,
+      points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
       avatarUrl: firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
       isAdmin: finalIsAdminValue,
     };
-    console.log(`[AuthContext] Final user profile data for ${firebaseUser.email}: `, profileToReturn);
+    console.log(`[AuthContext] Final user profile data FOR CONTEXT for ${firebaseUser.email}: isAdmin is ${profileToReturn.isAdmin}`);
     return profileToReturn;
   };
 
@@ -250,9 +247,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
-             console.log("[AuthContext] User profile processed. isAdmin:", userProfile.isAdmin);
+             console.log("[AuthContext] User profile set in context. isAdmin:", userProfile.isAdmin, "User object in context:", userProfile);
           } else {
-            console.warn("[AuthContext] onAuthStateChanged: User profile could not be created/fetched. Logging out.");
+            console.warn("[AuthContext] onAuthStateChanged: User profile could not be created/fetched. Logging out user.");
             setUser(null);
             setIsAuthenticated(false);
             await firebaseSignOut(auth); 
@@ -266,17 +263,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error("[AuthContext] Error during auth state change or profile handling:", error);
         setUser(null);
         setIsAuthenticated(false);
+        // Potentially sign out to clear bad state if error is critical
+        // await firebaseSignOut(auth); 
       } finally {
         setLoadingAuth(false);
-         console.log("[AuthContext] onAuthStateChanged: loadingAuth set to false");
+         console.log("[AuthContext] onAuthStateChanged: loadingAuth set to false. Current context isAuthenticated:", isAuthenticated, "Current context user:", user);
       }
     });
     return () => unsubscribe();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Dependencies intentionally managed for auth state
 
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && selectedStore) {
+    if (selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       const storedCart = localStorage.getItem(cartKey);
       if (storedCart) {
@@ -289,16 +289,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCart([]);
       }
-    } else if (typeof window !== 'undefined' && !selectedStore) {
+    } else if (!selectedStore) {
        setCart([]);
     }
   }, [selectedStore]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && selectedStore && cart.length > 0) { 
+    if (selectedStore && cart.length > 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.setItem(cartKey, JSON.stringify(cart));
-    } else if (typeof window !== 'undefined' && selectedStore && cart.length === 0) { 
+    } else if (selectedStore && cart.length === 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.removeItem(cartKey);
     }
@@ -313,41 +313,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
-        if (typeof window !== 'undefined') localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
+        localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
         setStoreSelectorOpen(false);
       }
     } else {
       setSelectedStoreState(null);
-      if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+      localStorage.removeItem(DODI_SELECTED_STORE_KEY);
       setCart([]);
       setStoreSelectorOpen(true);
     }
   }, [stores, selectedStore]); 
 
   const login = useCallback(async (email: string, pass: string) => {
-    setLoadingAuth(true); // Keep this to manage login button state if needed
+    setLoadingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       toast({ title: "Login Successful", description: "Welcome back!" });
+      // onAuthStateChanged will handle setting user and isAuthenticated
       return true;
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
-      setLoadingAuth(false); // Explicitly set loading false on error for login page
+      setLoadingAuth(false); 
       return false; 
     } 
-    // setLoadingAuth(false) will be handled by onAuthStateChanged on success
   }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
-    setLoadingAuth(true); // Keep this
+    setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      // User profile creation (including isAdmin) is now handled by onAuthStateChanged calling createUserProfile
-      if (name && userCredential.user.displayName !== name) { // Update Firebase Auth profile name if provided
+      if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
+      // onAuthStateChanged will handle setting user and isAuthenticated
       return true;
     } catch (error: any) {
       console.error("Firebase registration error:", error);
@@ -360,21 +360,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
-      setLoadingAuth(false); // Explicitly set loading false on error for register page
+      setLoadingAuth(false);
       return false;
     }
-     // setLoadingAuth(false) will be handled by onAuthStateChanged on success
   }, []);
 
   const logout = useCallback(async () => {
-    // setLoadingAuth(true) will be handled by onAuthStateChanged
     try {
       await firebaseSignOut(auth);
       setCart([]); 
-      if (typeof window !== 'undefined' && selectedStore) {
+      if (selectedStore) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
+      // User state will be cleared by onAuthStateChanged
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/'); 
     } catch (error: any) {
@@ -485,5 +484,6 @@ export function useAppContext() {
   }
   return context;
 }
+    
 
     

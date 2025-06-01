@@ -18,14 +18,21 @@ export default function AdminLayout({
   const router = useRouter();
 
   useEffect(() => {
+    console.log('[AdminLayout] Effect triggered. loadingAuth:', loadingAuth, 'isAuthenticated:', isAuthenticated, 'user:', user);
     if (!loadingAuth) {
       if (!isAuthenticated || !user?.isAdmin) {
+        console.error('[AdminLayout] ACCESS DENIED. User is not authenticated or not an admin. User:', user, 'IsAuthenticated:', isAuthenticated, 'User isAdmin:', user?.isAdmin);
         router.replace('/'); // Redirect non-admins to homepage
+      } else {
+        console.log('[AdminLayout] Access GRANTED. User isAdmin:', user?.isAdmin);
       }
+    } else {
+      console.log('[AdminLayout] Still loading authentication...');
     }
   }, [user, isAuthenticated, loadingAuth, router]);
 
   if (loadingAuth) {
+    console.log('[AdminLayout] Rendering loading spinner for auth.');
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
@@ -35,6 +42,7 @@ export default function AdminLayout({
   }
 
   if (!isAuthenticated || !user?.isAdmin) {
+    console.log('[AdminLayout] Rendering Access Denied card. isAuthenticated:', isAuthenticated, 'user?.isAdmin:', user?.isAdmin);
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
         <Card className="max-w-md p-6 shadow-xl">
@@ -44,7 +52,7 @@ export default function AdminLayout({
           </CardHeader>
           <CardContent>
             <CardDescription className="text-md mb-6">
-              You do not have permission to view this page.
+              You do not have permission to view this page. (Client-side check)
             </CardDescription>
             <Button asChild>
               <Link href="/">Go to Homepage</Link>
@@ -55,6 +63,10 @@ export default function AdminLayout({
     );
   }
 
+  console.log('[AdminLayout] Rendering admin children content.');
   // If admin, render the children (the admin page content)
   return <>{children}</>;
 }
+
+
+    
