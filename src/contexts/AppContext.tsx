@@ -10,8 +10,8 @@ import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndP
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore'; // Firestore imports
 
 import type { Product, User, CartItem, Store, Deal } from '@/lib/types';
-import { initialProducts as allInitialProductsSeed } from '@/data/products';
-import { initialStores as initialStoresSeed } from '@/data/stores';
+// Removed: import { initialProducts as allInitialProductsSeed } from '@/data/products';
+// Removed: import { initialStores as initialStoresSeed } from '@/data/stores';
 import { dailyDeals as allInitialDealsSeed } from '@/data/deals';
 import { seedInitialData } from '@/lib/firestoreService';
 
@@ -66,7 +66,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Seed initial data if Firestore is empty
   useEffect(() => {
     const seed = async () => {
-      await seedInitialData(db);
+      await seedInitialData(); // Call it directly
     };
     seed();
   }, []);
@@ -88,20 +88,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setSelectedStoreState(store);
         } else {
           if (fetchedStores.length > 0) {
-             // setSelectedStoreState(fetchedStores[0]); // Default to first store if saved one not found
-             // localStorage.setItem(DODI_SELECTED_STORE_KEY, fetchedStores[0].id);
-             setStoreSelectorOpen(true); // Or prompt user to select
+             setStoreSelectorOpen(true); 
           } else {
-            setStoreSelectorOpen(true); // No stores, prompt user
+            setStoreSelectorOpen(true); 
           }
         }
       } else {
          if (fetchedStores.length > 0) {
-            // setSelectedStoreState(fetchedStores[0]); // Default to first store
-            // localStorage.setItem(DODI_SELECTED_STORE_KEY, fetchedStores[0].id);
             setStoreSelectorOpen(true);
          } else {
-            setStoreSelectorOpen(true); // No stores, prompt to select (though none exist yet)
+            setStoreSelectorOpen(true); 
          }
       }
     }, (error) => {
@@ -141,7 +137,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email,
           name: displayName,
           points: 0,
-          isAdmin: isInitialAdmin, // Set admin status
+          isAdmin: isInitialAdmin, 
           createdAt: new Date().toISOString(),
         });
         if (name && firebaseUser.displayName !== name) {
@@ -160,18 +156,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     } else {
-      // User profile exists, ensure admin status is correct for ADMIN_EMAIL
       const existingData = userSnap.data() as User;
+      let userProfileData = { ...existingData, id: firebaseUser.uid, avatarUrl: firebaseUser.photoURL || existingData.avatarUrl };
+
       if (isInitialAdmin && !existingData.isAdmin) {
         try {
           await updateDoc(userRef, { isAdmin: true });
-          return { ...existingData, id: firebaseUser.uid, isAdmin: true };
+          userProfileData.isAdmin = true; 
         } catch (error) {
           console.error("Error updating admin status: ", error);
-          return { ...existingData, id: firebaseUser.uid }; // Return existing data if update fails
         }
       }
-      return { ...existingData, id: firebaseUser.uid };
+      return userProfileData;
     }
   };
 
@@ -185,10 +181,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setUser(userProfile);
             setIsAuthenticated(true);
           } else {
-            // Handle case where profile creation/fetch failed
             setUser(null);
             setIsAuthenticated(false);
-            await firebaseSignOut(auth); // Log out if profile is inconsistent
+            await firebaseSignOut(auth); 
           }
         } else {
           setUser(null);
@@ -220,17 +215,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCart([]);
       }
-      // setStoreSelectorOpen(false); // Potentially closes dialog too early if stores are still loading
     } else {
        setCart([]);
     }
   }, [selectedStore]);
 
   useEffect(() => {
-    if (selectedStore && cart.length > 0) { // Only save if cart is not empty
+    if (selectedStore && cart.length > 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.setItem(cartKey, JSON.stringify(cart));
-    } else if (selectedStore && cart.length === 0) { // Remove if cart becomes empty
+    } else if (selectedStore && cart.length === 0) { 
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
       localStorage.removeItem(cartKey);
     }
@@ -260,29 +254,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      // onAuthStateChanged will handle setting user and isAuthenticated
       toast({ title: "Login Successful", description: "Welcome back!" });
       return true;
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
+      setLoadingAuth(false); // Explicitly set loading to false on error
       return false;
-    } finally {
-       // setLoadingAuth(false); // onAuthStateChanged handles this
     }
+    // setLoadingAuth(false) is handled by onAuthStateChanged in success case
   }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      // createUserProfile will be called by onAuthStateChanged
-      // If name is provided, update Firebase Auth profile display name
       if (name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // The onAuthStateChanged listener will then call createUserProfile
-      // which handles Firestore document creation.
+      // createUserProfile will be called by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -296,10 +286,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
+      setLoadingAuth(false); // Explicitly set loading to false on error
       return false;
-    } finally {
-      // setLoadingAuth(false); // onAuthStateChanged handles this
     }
+     // setLoadingAuth(false) is handled by onAuthStateChanged in success case
   }, []);
 
   const logout = useCallback(async () => {
@@ -311,14 +301,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
-      // User will be set to null by onAuthStateChanged
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/'); 
     } catch (error: any) {
       console.error("Firebase logout error:", error);
       toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
     } finally {
-      // setLoadingAuth(false); // onAuthStateChanged handles this
+      // setLoadingAuth(false) handled by onAuthStateChanged
     }
   }, [router, selectedStore]);
 
@@ -357,7 +346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         item.product.id === productId
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
-      ).filter(item => item.quantity > 0) // Remove if quantity becomes 0
+      ).filter(item => item.quantity > 0) 
     );
   }, []);
 
@@ -376,11 +365,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore, allProducts, loadingProducts]);
 
   const deals = useMemo(() => {
-    if (!selectedStore || loadingProducts) return []; // Deals depend on products
-    // Filter seed deals based on products available in the selected store
+    if (!selectedStore || loadingProducts || allProducts.length === 0) return []; 
     return allInitialDealsSeed.filter(d => {
         const productExistsInStore = allProducts.some(p => p.id === d.product.id && p.storeId === selectedStore.id);
-        return productExistsInStore && d.storeId === selectedStore.id; // Ensure deal itself is for the store
+        return productExistsInStore && d.storeId === selectedStore.id; 
     });
   }, [selectedStore, allProducts, loadingProducts]);
 
@@ -425,3 +413,4 @@ export function useAppContext() {
   }
   return context;
 }
+
