@@ -10,23 +10,38 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  useSidebar, 
 } from '@/components/ui/sidebar';
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft } from 'lucide-react';
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight } from 'lucide-react';
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
+  const { toggleSidebar, state, isMobile } = useSidebar(); 
 
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarContent className="flex flex-col">
-        <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
-          <Link href="/" className="flex items-center gap-2">
-            <DodiLogo className="group-data-[collapsible=icon]:hidden" />
-            <PanelLeft className="hidden group-data-[collapsible=icon]:block h-6 w-6 text-sidebar-foreground" />
-          </Link>
+        <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
+          {/* On mobile, this header content might be hidden if the sidebar is a sheet.
+              The trigger to open the sheet itself is now missing from the Navbar.
+              This setup is primarily for desktop icon-collapsible behavior. */}
+          {!isMobile && state === 'expanded' ? (
+            <div className="flex items-center justify-between w-full pl-1 pr-1">
+              <Link href="/" className="flex items-center gap-2">
+                <DodiLogo />
+              </Link>
+              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground">
+                <PanelLeft /> 
+              </Button>
+            </div>
+          ) : !isMobile && state === 'collapsed' ? (
+            <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground group-data-[collapsible=icon]:mx-auto">
+              <PanelRight /> 
+            </Button>
+          ) : null /* On mobile, this internal header trigger isn't primary for opening the sheet */}
         </SidebarHeader>
 
         <SidebarMenu className="flex-1 overflow-y-auto p-2">

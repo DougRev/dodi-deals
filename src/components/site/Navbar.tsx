@@ -5,7 +5,7 @@ import Link from 'next/link';
 import DodiLogo from '@/components/icons/DodiLogo';
 import { AuthButton } from '@/components/site/AuthButton';
 import { Button } from '@/components/ui/button';
-import { SidebarTrigger } from '@/components/ui/sidebar'; // Import SidebarTrigger
+// import { SidebarTrigger } from '@/components/ui/sidebar'; // Removed
 import { ShoppingCart, MapPin, Edit, Award, Loader2 } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
 
@@ -54,8 +54,8 @@ export function Navbar() {
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6">
         <div className="flex items-center space-x-2 md:space-x-4">
-          <SidebarTrigger /> {/* Sidebar trigger icon button */}
-          <Link href="/" className="hidden md:flex items-center space-x-2"> {/* Logo hidden on small screens by default, visible on md+ */}
+          {/* <SidebarTrigger /> Removed */}
+          <Link href="/" className="flex items-center space-x-2"> {/* Logo always visible now, or controlled by sidebar visibility */}
             <DodiLogo />
           </Link>
         </div>
