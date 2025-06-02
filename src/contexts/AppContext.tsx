@@ -9,9 +9,10 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability, DayOfWeek, ProductCategory, StoreDailyDealSetting } from '@/lib/types';
+import { daysOfWeek, fixedDailyCategories } from '@/lib/types'; // Import daysOfWeek and fixedDailyCategories
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // These deals now reference Product IDs
+// import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // No longer using static deals seed
 import { seedInitialData } from '@/lib/firestoreService';
 
 
@@ -23,12 +24,12 @@ interface AppContextType {
   logout: () => void;
   cart: CartItem[];
   addToCart: (product: ResolvedProduct, quantity?: number) => void;
-  removeFromCart: (productId: string) => void; // ProductId here is the original product ID
-  updateCartQuantity: (productId: string, quantity: number) => void; // ProductId here is the original product ID
+  removeFromCart: (productId: string) => void;
+  updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  products: ResolvedProduct[]; // These are resolved for the selected store
-  allProducts: Product[]; // These are raw products from Firestore
-  deals: Deal[]; // These are resolved for the selected store
+  products: ResolvedProduct[];
+  allProducts: Product[];
+  deals: Deal[];
   getCartTotal: () => number;
   stores: Store[];
   selectedStore: Store | null;
@@ -54,7 +55,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const [stores, setStores] = useState<Store[]>(initialStoresSeedData);
   const [loadingStores, setLoadingStores] = useState(true); 
-  const [allProducts, setAllProducts] = useState<Product[]>([]); // Raw products from Firestore
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
@@ -366,27 +367,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setStoreSelectorOpen(true);
       return;
     }
-    if (product.storeId !== selectedStore.id) {
-      // This check might be redundant if `product` is already resolved for the selected store
-      toast({ title: "Product-Store Mismatch", description: "This product is not configured for the selected store.", variant: "destructive" });
-      return;
-    }
+    // The product passed to addToCart should already have its price set correctly (deal price or regular price).
+    // The CartItem stores this resolved product directly.
     setCart((prevCart) => {
       const existingItem = prevCart.find(item => item.product.id === product.id && item.product.storeId === product.storeId);
       if (existingItem) {
         return prevCart.map(item =>
           (item.product.id === product.id && item.product.storeId === product.storeId)
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
+            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) } // Use stock from passed product
             : item
         );
       }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }];
+      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }]; // Use stock from passed product
     });
     toast({ title: "Item Added", description: `${product.name} added to cart.` });
   }, [selectedStore]);
 
   const removeFromCart = useCallback((originalProductId: string) => {
-    // Assumes that products in cart are for the selectedStore, so storeId match is implicit
     setCart((prevCart) => prevCart.filter(item => item.product.id !== originalProductId));
     toast({ title: "Item Removed", description: "Item removed from cart." });
   }, []);
@@ -394,7 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateCartQuantity = useCallback((originalProductId: string, quantity: number) => {
     setCart((prevCart) =>
       prevCart.map(item =>
-        item.product.id === originalProductId // Assumes storeId match due to selectedStore context
+        item.product.id === originalProductId
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
       ).filter(item => item.quantity > 0) 
@@ -407,6 +404,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getCartTotal = useCallback(() => {
+    // Cart items store ResolvedProduct with the price it was added at (deal or regular)
     return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
   }, [cart]);
 
@@ -415,8 +413,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
-      // Ensure p.availability exists before trying to use .find on it
-      const availabilityForStore = p.availability && p.availability.find(avail => avail.storeId === selectedStore.id);
+      if (!p.availability) return; // Guard against undefined availability
+      const availabilityForStore = p.availability.find(avail => avail.storeId === selectedStore.id);
       if (availabilityForStore) {
         resolved.push({
           id: p.id,
@@ -436,37 +434,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore, allProducts, loadingProducts]);
 
   const deals: Deal[] = useMemo(() => {
-    if (!selectedStore || loadingProducts || allProducts.length === 0) return [];
+    if (!selectedStore || loadingProducts || !selectedStore.dailyDeals || products.length === 0) {
+      return [];
+    }
 
-    return allInitialDealsSeed
-      .map(seedDeal => {
-        const coreProduct = allProducts.find(p => p.id === seedDeal.product.id); 
-        if (!coreProduct) return null;
+    const today = new Date();
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; // Sunday is 0, Monday is 1
+    const dealSettingToday = selectedStore.dailyDeals[currentDayOfWeek];
 
-        // Ensure coreProduct.availability exists
-        const availabilityForStore = coreProduct.availability && coreProduct.availability.find(avail => avail.storeId === selectedStore.id);
-        if (!availabilityForStore || seedDeal.storeId !== selectedStore.id) return null;
+    if (!dealSettingToday || !dealSettingToday.category || dealSettingToday.discountPercentage <= 0) {
+      return []; // No deal today or discount is 0
+    }
 
-        const resolvedDealProduct: ResolvedProduct = {
-          id: coreProduct.id,
-          name: coreProduct.name,
-          description: coreProduct.description,
-          brand: coreProduct.brand,
-          category: coreProduct.category,
-          dataAiHint: coreProduct.dataAiHint,
+    const categoryOnDealToday = dealSettingToday.category;
+    const discountPercentageToday = dealSettingToday.discountPercentage;
+
+    const generatedDeals: Deal[] = [];
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    products.forEach(resolvedProduct => {
+      if (resolvedProduct.category === categoryOnDealToday && resolvedProduct.stock > 0) {
+        const originalPrice = resolvedProduct.price;
+        const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
+
+        generatedDeals.push({
+          id: `${resolvedProduct.id}-${currentDayOfWeek}`, // Unique ID for the deal instance
+          product: resolvedProduct, // The ResolvedProduct (contains original price for display)
+          dealPrice: dealPrice,
+          originalPrice: originalPrice,
+          discountPercentage: discountPercentageToday,
+          expiresAt: endOfToday.toISOString(),
+          title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
+          description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${resolvedProduct.name}.`,
           storeId: selectedStore.id,
-          price: availabilityForStore.price, // Original price for comparison
-          stock: availabilityForStore.stock,
-          imageUrl: availabilityForStore.storeSpecificImageUrl || coreProduct.baseImageUrl,
-        };
-        
-        return {
-          ...seedDeal,
-          product: resolvedDealProduct, // Replace with the fully resolved product for this store
-        };
-      })
-      .filter(deal => deal !== null) as Deal[];
-  }, [selectedStore, allProducts, loadingProducts]);
+          categoryOnDeal: categoryOnDealToday,
+        });
+      }
+    });
+
+    return generatedDeals;
+  }, [selectedStore, products, loadingProducts]);
 
 
   const contextValue = useMemo(() => ({
@@ -480,9 +488,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     removeFromCart,
     updateCartQuantity,
     clearCart,
-    products, // Resolved products
-    allProducts, // Raw products
-    deals, // Resolved deals
+    products, 
+    allProducts, 
+    deals, 
     getCartTotal,
     stores, 
     selectedStore,
@@ -509,4 +517,3 @@ export function useAppContext() {
   }
   return context;
 }
-

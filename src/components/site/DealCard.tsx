@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Deal, ResolvedProduct } from '@/lib/types'; // Deal now contains a ResolvedProduct
 import { useAppContext } from '@/hooks/useAppContext';
-import { ShoppingCart, TimerIcon } from 'lucide-react';
+import { ShoppingCart, TimerIcon, Percent } from 'lucide-react';
 
 interface DealCardProps {
-  deal: Deal; // deal.product is already a ResolvedProduct
+  deal: Deal; 
 }
 
 function calculateTimeLeft(expiresAt: string) {
@@ -51,14 +51,10 @@ export function DealCard({ deal }: DealCardProps) {
       return;
     }
     if (isAuthenticated) {
-      // Create a ResolvedProduct specifically for the deal to pass to addToCart
-      // The `deal.product` is already the resolved product for the store context
-      // but `addToCart` might expect certain price/stock based on its own resolution.
-      // For deals, the price IS the dealPrice.
+      // Create a version of the ResolvedProduct with the deal price for the cart
       const productForCart: ResolvedProduct = {
-        ...deal.product, // Contains original product ID, store ID, name, resolved image, etc.
-        price: deal.dealPrice, // Crucially, use the deal price for the cart
-        // stock remains the same as the resolved product's stock
+        ...deal.product, // Spread the original resolved product details
+        price: deal.dealPrice, // Override price with the deal price
       };
       addToCart(productForCart);
     } else {
@@ -79,7 +75,7 @@ export function DealCard({ deal }: DealCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative w-full">
           <Image
-            src={deal.product.imageUrl} // Use resolved imageUrl from deal.product
+            src={deal.product.imageUrl} 
             alt={deal.product.name}
             layout="fill"
             objectFit="cover"
@@ -88,20 +84,25 @@ export function DealCard({ deal }: DealCardProps) {
         </div>
       </CardHeader>
       <CardContent className="p-4 flex-grow">
-        <CardTitle className="text-xl font-headline mb-1 text-accent">{deal.title}</CardTitle>
-        <p className="text-lg font-semibold mb-1">{deal.product.name}</p>
+        <div className="flex justify-between items-start mb-1">
+            <CardTitle className="text-xl font-headline text-accent">{deal.product.name}</CardTitle>
+            <div className="text-xs font-semibold bg-destructive text-destructive-foreground p-1 px-2 rounded-full flex items-center">
+                <Percent className="h-3 w-3 mr-1" /> {deal.discountPercentage}% OFF
+            </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-1">Today's Deal: {deal.categoryOnDeal}</p>
         <p className="text-xs text-muted-foreground mb-1">{deal.product.brand}</p>
         <CardDescription className="text-sm text-muted-foreground mb-2 h-12 overflow-y-auto">
           {deal.description || deal.product.description}
         </CardDescription>
         <div className="flex items-baseline space-x-2 mb-2">
           <p className="text-2xl font-bold text-destructive">${deal.dealPrice.toFixed(2)}</p>
-          <p className="text-md line-through text-muted-foreground">${deal.product.price.toFixed(2)}</p> {/* Original price from resolved product */}
+          <p className="text-md line-through text-muted-foreground">${deal.originalPrice.toFixed(2)}</p>
         </div>
         {isDealActive ? (
           <div className="flex items-center text-sm text-accent font-medium p-2 bg-accent/10 rounded-md">
             <TimerIcon className="mr-2 h-5 w-5" />
-            Expires in: {timerComponents.join(' ')}
+            Deal ends in: {timerComponents.join(' ')}
           </div>
         ) : (
           <p className="text-sm text-destructive font-medium p-2 bg-destructive/10 rounded-md">Deal Expired</p>

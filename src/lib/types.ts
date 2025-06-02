@@ -17,7 +17,7 @@ export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> =
   Monday: 'Flower',
   Tuesday: 'Edible',
   Wednesday: 'Pre-roll',
-  Thursday: 'Accessory', // For Glassware
+  Thursday: 'Accessory', // For Glassware type items
   Friday: 'Vape',
 };
 
@@ -92,40 +92,32 @@ export interface Product extends Omit<ProductFormData, 'availability'> {
 // This "resolved" type is used by AppContext to provide product info to UI components
 // based on the selected store.
 export interface ResolvedProduct {
-  id: string;
+  id: string; // This is the original product ID from the 'products' collection
   name: string;
   description: string;
   brand: string;
-  category: ProductCategory; // Uses updated categories
+  category: ProductCategory;
   dataAiHint?: string;
-  storeId: string;
-  price: number;
-  stock: number;
-  imageUrl: string;
+  storeId: string; // The ID of the store for which this product is resolved
+  price: number; // The price at this specific store
+  stock: number; // The stock at this specific store
+  imageUrl: string; // The resolved image URL (store-specific or base)
 }
+
 
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
 // It represents a specific product that is currently on sale due to a daily category discount.
 export interface Deal {
-  id: string; // e.g., product_id + day_of_week to make it unique for display
-  product: ResolvedProduct; // The specific product that is on sale
+  id: string; // Unique ID for the deal instance, e.g., `resolvedProduct.id + '-' + currentDay`
+  product: ResolvedProduct; // The specific product that is on sale (contains original price)
   dealPrice: number;        // The calculated discounted price
-  originalPrice: number;    // The product's original price
+  originalPrice: number;    // The product's original price (same as product.price)
   discountPercentage: number; // The percentage applied
   expiresAt: string;        // Typically end of the current day
-  title: string;            // e.g., "Monday Flower Special!" or product name
+  title: string;            // e.g., "Monday Flower Special!" or a generated title for the product on deal
   description?: string;     // Could be specific to the deal or product's desc
-  storeId: string;
+  storeId: string;          // Store where this deal is active
   categoryOnDeal: ProductCategory; // The category that triggered this deal
-}
-
-
-// This is for the new "Daily Recurring Deals" managed in Firestore per store
-// (This type might not be directly used if dailyDeals in Store is StoreDailyDealSetting)
-export interface ResolvedDailyDealItem {
-  product: ResolvedProduct;
-  dealPrice: number;
-  dayOfWeek: DayOfWeek;
 }
 
 
@@ -139,6 +131,7 @@ export interface User {
 }
 
 export interface CartItem {
-  product: ResolvedProduct;
+  product: ResolvedProduct; // Note: The price in this ResolvedProduct should be the price it was added to cart at (deal or regular)
   quantity: number;
 }
+
