@@ -434,7 +434,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore, allProducts, loadingProducts]);
 
   const deals: Deal[] = useMemo(() => {
-    if (!selectedStore || loadingProducts || !selectedStore.dailyDeals || selectedStore.dailyDeals.length === 0 || products.length === 0) {
+    // Initial checks for necessary data
+    if (!selectedStore || loadingProducts || products.length === 0) {
+      return [];
+    }
+    // Explicitly check if dailyDeals is a valid array and not empty
+    if (!selectedStore.dailyDeals || !Array.isArray(selectedStore.dailyDeals) || selectedStore.dailyDeals.length === 0) {
       return [];
     }
   
@@ -445,9 +450,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     // Find the first active rule for today
     for (const rule of selectedStore.dailyDeals) {
-      if (rule.selectedDays.includes(currentDayOfWeek) && rule.discountPercentage > 0) {
-        activeRule = rule;
-        break; // Use the first matching rule
+      // Ensure rule itself and its properties are valid before checking
+      if (rule && Array.isArray(rule.selectedDays) && typeof rule.category === 'string' && typeof rule.discountPercentage === 'number') {
+        if (rule.selectedDays.includes(currentDayOfWeek) && rule.discountPercentage > 0) {
+          activeRule = rule;
+          break; // Use the first matching rule
+        }
       }
     }
   
@@ -455,8 +463,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return []; // No active custom deal rule for today
     }
   
+    // Ensure activeRule has the category and discountPercentage
     const categoryOnDealToday = activeRule.category;
     const discountPercentageToday = activeRule.discountPercentage;
+
+    if (!categoryOnDealToday || discountPercentageToday <= 0) {
+        // This case should ideally be caught by the loop's conditions, but as a safeguard
+        return [];
+    }
   
     const generatedDeals: Deal[] = [];
     const endOfToday = new Date(today);
@@ -468,7 +482,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
   
         generatedDeals.push({
-          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${activeRule?.id || 'custom'}`, // Unique ID for the deal instance
+          // Use a combination of product id, day, and potentially rule category/discount for a more unique deal id
+          // The original `activeRule.id` was a temporary UI key and is not saved.
+          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`, 
           product: resolvedProduct, 
           dealPrice: dealPrice,
           originalPrice: originalPrice,
@@ -528,3 +544,4 @@ export function useAppContext() {
 }
 
     
+
