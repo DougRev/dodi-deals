@@ -70,11 +70,11 @@ export default function AdminProductsPage() {
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: productCategories[0] || 'Vape', 
           dataAiHint: '',
-          availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], // Ensure placeholder has empty storeId
+          availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       }
     }
-  }, [isFormOpen, currentProduct, form, stores]);
+  }, [isFormOpen, currentProduct, form.reset]); // DEPENDENCY ARRAY CHANGED HERE
 
   const handleAddNewProduct = () => {
     setCurrentProduct(null);
@@ -85,7 +85,7 @@ export default function AdminProductsPage() {
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape', 
       dataAiHint: '',
-      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], // Ensure placeholder has empty storeId
+      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], 
     });
     setIsFormOpen(true);
   };
@@ -510,3 +510,5 @@ export default function AdminProductsPage() {
   );
 }
 
+
+    
