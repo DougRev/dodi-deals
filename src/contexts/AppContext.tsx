@@ -27,11 +27,13 @@ interface AppContextType {
   addToCart: (product: ResolvedProduct, quantity?: number) => void;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
+  getCartItemQuantity: (productId: string) => number;
   clearCart: () => void;
   products: ResolvedProduct[];
   allProducts: Product[];
   deals: Deal[];
   getCartTotal: () => number;
+  getTotalCartItems: () => number;
   stores: Store[];
   selectedStore: Store | null;
   selectStore: (storeId: string | null) => void;
@@ -182,13 +184,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
     let finalIsAdminValue = false;
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
-    const existingAvatarUrl = userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined;
-    const firebaseAuthPhotoURL = firebaseUser.photoURL;
-
-    if (!userSnap.exists()) {
-      finalIsAdminValue = isTheAdminEmail;
-      
-      const profileDataToSet: {
+    
+    const profileDataToSet: {
         email: string | null;
         name: string;
         points: number;
@@ -198,16 +195,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } = {
         email: firebaseUser.email,
         name: displayName,
-        points: 0,
-        isAdmin: finalIsAdminValue,
-        createdAt: new Date().toISOString(),
+        points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
+        isAdmin: isTheAdminEmail || (userSnap.exists() ? (userSnap.data() as User).isAdmin === true : false),
+        createdAt: userSnap.exists() ? (userSnap.data() as User).createdAt : new Date().toISOString(),
       };
 
-      const determinedAvatarUrl = firebaseAuthPhotoURL || existingAvatarUrl; // existingAvatarUrl will be undefined
-      if (determinedAvatarUrl) { // Only add avatarUrl if it's truthy (not null or undefined or empty string)
-        profileDataToSet.avatarUrl = determinedAvatarUrl;
-      }
+    const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
+    if (determinedAvatarUrl) {
+      profileDataToSet.avatarUrl = determinedAvatarUrl;
+    }
+    
+    finalIsAdminValue = profileDataToSet.isAdmin;
 
+    if (!userSnap.exists()) {
       try {
         await setDoc(userRef, profileDataToSet);
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
@@ -217,28 +217,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
         finalIsAdminValue = false; 
+        profileDataToSet.isAdmin = false;
       }
     } else {
       const existingData = userSnap.data() as User;
-      finalIsAdminValue = existingData.isAdmin === true; 
-      
       const updates: Partial<User> = {};
-      if (isTheAdminEmail && !finalIsAdminValue) {
+      if (isTheAdminEmail && !existingData.isAdmin) {
         updates.isAdmin = true;
-        finalIsAdminValue = true; 
+        finalIsAdminValue = true;
       }
-      if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
-        updates.name = firebaseUser.displayName;
+      if (displayName && existingData.name !== displayName) {
+        updates.name = displayName;
       }
-      const currentAuthAvatar = firebaseAuthPhotoURL || existingData.avatarUrl;
-      if (currentAuthAvatar && existingData.avatarUrl !== currentAuthAvatar) {
-        updates.avatarUrl = currentAuthAvatar;
+       if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
+        updates.avatarUrl = determinedAvatarUrl;
+      } else if (!determinedAvatarUrl && existingData.avatarUrl) {
+        updates.avatarUrl = undefined; // Or a command to delete the field
       }
 
 
       if (Object.keys(updates).length > 0) {
         try {
             await updateDoc(userRef, updates);
+            if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
+            if (updates.avatarUrl && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
         } catch (error: any) {
              console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
         }
@@ -248,9 +250,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const profileToReturn: User = {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
-      name: (userSnap.exists() ? (userSnap.data() as User).name : displayName) || displayName,
-      points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
-      avatarUrl: firebaseAuthPhotoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
+      name: profileDataToSet.name,
+      points: profileDataToSet.points,
+      avatarUrl: profileDataToSet.avatarUrl,
       isAdmin: finalIsAdminValue,
     };
     return profileToReturn;
@@ -359,6 +361,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // createUserProfile will be called by onAuthStateChanged listener
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -459,6 +462,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, [setCart]);
 
+  const getCartItemQuantity = useCallback((productId: string): number => {
+    if (!selectedStore) return 0;
+    const item = cart.find(i => i.product.id === productId && i.product.storeId === selectedStore.id);
+    return item ? item.quantity : 0;
+  }, [cart, selectedStore]);
+
   const clearCart = useCallback(() => {
     setCart([]);
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
@@ -466,6 +475,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getCartTotal = useCallback(() => {
     return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  }, [cart]);
+
+  const getTotalCartItems = useCallback(() => {
+    return cart.reduce((total, item) => total + item.quantity, 0);
   }, [cart]);
 
   const products: ResolvedProduct[] = useMemo(() => {
@@ -573,11 +586,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addToCart,
     removeFromCart,
     updateCartQuantity,
+    getCartItemQuantity,
     clearCart,
     products, 
     allProducts, 
     deals, 
     getCartTotal,
+    getTotalCartItems,
     stores, 
     selectedStore,
     selectStore,
@@ -588,7 +603,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadingProducts,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, cart, addToCart, removeFromCart, 
-    updateCartQuantity, clearCart, products, allProducts, deals, getCartTotal, stores, 
+    updateCartQuantity, getCartItemQuantity, clearCart, products, allProducts, deals, getCartTotal, getTotalCartItems, stores, 
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts
   ]);
