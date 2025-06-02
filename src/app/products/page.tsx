@@ -4,22 +4,24 @@
 import { useState, useMemo } from 'react';
 import { ProductCard } from '@/components/site/ProductCard';
 import { useAppContext } from '@/hooks/useAppContext';
-import type { Product } from '@/lib/types';
+import type { ResolvedProduct, ProductCategory } from '@/lib/types'; // Using ResolvedProduct
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, MapPin } from 'lucide-react';
+import { Search, Filter, MapPin, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function ProductsPage() {
-  const { products, selectedStore, setStoreSelectorOpen } = useAppContext();
+  // products from context are already ResolvedProduct[] for the selected store
+  const { products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'All' | Product['category']>('All');
+  const [selectedCategory, setSelectedCategory] = useState<'All' | ProductCategory>('All');
 
   const categories = useMemo(() => {
     if (!selectedStore) return ['All'];
+    // Derive categories from the resolved products available in the current store
     const uniqueCategories = new Set(products.map(p => p.category));
-    return ['All', ...Array.from(uniqueCategories)] as ('All' | Product['category'])[];
+    return ['All', ...Array.from(uniqueCategories)] as ('All' | ProductCategory)[];
   }, [products, selectedStore]);
 
   const filteredProducts = useMemo(() => {
@@ -32,22 +34,30 @@ export default function ProductsPage() {
     });
   }, [products, searchTerm, selectedCategory, selectedStore]);
 
-  if (!selectedStore) {
-    return (
-      <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
-        <Card className="p-8 shadow-xl max-w-md">
-          <CardContent className="flex flex-col items-center">
-            <MapPin className="h-16 w-16 text-primary mb-6" />
-            <h1 className="text-2xl font-bold font-headline mb-4 text-primary">View Products</h1>
-            <p className="text-muted-foreground mb-6">
-              Please select a store to see its product inventory.
-            </p>
-            <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-              Select Store
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+  if (loadingStores || (!selectedStore && !loadingStores)) {
+     if (!selectedStore && !loadingStores) {
+        return (
+        <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
+            <Card className="p-8 shadow-xl max-w-md">
+            <CardContent className="flex flex-col items-center">
+                <MapPin className="h-16 w-16 text-primary mb-6" />
+                <h1 className="text-2xl font-bold font-headline mb-4 text-primary">View Products</h1>
+                <p className="text-muted-foreground mb-6">
+                Please select a store to see its product inventory.
+                </p>
+                <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                Select Store
+                </Button>
+            </CardContent>
+            </Card>
+        </div>
+        );
+     }
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[70vh]">
+            <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+            <p className="text-lg text-muted-foreground">Loading store information...</p>
+        </div>
     );
   }
 
@@ -71,7 +81,7 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center gap-2 flex-grow md:flex-grow-0">
           <Filter className="h-5 w-5 text-muted-foreground" />
-          <Select value={selectedCategory} onValueChange={(value: 'All' | Product['category']) => setSelectedCategory(value)}>
+          <Select value={selectedCategory} onValueChange={(value: 'All' | ProductCategory) => setSelectedCategory(value)}>
             <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filter by category" />
             </SelectTrigger>
@@ -86,9 +96,11 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {filteredProducts.length > 0 ? (
+      {loadingProducts ? (
+         <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <span className="ml-2">Loading products...</span></div>
+      ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
+          {filteredProducts.map((product) => ( // product is a ResolvedProduct here
             <ProductCard key={product.id} product={product} />
           ))}
         </div>

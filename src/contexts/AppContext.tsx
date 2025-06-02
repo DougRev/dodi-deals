@@ -9,9 +9,9 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { dailyDeals as allInitialDealsSeed } from '@/data/deals';
+import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // These deals now reference Product IDs
 import { seedInitialData } from '@/lib/firestoreService';
 
 
@@ -22,13 +22,13 @@ interface AppContextType {
   register: (email: string, pass: string, name?: string) => Promise<boolean>;
   logout: () => void;
   cart: CartItem[];
-  addToCart: (product: Product, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
+  addToCart: (product: ResolvedProduct, quantity?: number) => void;
+  removeFromCart: (productId: string) => void; // ProductId here is the original product ID
+  updateCartQuantity: (productId: string, quantity: number) => void; // ProductId here is the original product ID
   clearCart: () => void;
-  products: Product[];
-  allProducts: Product[];
-  deals: Deal[];
+  products: ResolvedProduct[]; // These are resolved for the selected store
+  allProducts: Product[]; // These are raw products from Firestore
+  deals: Deal[]; // These are resolved for the selected store
   getCartTotal: () => number;
   stores: Store[];
   selectedStore: Store | null;
@@ -54,7 +54,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const [stores, setStores] = useState<Store[]>(initialStoresSeedData);
   const [loadingStores, setLoadingStores] = useState(true); 
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]); // Raw products from Firestore
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
@@ -174,10 +174,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
 
     if (!userSnap.exists()) {
-      console.log(`[AuthContext] Creating new user profile for ${firebaseUser.email}. Email matches ADMIN_EMAIL: ${isTheAdminEmail}`);
-      finalIsAdminValue = isTheAdminEmail; // This should be true if isTheAdminEmail is true
+      finalIsAdminValue = isTheAdminEmail;
       try {
-        console.log(`[AuthContext] Attempting to setDoc for new user ${firebaseUser.email} with isAdmin: ${finalIsAdminValue}`);
         await setDoc(userRef, {
           email: firebaseUser.email,
           name: displayName,
@@ -185,45 +183,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           isAdmin: finalIsAdminValue,
           createdAt: new Date().toISOString(),
         });
-        console.log(`[AuthContext] New user profile CREATED for ${firebaseUser.email}. isAdmin in written data: ${finalIsAdminValue}`);
         if (firebaseUser.displayName !== displayName) {
             await updateProfile(firebaseUser, { displayName: displayName });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        finalIsAdminValue = false; // Explicitly set to false if creation failed
+        finalIsAdminValue = false; 
       }
     } else {
       const existingData = userSnap.data() as User;
-      // Start with the assumption from existing data, or false if not present
-      finalIsAdminValue = existingData.isAdmin === true; // Ensure it's a boolean true
+      finalIsAdminValue = existingData.isAdmin === true; 
       
-      console.log(`[AuthContext] Existing user profile found for ${firebaseUser.email}. DB isAdmin: ${existingData.isAdmin}. Initial finalIsAdminValue: ${finalIsAdminValue}. Is this the admin email: ${isTheAdminEmail}`);
-
       if (isTheAdminEmail && !finalIsAdminValue) {
-        console.warn(`[AuthContext] Admin email ${firebaseUser.email} logged in, but effective isAdmin is ${finalIsAdminValue}. Attempting to correct in Firestore.`);
         try {
           await updateDoc(userRef, { isAdmin: true });
           finalIsAdminValue = true; 
-          console.log(`[AuthContext] Successfully UPDATED isAdmin to true for ${firebaseUser.email} in Firestore.`);
         } catch (error: any) {
-          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}. This usually means security rules are preventing self-elevation.`);
-          // finalIsAdminValue remains what it was before the failed update (false)
-          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database (likely due to security rules). Manually verify Firestore data for this user.", variant: "destructive" });
+          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}.`);
+          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database. Manually verify Firestore data for this user.", variant: "destructive" });
         }
       }
       if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
         try {
             await updateDoc(userRef, { name: firebaseUser.displayName });
-             console.log(`[AuthContext] Updated Firestore name for ${firebaseUser.email} to match Auth profile.`);
         } catch (error) {
             console.error(`[AuthContext] Failed to update Firestore name for ${firebaseUser.email}:`, error);
         }
       }
     }
     
-    console.log(`[AuthContext] PRE-RETURN CHECK for ${firebaseUser.email}: finalIsAdminValue determined to be ${finalIsAdminValue}`);
     const profileToReturn: User = {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
@@ -232,7 +221,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       avatarUrl: firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
       isAdmin: finalIsAdminValue,
     };
-    console.log(`[AuthContext] Final user profile data FOR CONTEXT for ${firebaseUser.email}: isAdmin is ${profileToReturn.isAdmin}`);
     return profileToReturn;
   };
 
@@ -242,20 +230,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
         if (firebaseUser) {
-          console.log("[AuthContext] onAuthStateChanged: User is LOGGED IN", firebaseUser.email);
           const userProfile = await createUserProfile(firebaseUser, firebaseUser.displayName || undefined);
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
-             console.log("[AuthContext] User profile set in context. isAdmin:", userProfile.isAdmin, "User object in context:", userProfile);
           } else {
-            console.warn("[AuthContext] onAuthStateChanged: User profile could not be created/fetched. Logging out user.");
             setUser(null);
             setIsAuthenticated(false);
             await firebaseSignOut(auth); 
           }
         } else {
-          console.log("[AuthContext] onAuthStateChanged: User is LOGGED OUT");
           setUser(null);
           setIsAuthenticated(false);
         }
@@ -263,16 +247,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error("[AuthContext] Error during auth state change or profile handling:", error);
         setUser(null);
         setIsAuthenticated(false);
-        // Potentially sign out to clear bad state if error is critical
-        // await firebaseSignOut(auth); 
       } finally {
         setLoadingAuth(false);
-         console.log("[AuthContext] onAuthStateChanged: loadingAuth set to false. Current context isAuthenticated:", isAuthenticated, "Current context user:", user);
       }
     });
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Dependencies intentionally managed for auth state
+  }, []);
 
 
   useEffect(() => {
@@ -329,7 +310,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       toast({ title: "Login Successful", description: "Welcome back!" });
-      // onAuthStateChanged will handle setting user and isAuthenticated
       return true;
     } catch (error: any) {
       console.error("Firebase login error:", error);
@@ -347,7 +327,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await updateProfile(userCredential.user, { displayName: name });
       }
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
-      // onAuthStateChanged will handle setting user and isAuthenticated
       return true;
     } catch (error: any) {
       console.error("Firebase registration error:", error);
@@ -373,7 +352,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
           localStorage.removeItem(cartKey);
       }
-      // User state will be cleared by onAuthStateChanged
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/'); 
     } catch (error: any) {
@@ -382,21 +360,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } 
   }, [router, selectedStore]);
 
-  const addToCart = useCallback((product: Product, quantity: number = 1) => {
+  const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
     if (!selectedStore) {
       toast({ title: "No Store Selected", description: "Please select a store before adding to cart.", variant: "destructive" });
       setStoreSelectorOpen(true);
       return;
     }
     if (product.storeId !== selectedStore.id) {
-      toast({ title: "Wrong Store", description: "This product is not available at the selected store.", variant: "destructive" });
+      // This check might be redundant if `product` is already resolved for the selected store
+      toast({ title: "Product-Store Mismatch", description: "This product is not configured for the selected store.", variant: "destructive" });
       return;
     }
     setCart((prevCart) => {
-      const existingItem = prevCart.find(item => item.product.id === product.id);
+      const existingItem = prevCart.find(item => item.product.id === product.id && item.product.storeId === product.storeId);
       if (existingItem) {
         return prevCart.map(item =>
-          item.product.id === product.id
+          (item.product.id === product.id && item.product.storeId === product.storeId)
             ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
             : item
         );
@@ -406,15 +385,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "Item Added", description: `${product.name} added to cart.` });
   }, [selectedStore]);
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart((prevCart) => prevCart.filter(item => item.product.id !== productId));
+  const removeFromCart = useCallback((originalProductId: string) => {
+    // Assumes that products in cart are for the selectedStore, so storeId match is implicit
+    setCart((prevCart) => prevCart.filter(item => item.product.id !== originalProductId));
     toast({ title: "Item Removed", description: "Item removed from cart." });
   }, []);
 
-  const updateCartQuantity = useCallback((productId: string, quantity: number) => {
+  const updateCartQuantity = useCallback((originalProductId: string, quantity: number) => {
     setCart((prevCart) =>
       prevCart.map(item =>
-        item.product.id === productId
+        item.product.id === originalProductId // Assumes storeId match due to selectedStore context
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
       ).filter(item => item.quantity > 0) 
@@ -430,17 +410,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
   }, [cart]);
 
-  const products = useMemo(() => {
-    if (!selectedStore || loadingProducts) return [];
-    return allProducts.filter(p => p.storeId === selectedStore.id);
+  const products: ResolvedProduct[] = useMemo(() => {
+    if (!selectedStore || loadingProducts || allProducts.length === 0) return [];
+    
+    const resolved: ResolvedProduct[] = [];
+    allProducts.forEach(p => {
+      const availabilityForStore = p.availability.find(avail => avail.storeId === selectedStore.id);
+      if (availabilityForStore) {
+        resolved.push({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          brand: p.brand,
+          category: p.category,
+          dataAiHint: p.dataAiHint,
+          storeId: selectedStore.id,
+          price: availabilityForStore.price,
+          stock: availabilityForStore.stock,
+          imageUrl: availabilityForStore.storeSpecificImageUrl || p.baseImageUrl,
+        });
+      }
+    });
+    return resolved;
   }, [selectedStore, allProducts, loadingProducts]);
 
-  const deals = useMemo(() => {
-    if (!selectedStore || loadingProducts || allProducts.length === 0) return []; 
-    return allInitialDealsSeed.filter(d => {
-        const productExistsInStore = allProducts.some(p => p.id === d.product.id && p.storeId === selectedStore.id);
-        return productExistsInStore && d.storeId === selectedStore.id; 
-    });
+  const deals: Deal[] = useMemo(() => {
+    if (!selectedStore || loadingProducts || allProducts.length === 0) return [];
+
+    return allInitialDealsSeed
+      .map(seedDeal => {
+        const coreProduct = allProducts.find(p => p.id === seedDeal.product.id); // seedDeal.product.id is original product id
+        if (!coreProduct) return null;
+
+        const availabilityForStore = coreProduct.availability.find(avail => avail.storeId === selectedStore.id);
+        if (!availabilityForStore || seedDeal.storeId !== selectedStore.id) return null;
+
+        const resolvedDealProduct: ResolvedProduct = {
+          id: coreProduct.id,
+          name: coreProduct.name,
+          description: coreProduct.description,
+          brand: coreProduct.brand,
+          category: coreProduct.category,
+          dataAiHint: coreProduct.dataAiHint,
+          storeId: selectedStore.id,
+          price: availabilityForStore.price, // Original price for comparison
+          stock: availabilityForStore.stock,
+          imageUrl: availabilityForStore.storeSpecificImageUrl || coreProduct.baseImageUrl,
+        };
+        
+        return {
+          ...seedDeal,
+          product: resolvedDealProduct, // Replace with the fully resolved product for this store
+        };
+      })
+      .filter(deal => deal !== null) as Deal[];
   }, [selectedStore, allProducts, loadingProducts]);
 
 
@@ -455,9 +478,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     removeFromCart,
     updateCartQuantity,
     clearCart,
-    products,
-    allProducts,
-    deals,
+    products, // Resolved products
+    allProducts, // Raw products
+    deals, // Resolved deals
     getCartTotal,
     stores, 
     selectedStore,
@@ -484,6 +507,3 @@ export function useAppContext() {
   }
   return context;
 }
-    
-
-    

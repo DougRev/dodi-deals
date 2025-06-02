@@ -4,27 +4,28 @@
 import { useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Trash2, ShoppingBag, ArrowLeft, MapPin } from 'lucide-react';
+import type { ResolvedProduct } from '@/lib/types'; // Cart items use ResolvedProduct
 
 export default function CartPage() {
-  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen, loadingAuth } = useAppContext(); // Added loadingAuth
+  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen, loadingAuth } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!loadingAuth && !isAuthenticated) { // Check loadingAuth
+    if (!loadingAuth && !isAuthenticated) {
       const redirect = searchParams.get('redirect');
       router.push(redirect ? `/login?redirect=${redirect}` : '/login?redirect=/cart');
     }
   }, [isAuthenticated, router, loadingAuth, searchParams]);
 
-  if (loadingAuth || (!loadingAuth && !isAuthenticated)) { // Show loading or redirect text
+  if (loadingAuth || (!loadingAuth && !isAuthenticated)) {
     return <div className="text-center py-10">Loading cart...</div>;
   }
 
@@ -48,6 +49,7 @@ export default function CartPage() {
   }
 
   const handleQuantityChange = (productId: string, newQuantity: number) => {
+    // productId is the original product ID from ResolvedProduct
     if (newQuantity >= 0) {
       updateCartQuantity(productId, newQuantity);
     }
@@ -80,7 +82,7 @@ export default function CartPage() {
               <Card key={item.product.id} className="flex flex-col md:flex-row items-center p-4 gap-4 shadow-md">
                 <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-md overflow-hidden shrink-0">
                   <Image 
-                    src={item.product.imageUrl} 
+                    src={item.product.imageUrl} // Resolved imageUrl
                     alt={item.product.name} 
                     layout="fill" 
                     objectFit="cover" 
@@ -88,6 +90,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex-grow">
                   <h3 className="text-lg font-semibold text-primary">{item.product.name}</h3>
+                  <p className="text-sm text-muted-foreground">{item.product.brand}</p>
                   <p className="text-sm text-muted-foreground">{item.product.category}</p>
                   <p className="text-md font-bold text-accent">${item.product.price.toFixed(2)}</p>
                 </div>

@@ -32,41 +32,43 @@ export const StoreAvailabilitySchema = z.object({
 });
 export type StoreAvailability = z.infer<typeof StoreAvailabilitySchema>;
 
-// Zod schema for product form validation
+// Zod schema for product form validation (for Admin page)
 export const ProductSchema = z.object({
   name: z.string().min(3, { message: "Product name must be at least 3 characters." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
-  dataAiHint: z.string().optional().default(''),
-  availability: z.array(StoreAvailabilitySchema).min(1, { message: "Product must be available in at least one store." }),
+  dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
+  availability: z.array(StoreAvailabilitySchema)
+    .min(1, { message: "Product must be available in at least one store." })
+    .refine(items => new Set(items.map(item => item.storeId)).size === items.length, {
+      message: "Each store can only have one availability entry for this product.",
+    }),
 });
 
 // Type inferred from the Zod schema for product form data
 export type ProductFormData = z.infer<typeof ProductSchema>;
 
-// Main Product interface for Firestore
-export interface Product {
+// Main Product interface for Firestore (matches structure of ProductSchema)
+export interface Product extends Omit<ProductFormData, 'availability'> {
   id: string;
+  availability: StoreAvailability[];
+}
+
+// This "resolved" type is used by AppContext to provide product info to UI components
+// based on the selected store.
+export interface ResolvedProduct {
+  id: string; // This will be the original product ID from Firestore
   name: string;
   description: string;
   brand: string;
-  baseImageUrl: string;
   category: ProductCategory;
   dataAiHint?: string;
-  availability: StoreAvailability[]; // Array of store-specific details
-}
-
-// This type will be used by AppContext to provide resolved product info to components
-export interface ResolvedProduct extends Omit<Product, 'availability' | 'baseImageUrl'> {
-  // Core product fields except for availability and baseImageUrl (which is resolved to imageUrl)
-  // Plus store-specific resolved fields:
   storeId: string;      // The ID of the store for which this product is resolved
   price: number;        // Price in the specific store
   stock: number;        // Stock in the specific store
   imageUrl: string;     // Resolved image URL (storeSpecific or base) for this store context
-  originalProductId: string; // The ID of the original product document
 }
 
 

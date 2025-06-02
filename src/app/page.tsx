@@ -6,40 +6,51 @@ import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, MapPin, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 export default function HomePage() {
-  const { deals, products, selectedStore, setStoreSelectorOpen } = useAppContext();
+  const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   
   // Show only a few featured products from the current store's products
   const featuredProducts = products.slice(0, 3);
 
-  if (!selectedStore) {
+  if (loadingStores || (!selectedStore && !loadingStores)) { // Show loader if stores are loading, or prompt if loading is done but no store
+    if (!selectedStore && !loadingStores) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
+          <Card className="p-8 shadow-xl max-w-md">
+            <CardContent className="flex flex-col items-center">
+              <MapPin className="h-16 w-16 text-primary mb-6" />
+              <h1 className="text-2xl font-bold font-headline mb-4 text-primary">Welcome to Dodi Deals!</h1>
+              <p className="text-muted-foreground mb-6">
+                Please select your preferred store to view deals and products available for pickup.
+              </p>
+              <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                Select Store
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
-      <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
-        <Card className="p-8 shadow-xl max-w-md">
-          <CardContent className="flex flex-col items-center">
-            <MapPin className="h-16 w-16 text-primary mb-6" />
-            <h1 className="text-2xl font-bold font-headline mb-4 text-primary">Welcome to Dodi Deals!</h1>
-            <p className="text-muted-foreground mb-6">
-              Please select your preferred store to view deals and products available for pickup.
-            </p>
-            <Button onClick={() => setStoreSelectorOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-              Select Store
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[70vh]">
+        <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading store information...</p>
       </div>
     );
   }
+  // At this point, selectedStore should be available if loadingStores is false.
 
   return (
     <div className="space-y-12">
       <section>
         <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h1>
         <p className="text-center text-muted-foreground mb-8">Don't miss out on these limited-time offers!</p>
-        {deals.length > 0 ? (
+        {loadingProducts ? (
+           <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <span className="ml-2">Loading deals...</span></div>
+        ) : deals.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {deals.map((deal) => (
               <DealCard key={deal.id} deal={deal} />
@@ -63,7 +74,9 @@ export default function HomePage() {
             </Link>
           </Button>
         </div>
-        {featuredProducts.length > 0 ? (
+        {loadingProducts ? (
+          <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" />  <span className="ml-2">Loading products...</span></div>
+        ) : featuredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {featuredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />

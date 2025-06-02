@@ -1,24 +1,29 @@
+
 "use client";
 
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Product } from '@/lib/types';
+import type { ResolvedProduct } from '@/lib/types'; // Updated to use ResolvedProduct
 import { useAppContext } from '@/hooks/useAppContext';
 import { ShoppingCart } from 'lucide-react';
 
 interface ProductCardProps {
-  product: Product;
+  product: ResolvedProduct; // Product is now a ResolvedProduct
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const { addToCart, isAuthenticated } = useAppContext();
+  const { addToCart, isAuthenticated, selectedStore } = useAppContext();
 
   const handleAddToCart = () => {
+    if (!selectedStore) {
+        alert("Please select a store first.");
+        return;
+    }
     if (isAuthenticated) {
+      // product is already resolved for the selected store
       addToCart(product);
     } else {
-      // Optionally, prompt to login or redirect
       alert("Please log in to add items to your cart.");
     }
   };
@@ -28,7 +33,7 @@ export function ProductCard({ product }: ProductCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative w-full">
           <Image
-            src={product.imageUrl}
+            src={product.imageUrl} // Use resolved imageUrl
             alt={product.name}
             layout="fill"
             objectFit="cover"
@@ -37,7 +42,8 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
       </CardHeader>
       <CardContent className="p-4 flex-grow">
-        <CardTitle className="text-xl font-headline mb-2">{product.name}</CardTitle>
+        <CardTitle className="text-xl font-headline mb-1">{product.name}</CardTitle>
+        <p className="text-xs text-muted-foreground mb-1">{product.brand}</p>
         <CardDescription className="text-sm text-muted-foreground mb-2 h-20 overflow-y-auto">{product.description}</CardDescription>
         <p className="text-lg font-semibold text-primary">${product.price.toFixed(2)}</p>
         <p className="text-xs text-muted-foreground">Category: {product.category}</p>
