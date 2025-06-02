@@ -165,35 +165,66 @@ export default function AdminProductsPage() {
         toast({ title: "Stores not loaded", description: "Cannot populate stores yet.", variant: "destructive" });
         return;
     }
-    const currentAvailabilities = form.getValues('availability') || [];
-    const existingStoreIds = new Set(currentAvailabilities.map(a => a.storeId));
-    
+
+    const currentFormAvailabilities = form.getValues('availability') || [];
     let defaultPrice = 0;
     let defaultStock = 0;
+    let operationsPerformed = 0;
 
-    if (currentAvailabilities.length > 0 && currentAvailabilities[0]) {
-        defaultPrice = Number(currentAvailabilities[0].price) || 0;
-        defaultStock = Number(currentAvailabilities[0].stock) || 0;
-    }
-    
-    let storesAddedCount = 0;
-    stores.forEach(store => {
-        if (!existingStoreIds.has(store.id)) {
+    // Scenario 1: The form has exactly one entry, and it's a placeholder (empty storeId).
+    if (currentFormAvailabilities.length === 1 && (!currentFormAvailabilities[0].storeId || currentFormAvailabilities[0].storeId.trim() === '')) {
+        defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
+        defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
+        
+        remove(0); // Remove the placeholder. `fields` (from useFieldArray) will be empty for subsequent appends.
+        
+        // Append all stores.
+        stores.forEach(store => {
             append({ 
                 storeId: store.id, 
                 price: defaultPrice, 
                 stock: defaultStock, 
                 storeSpecificImageUrl: '' 
             });
-            existingStoreIds.add(store.id); 
-            storesAddedCount++;
+            operationsPerformed++;
+        });
+        if (operationsPerformed > 0) {
+             toast({ title: "Stores Populated", description: `Replaced placeholder and added all ${operationsPerformed} store(s).` });
+        } else {
+             toast({ title: "No Stores", description: "Placeholder removed, but no stores configured to add." });
         }
-    });
-
-    if (storesAddedCount > 0) {
-        toast({ title: "Stores Populated", description: `${storesAddedCount} store(s) added to availability list with default values.` });
     } else {
-        toast({ title: "No New Stores", description: "All stores are already in the availability list or no stores available." });
+        // Scenario 2: Form has existing items, or is empty.
+        // Populate with stores not already in the list.
+        if (currentFormAvailabilities.length > 0 && currentFormAvailabilities[0]) {
+            defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
+            defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
+        }
+        // Else, if form is empty, defaults are 0,0.
+
+        // `fields` from useFieldArray is the reactive list of current field items.
+        // We map it to get the store IDs actually present in the form fields.
+        const existingStoreIdsInForm = new Set(fields.map(field => form.getValues(`availability.${fields.indexOf(field)}.storeId`)).filter(id => id && id.trim() !== ''));
+        
+        stores.forEach(store => {
+            if (!existingStoreIdsInForm.has(store.id)) {
+                append({ 
+                    storeId: store.id, 
+                    price: defaultPrice, 
+                    stock: defaultStock, 
+                    storeSpecificImageUrl: '' 
+                });
+                operationsPerformed++;
+            }
+        });
+
+        if (operationsPerformed > 0) {
+            toast({ title: "Stores Added", description: `${operationsPerformed} additional store(s) added to the list.` });
+        } else if (stores.length > 0) {
+            toast({ title: "All Stores Present", description: "All available stores are already in the list." });
+        } else {
+             toast({ title: "No Stores", description: "No stores configured to add." });
+        }
     }
   };
 
@@ -482,3 +513,4 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+
