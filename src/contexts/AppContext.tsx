@@ -9,8 +9,8 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability, DayOfWeek, ProductCategory, StoreDailyDealSetting } from '@/lib/types';
-import { daysOfWeek, fixedDailyCategories } from '@/lib/types'; // Import daysOfWeek and fixedDailyCategories
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability, DayOfWeek, ProductCategory, CustomDealRule } from '@/lib/types';
+import { daysOfWeek } from '@/lib/types'; // Import daysOfWeek
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 // import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // No longer using static deals seed
 import { seedInitialData } from '@/lib/firestoreService';
@@ -434,33 +434,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore, allProducts, loadingProducts]);
 
   const deals: Deal[] = useMemo(() => {
-    if (!selectedStore || loadingProducts || !selectedStore.dailyDeals || products.length === 0) {
+    if (!selectedStore || loadingProducts || !selectedStore.dailyDeals || selectedStore.dailyDeals.length === 0 || products.length === 0) {
       return [];
     }
-
+  
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; // Sunday is 0, Monday is 1
-    const dealSettingToday = selectedStore.dailyDeals[currentDayOfWeek];
-
-    if (!dealSettingToday || !dealSettingToday.category || dealSettingToday.discountPercentage <= 0) {
-      return []; // No deal today or discount is 0
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; // Sunday is 0 -> 6 (Sunday), Monday is 1 -> 0 (Monday)
+    
+    let activeRule: CustomDealRule | undefined = undefined;
+    
+    // Find the first active rule for today
+    for (const rule of selectedStore.dailyDeals) {
+      if (rule.selectedDays.includes(currentDayOfWeek) && rule.discountPercentage > 0) {
+        activeRule = rule;
+        break; // Use the first matching rule
+      }
     }
-
-    const categoryOnDealToday = dealSettingToday.category;
-    const discountPercentageToday = dealSettingToday.discountPercentage;
-
+  
+    if (!activeRule) {
+      return []; // No active custom deal rule for today
+    }
+  
+    const categoryOnDealToday = activeRule.category;
+    const discountPercentageToday = activeRule.discountPercentage;
+  
     const generatedDeals: Deal[] = [];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
-
+  
     products.forEach(resolvedProduct => {
       if (resolvedProduct.category === categoryOnDealToday && resolvedProduct.stock > 0) {
         const originalPrice = resolvedProduct.price;
         const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
-
+  
         generatedDeals.push({
-          id: `${resolvedProduct.id}-${currentDayOfWeek}`, // Unique ID for the deal instance
-          product: resolvedProduct, // The ResolvedProduct (contains original price for display)
+          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${activeRule?.id || 'custom'}`, // Unique ID for the deal instance
+          product: resolvedProduct, 
           dealPrice: dealPrice,
           originalPrice: originalPrice,
           discountPercentage: discountPercentageToday,
@@ -472,7 +481,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
     });
-
+  
     return generatedDeals;
   }, [selectedStore, products, loadingProducts]);
 
@@ -517,3 +526,5 @@ export function useAppContext() {
   }
   return context;
 }
+
+    
