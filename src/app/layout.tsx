@@ -5,7 +5,9 @@ import { AppProvider } from '@/contexts/AppContext';
 import { Navbar } from '@/components/site/Navbar';
 import { Footer } from '@/components/site/Footer';
 import { Toaster } from "@/components/ui/toaster";
-import { StoreSelectorDialog } from '@/components/site/StoreSelectorDialog'; // Import the dialog
+import { StoreSelectorDialog } from '@/components/site/StoreSelectorDialog';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/site/AppSidebar';
 
 export const metadata: Metadata = {
   title: 'Dodi Deals',
@@ -26,13 +28,18 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-screen flex flex-col">
         <AppProvider>
-          <StoreSelectorDialog /> {/* Add the dialog here so it's available globally */}
-          <Navbar />
-          <main className="flex-grow container mx-auto px-4 py-8 md:px-6">
-            {children}
-          </main>
-          <Footer />
-          <Toaster />
+          <SidebarProvider defaultOpen={true}>
+            <AppSidebar />
+            <SidebarInset className="flex flex-col flex-1">
+              <StoreSelectorDialog />
+              <Navbar />
+              <main className="flex-grow container mx-auto px-4 py-8 md:px-6">
+                {children}
+              </main>
+              <Footer />
+            </SidebarInset>
+            <Toaster />
+          </SidebarProvider>
         </AppProvider>
       </body>
     </html>

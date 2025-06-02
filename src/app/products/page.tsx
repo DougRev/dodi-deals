@@ -4,35 +4,41 @@
 import { useState, useMemo } from 'react';
 import { ProductCard } from '@/components/site/ProductCard';
 import { useAppContext } from '@/hooks/useAppContext';
-import type { ResolvedProduct, ProductCategory } from '@/lib/types'; // Using ResolvedProduct
+import type { ResolvedProduct, ProductCategory } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, MapPin, Loader2 } from 'lucide-react';
+import { Search, Filter, MapPin, Loader2, Tag } from 'lucide-react'; // Added Tag for brand
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function ProductsPage() {
-  // products from context are already ResolvedProduct[] for the selected store
   const { products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | ProductCategory>('All');
+  const [selectedBrand, setSelectedBrand] = useState<'All' | string>('All'); // New state for brand
 
   const categories = useMemo(() => {
-    if (!selectedStore) return ['All'];
-    // Derive categories from the resolved products available in the current store
+    if (!selectedStore || loadingProducts) return ['All']; // check loadingProducts
     const uniqueCategories = new Set(products.map(p => p.category));
     return ['All', ...Array.from(uniqueCategories)] as ('All' | ProductCategory)[];
-  }, [products, selectedStore]);
+  }, [products, selectedStore, loadingProducts]);
+
+  const brands = useMemo(() => {
+    if (!selectedStore || loadingProducts) return ['All']; // check loadingProducts
+    const uniqueBrands = new Set(products.map(p => p.brand));
+    return ['All', ...Array.from(uniqueBrands)].sort(); // Sort brands alphabetically
+  }, [products, selectedStore, loadingProducts]);
 
   const filteredProducts = useMemo(() => {
     if (!selectedStore) return [];
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
+      const matchesBrand = selectedBrand === 'All' || product.brand === selectedBrand;
       const matchesSearchTerm = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                 product.description.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearchTerm;
+      return matchesCategory && matchesBrand && matchesSearchTerm;
     });
-  }, [products, searchTerm, selectedCategory, selectedStore]);
+  }, [products, searchTerm, selectedCategory, selectedBrand, selectedStore]);
 
   if (loadingStores || (!selectedStore && !loadingStores)) {
      if (!selectedStore && !loadingStores) {
@@ -68,8 +74,8 @@ export default function ProductsPage() {
         <p className="text-lg text-muted-foreground">Explore our wide selection of vapes, THCa, and accessories.</p>
       </header>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-8 p-4 bg-card rounded-lg shadow">
-        <div className="relative flex-grow">
+      <div className="flex flex-col md:flex-row gap-4 mb-8 p-4 bg-card rounded-lg shadow items-center">
+        <div className="relative flex-grow w-full md:w-auto">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
             type="text"
@@ -79,7 +85,7 @@ export default function ProductsPage() {
             className="pl-10 w-full"
           />
         </div>
-        <div className="flex items-center gap-2 flex-grow md:flex-grow-0">
+        <div className="flex items-center gap-2 w-full md:w-auto">
           <Filter className="h-5 w-5 text-muted-foreground" />
           <Select value={selectedCategory} onValueChange={(value: 'All' | ProductCategory) => setSelectedCategory(value)}>
             <SelectTrigger className="w-full md:w-[180px]">
@@ -94,14 +100,29 @@ export default function ProductsPage() {
             </SelectContent>
           </Select>
         </div>
+         <div className="flex items-center gap-2 w-full md:w-auto">
+          <Tag className="h-5 w-5 text-muted-foreground" /> {/* Icon for brand filter */}
+          <Select value={selectedBrand} onValueChange={(value: 'All' | string) => setSelectedBrand(value)}>
+            <SelectTrigger className="w-full md:w-[180px]">
+              <SelectValue placeholder="Filter by brand" />
+            </SelectTrigger>
+            <SelectContent>
+              {brands.map(brand => (
+                <SelectItem key={brand} value={brand}>
+                  {brand}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {loadingProducts ? (
          <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <span className="ml-2">Loading products...</span></div>
       ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => ( // product is a ResolvedProduct here
-            <ProductCard key={product.id} product={product} />
+          {filteredProducts.map((product) => (
+            <ProductCard key={product.id + '-' + product.storeId} product={product} />
           ))}
         </div>
       ) : (
