@@ -5,13 +5,17 @@ import Link from 'next/link';
 import {
   Sidebar,
   SidebarContent,
-  SidebarHeader,
+  SidebarHeader, // This is for desktop sidebar structure from @/components/ui/sidebar
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
   useSidebar, 
 } from '@/components/ui/sidebar';
+import {
+  SheetHeader as UiSheetHeader, // Aliased import for mobile sheet specific header
+  SheetTitle as UiSheetTitle,   // Aliased import for mobile sheet specific title
+} from '@/components/ui/sheet';
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
@@ -24,7 +28,16 @@ export function AppSidebar() {
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarContent className="flex flex-col">
-        {/* Sidebar header is primarily for desktop expand/collapse trigger now */}
+        {/* Mobile Sheet Header & Title for Accessibility */}
+        {isMobile && (
+          <UiSheetHeader className="p-4 border-b">
+            <UiSheetTitle>
+              <DodiLogo />
+            </UiSheetTitle>
+          </UiSheetHeader>
+        )}
+
+        {/* Desktop Sidebar Header */}
         {!isMobile && (
            <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
             {state === 'expanded' ? (
@@ -43,10 +56,6 @@ export function AppSidebar() {
             )}
           </SidebarHeader>
         )}
-        {/* On mobile, if a header is needed for the sheet, it can be added here conditionally. 
-            For now, a simple top padding or let the Navbar handle the visual top. */}
-        {isMobile && <div className="h-10" /> /* Placeholder for potential mobile sheet header spacing */}
-
 
         <SidebarMenu className="flex-1 overflow-y-auto p-2">
           <SidebarMenuItem>
