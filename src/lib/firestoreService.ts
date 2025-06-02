@@ -6,7 +6,7 @@
 import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
 // clientAuth might still be used for getting current user for logging/auditing, but not for Firestore operations here.
 // import { auth as clientAuth } from '@/lib/firebase';
-import type { Store, Product, User } from '@/lib/types';
+import type { Product, User } from '@/lib/types'; // Removed Store as it's not directly used in this file's functions
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import type { StoreFormData } from '@/lib/types';
@@ -204,5 +204,21 @@ export async function updateUserAdminStatus(userId: string, isAdmin: boolean): P
   } catch (error) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user admin status for ${userId}:`, error);
     throw error;
+  }
+}
+
+export async function updateUserAvatar(userId: string, avatarUrl: string): Promise<void> {
+  const functionName = 'updateUserAvatar';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId:`, userId, 'with avatarUrl:', avatarUrl);
+
+  const userRef = adminDb!.collection('users').doc(userId);
+  try {
+    await userRef.update({ avatarUrl: avatarUrl });
+    console.log(`[firestoreService][AdminSDK][${functionName}] User avatar updated successfully for ${userId}.`);
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user avatar for ${userId}:`, error);
+    throw error; // Re-throw the error to be caught by the calling function in AppContext
   }
 }

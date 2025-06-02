@@ -9,11 +9,11 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, StoreAvailability, DayOfWeek, ProductCategory, CustomDealRule } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule } from '@/lib/types'; // Removed StoreAvailability, DayOfWeek, ProductCategory
 import { daysOfWeek } from '@/lib/types'; // Import daysOfWeek
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 // import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // No longer using static deals seed
-import { seedInitialData } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -22,6 +22,7 @@ interface AppContextType {
   login: (email: string, pass: string) => Promise<boolean>;
   register: (email: string, pass: string, name?: string) => Promise<boolean>;
   logout: () => void;
+  updateUserAvatar: (newAvatarUrl: string) => Promise<boolean>;
   cart: CartItem[];
   addToCart: (product: ResolvedProduct, quantity?: number) => void;
   removeFromCart: (productId: string) => void;
@@ -173,6 +174,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
     let finalIsAdminValue = false;
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
+    const existingAvatarUrl = userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined;
+    const firebaseAuthPhotoURL = firebaseUser.photoURL;
 
     if (!userSnap.exists()) {
       finalIsAdminValue = isTheAdminEmail;
@@ -183,9 +186,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           points: 0,
           isAdmin: finalIsAdminValue,
           createdAt: new Date().toISOString(),
+          avatarUrl: firebaseAuthPhotoURL || existingAvatarUrl, // Prefer firebase auth, then existing (though should be same), then undefined
         });
-        if (firebaseUser.displayName !== displayName) {
-            await updateProfile(firebaseUser, { displayName: displayName });
+        // Ensure Firebase Auth profile is also updated if a name was derived or default
+        if (firebaseUser.displayName !== displayName || (firebaseAuthPhotoURL && firebaseUser.photoURL !== firebaseAuthPhotoURL)) {
+            await updateProfile(firebaseUser, { displayName: displayName, photoURL: firebaseAuthPhotoURL || existingAvatarUrl });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
@@ -196,20 +201,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const existingData = userSnap.data() as User;
       finalIsAdminValue = existingData.isAdmin === true; 
       
+      const updates: Partial<User> = {};
       if (isTheAdminEmail && !finalIsAdminValue) {
-        try {
-          await updateDoc(userRef, { isAdmin: true });
-          finalIsAdminValue = true; 
-        } catch (error: any) {
-          console.error(`[AuthContext] CRITICAL: Failed to UPDATE isAdmin status for admin email ${firebaseUser.email}. Error: ${error.message}.`);
-          toast({ title: "Admin Status Update Failed", description: "Could not update admin status in the database. Manually verify Firestore data for this user.", variant: "destructive" });
-        }
+        updates.isAdmin = true;
+        finalIsAdminValue = true; 
       }
       if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
+        updates.name = firebaseUser.displayName;
+      }
+       // Sync avatarUrl from Firebase Auth to Firestore if it's different or Firestore doesn't have one
+      if (firebaseAuthPhotoURL && existingData.avatarUrl !== firebaseAuthPhotoURL) {
+        updates.avatarUrl = firebaseAuthPhotoURL;
+      }
+
+      if (Object.keys(updates).length > 0) {
         try {
-            await updateDoc(userRef, { name: firebaseUser.displayName });
-        } catch (error) {
-            console.error(`[AuthContext] Failed to update Firestore name for ${firebaseUser.email}:`, error);
+            await updateDoc(userRef, updates);
+        } catch (error: any) {
+             console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
         }
       }
     }
@@ -217,9 +226,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const profileToReturn: User = {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
-      name: displayName,
+      name: (userSnap.exists() ? (userSnap.data() as User).name : displayName) || displayName,
       points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
-      avatarUrl: firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
+      avatarUrl: firebaseAuthPhotoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined),
       isAdmin: finalIsAdminValue,
     };
     return profileToReturn;
@@ -324,9 +333,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      // The createUserProfile function, called by onAuthStateChanged, will handle Firestore document creation and initial name setting.
+      // We can still update Firebase Auth profile display name here if provided.
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // We don't set photoURL here during registration; avatar selection is a separate step.
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -344,6 +356,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   }, []);
+
+  const updateUserAvatar = useCallback(async (newAvatarUrl: string) => {
+    if (!auth.currentUser || !user) {
+      toast({ title: "Not Authenticated", description: "You must be logged in to update your avatar.", variant: "destructive" });
+      return false;
+    }
+    try {
+      // Update Firebase Auth profile
+      await updateProfile(auth.currentUser, { photoURL: newAvatarUrl });
+      
+      // Update Firestore (via server action)
+      await updateUserAvatarInFirestore(auth.currentUser.uid, newAvatarUrl);
+      
+      // Update local state
+      setUser(prevUser => prevUser ? { ...prevUser, avatarUrl: newAvatarUrl } : null);
+      toast({ title: "Avatar Updated", description: "Your profile picture has been changed." });
+      return true;
+    } catch (error: any) {
+      console.error("Error updating avatar:", error);
+      toast({ title: "Avatar Update Failed", description: error.message || "Could not update avatar.", variant: "destructive" });
+      return false;
+    }
+  }, [user]);
 
   const logout = useCallback(async () => {
     try {
@@ -434,58 +469,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore, allProducts, loadingProducts]);
 
   const deals: Deal[] = useMemo(() => {
-    // Initial checks for necessary data
-    if (!selectedStore || loadingProducts || products.length === 0) {
+    if (!selectedStore || loadingProducts || products.length === 0 || !selectedStore.dailyDeals || selectedStore.dailyDeals.length === 0) {
       return [];
     }
-    // Explicitly check if dailyDeals is a valid array and not empty
-    if (!selectedStore.dailyDeals || !Array.isArray(selectedStore.dailyDeals) || selectedStore.dailyDeals.length === 0) {
-      return [];
-    }
-  
+
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; // Sunday is 0 -> 6 (Sunday), Monday is 1 -> 0 (Monday)
-    
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     let activeRule: CustomDealRule | undefined = undefined;
-    
-    // Find the first active rule for today
+
     for (const rule of selectedStore.dailyDeals) {
-      // Ensure rule itself and its properties are valid before checking
       if (rule && Array.isArray(rule.selectedDays) && typeof rule.category === 'string' && typeof rule.discountPercentage === 'number') {
         if (rule.selectedDays.includes(currentDayOfWeek) && rule.discountPercentage > 0) {
           activeRule = rule;
-          break; // Use the first matching rule
+          break; 
         }
       }
     }
-  
+
     if (!activeRule) {
-      return []; // No active custom deal rule for today
+      return [];
     }
-  
-    // Ensure activeRule has the category and discountPercentage
+    
     const categoryOnDealToday = activeRule.category;
     const discountPercentageToday = activeRule.discountPercentage;
 
-    if (!categoryOnDealToday || discountPercentageToday <= 0) {
-        // This case should ideally be caught by the loop's conditions, but as a safeguard
-        return [];
-    }
-  
     const generatedDeals: Deal[] = [];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
-  
+
     products.forEach(resolvedProduct => {
       if (resolvedProduct.category === categoryOnDealToday && resolvedProduct.stock > 0) {
         const originalPrice = resolvedProduct.price;
         const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
-  
+
         generatedDeals.push({
-          // Use a combination of product id, day, and potentially rule category/discount for a more unique deal id
-          // The original `activeRule.id` was a temporary UI key and is not saved.
-          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`, 
-          product: resolvedProduct, 
+          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
+          product: resolvedProduct,
           dealPrice: dealPrice,
           originalPrice: originalPrice,
           discountPercentage: discountPercentageToday,
@@ -497,7 +516,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
     });
-  
     return generatedDeals;
   }, [selectedStore, products, loadingProducts]);
 
@@ -508,6 +526,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     login,
     register,
     logout,
+    updateUserAvatar,
     cart,
     addToCart,
     removeFromCart,
@@ -526,7 +545,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadingStores,
     loadingProducts,
   }), [
-    isAuthenticated, user, login, register, logout, cart, addToCart, removeFromCart, 
+    isAuthenticated, user, login, register, logout, updateUserAvatar, cart, addToCart, removeFromCart, 
     updateCartQuantity, clearCart, products, allProducts, deals, getCartTotal, stores, 
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts
@@ -542,7 +561,3 @@ export function useAppContext() {
   }
   return context;
 }
-
-    
-
-
