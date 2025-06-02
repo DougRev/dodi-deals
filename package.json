@@ -1,3 +1,4 @@
+
 {
   "name": "nextn",
   "version": "0.1.0",
@@ -10,7 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "import-products": "dotenv_config_path=.env.local node -r dotenv/config ./node_modules/tsx/dist/cli.js ./scripts/importProducts.ts"
+    "import-products": "tsx ./scripts/importProducts.ts"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",

@@ -1,16 +1,37 @@
 // scripts/importProducts.ts
-// dotenv import and config is removed from here as it's handled by the npm script using node -r
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Explicitly load .env.local at the very start of the script
+const envConfigPath = path.resolve(process.cwd(), '.env.local');
+const dotenvResult = dotenv.config({ path: envConfigPath });
+
+if (dotenvResult.error) {
+  console.warn(`[importProducts.ts] Warning: Could not load .env.local file from ${envConfigPath}. Error: ${dotenvResult.error.message}`);
+  console.warn('[importProducts.ts] Script will rely on globally set environment variables or Application Default Credentials if available.');
+} else {
+  if (dotenvResult.parsed) {
+    console.log(`[importProducts.ts] Successfully loaded .env.local from ${envConfigPath}. Variables loaded: ${Object.keys(dotenvResult.parsed).join(', ')}`);
+  } else {
+    console.log(`[importProducts.ts] Loaded .env.local from ${envConfigPath}, but it might be empty or only contain comments.`);
+  }
+}
+
+// For debugging: Log the critical env vars AFTER attempting to load .env.local
+// console.log('[importProducts.ts] SERVICE_ACCOUNT_PROJECT_ID (after dotenv):', process.env.SERVICE_ACCOUNT_PROJECT_ID);
+// console.log('[importProducts.ts] SERVICE_ACCOUNT_CLIENT_EMAIL (after dotenv):', process.env.SERVICE_ACCOUNT_CLIENT_EMAIL);
+// console.log('[importProducts.ts] SERVICE_ACCOUNT_PRIVATE_KEY (after dotenv, present?):', !!process.env.SERVICE_ACCOUNT_PRIVATE_KEY);
+
 
 import admin from 'firebase-admin';
 import { productsToImport, type ProductImportEntry } from './productImportData';
 import type { Product, StoreAvailability, ProductCategory } from '../src/lib/types'; // Adjust path if needed
 
 // --- Configuration ---
-// Option 1: Path to your service account key JSON file
+// Option 1: Path to your service account key JSON file (less preferred now that .env.local is used)
 // const serviceAccountPath = "/path/to/your/serviceAccountKey.json";
 
-// Option 2: Environment variables (ensure these are set in your script's environment)
-// These will now be loaded from .env.local by the preloaded dotenv/config
+// Option 2: Environment variables (now loaded from .env.local by dotenv at the top of this script)
 const serviceAccount = {
   projectId: process.env.SERVICE_ACCOUNT_PROJECT_ID,
   clientEmail: process.env.SERVICE_ACCOUNT_CLIENT_EMAIL,
@@ -28,28 +49,33 @@ const DEFAULT_BASE_IMAGE_URL = 'https://placehold.co/600x400.png';
 try {
   if (admin.apps.length === 0) {
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        console.log("Initializing Firebase Admin with Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS)...");
+        console.log("[importProducts.ts] Initializing Firebase Admin with Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS)...");
         admin.initializeApp({
             credential: admin.credential.applicationDefault(),
         });
     } else if (serviceAccount.projectId && serviceAccount.clientEmail && serviceAccount.privateKey) {
-        console.log("Initializing Firebase Admin with explicit service account environment variables (from .env.local via dotenv/config)...");
+        console.log("[importProducts.ts] Initializing Firebase Admin with explicit service account environment variables (from .env.local via dotenv)...");
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
         });
     } else {
-        throw new Error("Firebase Admin SDK credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_PROJECT_ID, SERVICE_ACCOUNT_CLIENT_EMAIL, and SERVICE_ACCOUNT_PRIVATE_KEY environment variables.");
+        console.error('[importProducts.ts] Critical Firebase Admin SDK Credential Issue:');
+        console.error('  - GOOGLE_APPLICATION_CREDENTIALS was not found in the environment.');
+        console.error(`  - SERVICE_ACCOUNT_PROJECT_ID is: ${serviceAccount.projectId ? `"${serviceAccount.projectId}"` : 'MISSING or undefined'}`);
+        console.error(`  - SERVICE_ACCOUNT_CLIENT_EMAIL is: ${serviceAccount.clientEmail ? `"${serviceAccount.clientEmail}"` : 'MISSING or undefined'}`);
+        console.error(`  - SERVICE_ACCOUNT_PRIVATE_KEY is: ${serviceAccount.privateKey ? 'Present (not empty)' : 'MISSING or undefined'}`);
+        throw new Error("Firebase Admin SDK credentials not found or incomplete. Ensure .env.local is correctly populated and readable, or GOOGLE_APPLICATION_CREDENTIALS is set.");
     }
   }
 } catch (error: any) {
-  console.error("Firebase Admin SDK Initialization Error:", error.message);
+  console.error("[importProducts.ts] Firebase Admin SDK Initialization Error:", error.message);
   process.exit(1);
 }
 
 const db = admin.firestore();
 
 async function importProducts() {
-  console.log(`Starting product import for ${productsToImport.length} products...`);
+  console.log(`[importProducts.ts] Starting product import for ${productsToImport.length} products...`);
   const productsCollection = db.collection('products');
   let successfulImports = 0;
   let failedImports = 0;
@@ -79,40 +105,34 @@ async function importProducts() {
     };
 
     try {
-      // Check if a product with this name already exists (simple check)
-      // For a more robust check, you might query by name AND brand.
       const existingProductQuery = await productsCollection.where('name', '==', entry.name).limit(1).get();
       if (!existingProductQuery.empty) {
-          console.warn(`Product with name "${entry.name}" already exists. Skipping ID ${productId}.`);
-          // You could choose to update it here if desired
-          // const existingDocId = existingProductQuery.docs[0].id;
-          // await productsCollection.doc(existingDocId).update(productData);
-          // console.log(`Updated existing product: ${entry.name} (ID: ${existingDocId})`);
+          console.warn(`[importProducts.ts] Product with name "${entry.name}" already exists. Skipping ID ${productId}.`);
           failedImports++;
           continue;
       }
 
       await productsCollection.doc(productId).set(productData);
-      console.log(`Successfully imported: ${entry.name} (ID: ${productId})`);
+      console.log(`[importProducts.ts] Successfully imported: ${entry.name} (ID: ${productId})`);
       successfulImports++;
     } catch (error) {
-      console.error(`Failed to import product: ${entry.name}. Error:`, error);
+      console.error(`[importProducts.ts] Failed to import product: ${entry.name}. Error:`, error);
       failedImports++;
     }
   }
 
-  console.log("\n--- Import Summary ---");
+  console.log("\n--- [importProducts.ts] Import Summary ---");
   console.log(`Successfully imported products: ${successfulImports}`);
   console.log(`Failed/Skipped imports: ${failedImports}`);
-  console.log("----------------------");
+  console.log("------------------------------------------");
 }
 
 importProducts()
   .then(() => {
-    console.log("Product import script finished.");
+    console.log("[importProducts.ts] Product import script finished.");
     process.exit(0);
   })
   .catch((error) => {
-    console.error("Unhandled error in import script:", error);
+    console.error("[importProducts.ts] Unhandled error in import script:", error);
     process.exit(1);
   });
