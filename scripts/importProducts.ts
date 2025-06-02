@@ -18,28 +18,25 @@ if (dotenvResult.error) {
   }
 }
 
-// For debugging: Log the critical env vars AFTER attempting to load .env.local
-// console.log('[importProducts.ts] SERVICE_ACCOUNT_PROJECT_ID (after dotenv):', process.env.SERVICE_ACCOUNT_PROJECT_ID);
-// console.log('[importProducts.ts] SERVICE_ACCOUNT_CLIENT_EMAIL (after dotenv):', process.env.SERVICE_ACCOUNT_CLIENT_EMAIL);
-// console.log('[importProducts.ts] SERVICE_ACCOUNT_PRIVATE_KEY (after dotenv, present?):', !!process.env.SERVICE_ACCOUNT_PRIVATE_KEY);
-
-
 import admin from 'firebase-admin';
 import { productsToImport, type ProductImportEntry } from './productImportData';
 import type { Product, StoreAvailability, ProductCategory } from '../src/lib/types'; // Adjust path if needed
 
 // --- Configuration ---
-// Option 1: Path to your service account key JSON file (less preferred now that .env.local is used)
-// const serviceAccountPath = "/path/to/your/serviceAccountKey.json";
-
-// Option 2: Environment variables (now loaded from .env.local by dotenv at the top of this script)
 const serviceAccount = {
   projectId: process.env.SERVICE_ACCOUNT_PROJECT_ID,
   clientEmail: process.env.SERVICE_ACCOUNT_CLIENT_EMAIL,
   privateKey: process.env.SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
 };
 
-const DEFAULT_STORE_ID = 'store_001'; // e.g., Indianapolis store
+// UPDATED: Use your specific store IDs
+const ALL_STORE_IDS = [
+  "7EQZwdhGKlEmkFueLjNW",
+  "22JNWkEJ6HF65R9Wz9lG",
+  "9NcyGNHGfgzkx1vuhILV",
+  "Te8D2yMpTFo43WfatrM7"
+];
+
 const DEFAULT_PRICE = 24.99;
 const DEFAULT_STOCK = 30;
 const DEFAULT_BASE_IMAGE_URL = 'https://placehold.co/600x400.png';
@@ -85,14 +82,13 @@ async function importProducts() {
     const entry: ProductImportEntry = productsToImport[i];
     const productId = `dodi_prod_${String(i + 1).padStart(3, '0')}`; // e.g., dodi_prod_001
 
-    const availability: StoreAvailability[] = [
-      {
-        storeId: DEFAULT_STORE_ID,
-        price: DEFAULT_PRICE,
-        stock: DEFAULT_STOCK,
-        storeSpecificImageUrl: '', // Can be left empty or set to a specific placeholder if needed
-      },
-    ];
+    // Create availability for all specified stores
+    const availability: StoreAvailability[] = ALL_STORE_IDS.map(storeId => ({
+      storeId: storeId,
+      price: DEFAULT_PRICE,
+      stock: DEFAULT_STOCK,
+      storeSpecificImageUrl: '', // Can be left empty or set to a specific placeholder if needed
+    }));
 
     const productData: Product = {
       id: productId, // Firestore will use the doc ID, but good to have for reference
@@ -102,7 +98,7 @@ async function importProducts() {
       category: entry.category,
       baseImageUrl: DEFAULT_BASE_IMAGE_URL,
       dataAiHint: entry.dataAiHint,
-      isFeatured: entry.isFeatured || false, // Add isFeatured here
+      isFeatured: entry.isFeatured || false,
       availability: availability,
     };
 
@@ -115,7 +111,7 @@ async function importProducts() {
       }
 
       await productsCollection.doc(productId).set(productData);
-      console.log(`[importProducts.ts] Successfully imported: ${entry.name} (ID: ${productId})`);
+      console.log(`[importProducts.ts] Successfully imported: ${entry.name} (ID: ${productId}) - Available in ${ALL_STORE_IDS.length} stores.`);
       successfulImports++;
     } catch (error) {
       console.error(`[importProducts.ts] Failed to import product: ${entry.name}. Error:`, error);
@@ -138,3 +134,4 @@ importProducts()
     console.error("[importProducts.ts] Unhandled error in import script:", error);
     process.exit(1);
   });
+
