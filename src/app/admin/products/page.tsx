@@ -18,7 +18,7 @@ import { ProductSchema, type ProductFormData, type Product, type Store, type Pro
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -53,7 +53,6 @@ export default function AdminProductsPage() {
   useEffect(() => {
     if (isFormOpen) {
       if (currentProduct) {
-        // When editing, map availability to ensure all fields, including optional ones, are present
         const currentAvailability = currentProduct.availability.map(avail => ({
           storeId: avail.storeId,
           price: Number(avail.price),
@@ -135,9 +134,9 @@ export default function AdminProductsPage() {
         ...data,
         availability: data.availability.map(avail => ({
           ...avail,
-          price: Number(avail.price), // Ensure numbers
+          price: Number(avail.price),
           stock: Number(avail.stock),
-          storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl, // Set to undefined if empty string
+          storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
         })),
       };
 
@@ -160,6 +159,29 @@ export default function AdminProductsPage() {
   };
   
   const getStoreName = (storeId: string) => stores.find(s => s.id === storeId)?.name || 'Unknown';
+
+  const handlePopulateAllStores = () => {
+    if (loadingStores || stores.length === 0) {
+        toast({ title: "Stores not loaded", description: "Cannot populate stores yet.", variant: "destructive" });
+        return;
+    }
+    const currentAvailabilities = form.getValues('availability') || [];
+    const existingStoreIds = new Set(currentAvailabilities.map(a => a.storeId));
+    
+    let storesAddedCount = 0;
+    stores.forEach(store => {
+        if (!existingStoreIds.has(store.id)) {
+            append({ storeId: store.id, price: 0, stock: 0, storeSpecificImageUrl: '' });
+            existingStoreIds.add(store.id); // Add to set to prevent duplicate checks if stores array had duplicates
+            storesAddedCount++;
+        }
+    });
+    if (storesAddedCount > 0) {
+        toast({ title: "Stores Populated", description: `${storesAddedCount} store(s) added to availability list.` });
+    } else {
+        toast({ title: "No New Stores", description: "All stores are already in the availability list or no stores available." });
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -271,7 +293,12 @@ export default function AdminProductsPage() {
               />
 
               <div className="space-y-4 rounded-md border p-4">
-                <FormLabel className="text-md font-semibold text-primary">Store Availability</FormLabel>
+                <div className="flex justify-between items-center">
+                    <FormLabel className="text-md font-semibold text-primary">Store Availability</FormLabel>
+                    <Button type="button" variant="outline" size="sm" onClick={handlePopulateAllStores} disabled={loadingStores || stores.length === 0}>
+                        <StoreIcon className="mr-2 h-4 w-4" /> Populate All Stores
+                    </Button>
+                </div>
                 {form.formState.errors.availability?.root && <FormMessage>{form.formState.errors.availability.root.message}</FormMessage>}
                 {fields.map((item, index) => (
                   <Card key={item.id} className="p-4 space-y-3 relative shadow-sm">
@@ -287,7 +314,7 @@ export default function AdminProductsPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Store</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingStores}>
+                          <Select onValueChange={field.onChange} value={field.value || ''} defaultValue={field.value || ''} disabled={loadingStores}>
                             <FormControl><SelectTrigger><SelectValue placeholder={loadingStores ? "Loading..." : "Select store"} /></SelectTrigger></FormControl>
                             <SelectContent>
                               {stores.map((store: Store) => (
@@ -306,7 +333,7 @@ export default function AdminProductsPage() {
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Price ($)</FormLabel>
-                            <FormControl><Input type="number" placeholder="29.99" {...field} step="0.01" /></FormControl>
+                            <FormControl><Input type="number" placeholder="29.99" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -317,7 +344,7 @@ export default function AdminProductsPage() {
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Stock</FormLabel>
-                            <FormControl><Input type="number" placeholder="50" {...field} step="1" /></FormControl>
+                            <FormControl><Input type="number" placeholder="50" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -441,3 +468,5 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+
+    
