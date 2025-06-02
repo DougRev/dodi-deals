@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react'; // Import Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck } from 'lucide-react'; 
 import Link from 'next/link';
 
-export default function ProfilePage() {
+function ProfilePageInternal() {
   const { isAuthenticated, user, logout, loadingAuth } = useAppContext(); 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -79,5 +79,13 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="text-center py-10">Loading profile page...</div>}>
+      <ProfilePageInternal />
+    </Suspense>
   );
 }
