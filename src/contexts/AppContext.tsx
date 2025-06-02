@@ -415,7 +415,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
-      const availabilityForStore = p.availability.find(avail => avail.storeId === selectedStore.id);
+      // Ensure p.availability exists before trying to use .find on it
+      const availabilityForStore = p.availability && p.availability.find(avail => avail.storeId === selectedStore.id);
       if (availabilityForStore) {
         resolved.push({
           id: p.id,
@@ -439,10 +440,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return allInitialDealsSeed
       .map(seedDeal => {
-        const coreProduct = allProducts.find(p => p.id === seedDeal.product.id); // seedDeal.product.id is original product id
+        const coreProduct = allProducts.find(p => p.id === seedDeal.product.id); 
         if (!coreProduct) return null;
 
-        const availabilityForStore = coreProduct.availability.find(avail => avail.storeId === selectedStore.id);
+        // Ensure coreProduct.availability exists
+        const availabilityForStore = coreProduct.availability && coreProduct.availability.find(avail => avail.storeId === selectedStore.id);
         if (!availabilityForStore || seedDeal.storeId !== selectedStore.id) return null;
 
         const resolvedDealProduct: ResolvedProduct = {
@@ -507,3 +509,4 @@ export function useAppContext() {
   }
   return context;
 }
+
