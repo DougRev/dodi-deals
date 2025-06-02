@@ -12,7 +12,6 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory } from '@/lib/types';
 import { daysOfWeek } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-// Removed initialProducts import as it's not directly used here anymore, firestoreService handles seeding.
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore } from '@/lib/firestoreService';
 
 
@@ -33,6 +32,7 @@ interface AppContextType {
   allProducts: Product[];
   deals: Deal[];
   getCartTotal: () => number;
+  getCartTotalSavings: () => number;
   getTotalCartItems: () => number;
   stores: Store[];
   selectedStore: Store | null;
@@ -55,9 +55,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  
+
   const [stores, setStores] = useState<Store[]>(initialStoresSeedData);
-  const [loadingStores, setLoadingStores] = useState(true); 
+  const [loadingStores, setLoadingStores] = useState(true);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
@@ -99,52 +99,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (snapshot.empty && !snapshot.metadata.hasPendingWrites) {
         setStores(initialStoresSeedData);
       }
-      
+
       const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectFinally: Store | null = null;
 
       if (savedStoreId) {
         storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
       }
-      
+
       const currentSelectedStoreIdBeforeUpdate = selectedStore ? selectedStore.id : null;
 
       if (storeToSelectFinally) {
         if (currentSelectedStoreIdBeforeUpdate !== storeToSelectFinally.id) {
-          setSelectedStoreState(storeToSelectFinally); 
+          setSelectedStoreState(storeToSelectFinally);
         }
-        setStoreSelectorOpen(false); 
+        setStoreSelectorOpen(false);
       } else {
         if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        
+
         if (!currentSelectedStoreIdBeforeUpdate) {
           if (currentStoresList.length > 0) {
-            setStoreSelectorOpen(true); 
+            setStoreSelectorOpen(true);
           } else {
-            setStoreSelectorOpen(true); 
+            setStoreSelectorOpen(true);
           }
         }
       }
-      setLoadingStores(false); 
+      setLoadingStores(false);
     }, (error) => {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
-      
+
       const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectOnError: Store | null = null;
       if (savedStoreId) {
           storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
       }
-      setSelectedStoreState(storeToSelectOnError); 
-      setStores(initialStoresSeedData); 
-      
+      setSelectedStoreState(storeToSelectOnError);
+      setStores(initialStoresSeedData);
+
       const isAnyStoreSelectedAfterErrorHandling = !!(selectedStore || storeToSelectOnError);
 
       if (!isAnyStoreSelectedAfterErrorHandling && initialStoresSeedData.length > 0) {
           setStoreSelectorOpen(true);
       } else if (isAnyStoreSelectedAfterErrorHandling) {
           setStoreSelectorOpen(false);
-      } else { 
+      } else {
           setStoreSelectorOpen(true);
       }
       setLoadingStores(false);
@@ -184,14 +184,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
     let finalIsAdminValue = false;
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
-    
+
     const profileDataToSet: {
         email: string | null;
         name: string;
         points: number;
         isAdmin: boolean;
         createdAt: string;
-        avatarUrl?: string; 
+        avatarUrl?: string;
       } = {
         email: firebaseUser.email,
         name: displayName,
@@ -204,19 +204,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (determinedAvatarUrl) {
       profileDataToSet.avatarUrl = determinedAvatarUrl;
     }
-    
+
     finalIsAdminValue = profileDataToSet.isAdmin;
 
     if (!userSnap.exists()) {
       try {
-        await setDoc(userRef, profileDataToSet);
+        const dataToSetForNewUser: any = { ...profileDataToSet };
+        if (dataToSetForNewUser.avatarUrl === undefined) {
+          delete dataToSetForNewUser.avatarUrl; // Remove avatarUrl if undefined for setDoc
+        }
+        await setDoc(userRef, dataToSetForNewUser);
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
             await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        finalIsAdminValue = false; 
+        finalIsAdminValue = false;
         profileDataToSet.isAdmin = false;
       }
     } else {
@@ -232,13 +236,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
        if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
         updates.avatarUrl = determinedAvatarUrl;
       } else if (!determinedAvatarUrl && existingData.avatarUrl) {
-        updates.avatarUrl = undefined; // Or a command to delete the field
+         // To remove a field, you might need a specific sentinel value or handle it differently
+         // For simplicity, setting to undefined might not remove it, Firestore often ignores undefined on update.
+         // If truly needs removal, { avatarUrl: deleteField() } from 'firebase/firestore' would be used,
+         // but that complicates the User type. For now, let's assume setting to an empty string or null if no avatar.
+        updates.avatarUrl = undefined; // Or handle removal explicitly if required.
       }
 
 
       if (Object.keys(updates).length > 0) {
         try {
-            await updateDoc(userRef, updates);
+            const dataToUpdateForExistingUser: any = { ...updates };
+            if (dataToUpdateForExistingUser.avatarUrl === undefined && !determinedAvatarUrl) {
+                // If we intend to remove avatarUrl, we might need a specific sentinel or ensure it's not set
+                // For now, if determinedAvatarUrl is falsy, and we want to clear it.
+                // Firestore update with undefined usually means "do not change this field".
+                // Let's assume for now if determinedAvatarUrl is empty, we want to clear it.
+                // This might need admin.firestore.FieldValue.delete() for actual field removal.
+                // Keeping it simple for now: if new URL is empty, try to set empty in DB.
+            }
+
+            await updateDoc(userRef, dataToUpdateForExistingUser);
             if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
             if (updates.avatarUrl && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
         } catch (error: any) {
@@ -246,7 +264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-    
+
     const profileToReturn: User = {
       id: firebaseUser.uid,
       email: firebaseUser.email || '',
@@ -271,7 +289,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             setUser(null);
             setIsAuthenticated(false);
-            if (typeof window !== 'undefined') await firebaseSignOut(auth); 
+            if (typeof window !== 'undefined') await firebaseSignOut(auth);
           }
         } else {
           setUser(null);
@@ -310,22 +328,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (selectedStore && cart.length > 0) { 
+      if (selectedStore && cart.length > 0) {
         const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
         localStorage.setItem(cartKey, JSON.stringify(cart));
-      } else if (selectedStore && cart.length === 0) { 
+      } else if (selectedStore && cart.length === 0) {
         const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
         localStorage.removeItem(cartKey);
       }
     }
   }, [cart, selectedStore]);
-  
+
   const selectStore = useCallback((storeId: string | null) => {
     if (storeId) {
-      const store = stores.find(s => s.id === storeId); 
+      const store = stores.find(s => s.id === storeId);
       if (store) {
         if (selectedStore?.id !== store.id) {
-          setCart([]); 
+          setCart([]);
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
@@ -338,7 +356,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCart([]);
       setStoreSelectorOpen(true);
     }
-  }, [stores, selectedStore, toast, setCart, setSelectedStoreState, setStoreSelectorOpen]); 
+  }, [stores, selectedStore, setCart, setSelectedStoreState, setStoreSelectorOpen]);
 
   const login = useCallback(async (email: string, pass: string) => {
     setLoadingAuth(true);
@@ -349,9 +367,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
-      setLoadingAuth(false); 
-      return false; 
-    } 
+      setLoadingAuth(false);
+      return false;
+    }
   }, [toast]);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
@@ -361,7 +379,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // createUserProfile will be called by onAuthStateChanged listener
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -406,7 +423,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setIsAuthenticated(false);
         setCart([]);
-        setSelectedStoreState(null); 
+        setSelectedStoreState(null);
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -418,13 +435,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error: any) {
       console.error("Firebase logout error:", error);
-      if (typeof window !== 'undefined') { 
+      if (typeof window !== 'undefined') {
         toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
       }
     } finally {
         setLoadingAuth(false);
     }
-  }, [auth, router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth]);
+  }, [router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -438,11 +455,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (existingItem) {
         return prevCart.map(item =>
           (item.product.id === product.id && item.product.storeId === product.storeId)
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) } 
+            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
             : item
         );
       }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }]; 
+      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }];
     });
     toast({ title: "Item Added", description: `${product.name} added to cart.` });
   }, [selectedStore, toast, setCart, setStoreSelectorOpen]);
@@ -458,7 +475,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         item.product.id === originalProductId
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
-      ).filter(item => item.quantity > 0) 
+      ).filter(item => item.quantity > 0)
     );
   }, [setCart]);
 
@@ -481,23 +498,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return cart.reduce((total, item) => total + item.quantity, 0);
   }, [cart]);
 
-  const products: ResolvedProduct[] = useMemo(() => {
+  const getCartTotalSavings = useCallback(() => {
+    return cart.reduce((totalSavings, item) => {
+      if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
+        totalSavings += (item.product.originalPrice - item.product.price) * item.quantity;
+      }
+      return totalSavings;
+    }, 0);
+  }, [cart]);
+
+  const products = useMemo(() => {
     if (!selectedStore || loadingProducts || allProducts.length === 0) return [];
-    
+
+    const today = new Date();
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+    let activeRule: CustomDealRule | undefined = undefined;
+    if (selectedStore.dailyDeals && selectedStore.dailyDeals.length > 0) {
+        for (const rule of selectedStore.dailyDeals) {
+            if (rule && Array.isArray(rule.selectedDays) && rule.selectedDays.includes(currentDayOfWeek) &&
+                typeof rule.category === 'string' && typeof rule.discountPercentage === 'number' && rule.discountPercentage > 0) {
+                activeRule = rule;
+                break;
+            }
+        }
+    }
+
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
-      if (!p.availability) return; 
+      if (!p.availability) return;
       const availabilityForStore = p.availability.find(avail => avail.storeId === selectedStore.id);
       if (availabilityForStore) {
-        let currentImageUrl = p.baseImageUrl; 
-
+        let currentImageUrl = p.baseImageUrl;
         if (availabilityForStore.storeSpecificImageUrl && availabilityForStore.storeSpecificImageUrl.trim() !== '') {
           currentImageUrl = availabilityForStore.storeSpecificImageUrl;
         } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
-          currentImageUrl = p.baseImageUrl; 
+          currentImageUrl = p.baseImageUrl;
         } else {
           const categoryPath = p.category && typeof p.category === 'string' ? p.category.toLowerCase().replace(/\s+/g, '-') : 'default';
           currentImageUrl = `/images/categories/${categoryPath}.png`;
+        }
+
+        let effectivePrice = availabilityForStore.price;
+        let originalPriceValue = availabilityForStore.price;
+        let isProductOnDeal = false;
+
+        if (activeRule && p.category === activeRule.category) {
+          isProductOnDeal = true;
+          effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
         }
 
         resolved.push({
@@ -508,7 +555,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           category: p.category,
           dataAiHint: p.dataAiHint,
           storeId: selectedStore.id,
-          price: availabilityForStore.price,
+          price: effectivePrice,
+          originalPrice: isProductOnDeal ? originalPriceValue : undefined, // Set originalPrice only if on deal
           stock: availabilityForStore.stock,
           imageUrl: currentImageUrl,
         });
@@ -517,61 +565,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return resolved;
   }, [selectedStore, allProducts, loadingProducts]);
 
+
   const deals: Deal[] = useMemo(() => {
     if (!selectedStore || loadingProducts || products.length === 0 || !selectedStore.dailyDeals || selectedStore.dailyDeals.length === 0) {
       return [];
     }
-  
+
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; 
-  
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     let activeRule: CustomDealRule | undefined = undefined;
-  
+
     for (const rule of selectedStore.dailyDeals) {
-      if (
-        rule &&
-        Array.isArray(rule.selectedDays) &&
-        rule.selectedDays.includes(currentDayOfWeek) &&
-        typeof rule.category === 'string' &&
-        typeof rule.discountPercentage === 'number' &&
-        rule.discountPercentage > 0 
-      ) {
+      if (rule && Array.isArray(rule.selectedDays) && rule.selectedDays.includes(currentDayOfWeek) &&
+          typeof rule.category === 'string' && typeof rule.discountPercentage === 'number' && rule.discountPercentage > 0) {
         activeRule = rule;
-        break; 
+        break;
       }
     }
-  
+
     if (!activeRule) {
       return [];
     }
-    
-    const categoryOnDealToday = activeRule.category as ProductCategory; 
+
+    const categoryOnDealToday = activeRule.category as ProductCategory;
     const discountPercentageToday = activeRule.discountPercentage;
-  
-    const generatedDeals: Deal[] = [];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
-  
-    products.forEach(resolvedProduct => {
-      if (resolvedProduct.category === categoryOnDealToday && resolvedProduct.stock > 0) {
-        const originalPrice = resolvedProduct.price;
-        const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
-  
-        generatedDeals.push({
-          id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
-          product: resolvedProduct, 
-          dealPrice: dealPrice,
-          originalPrice: originalPrice, 
-          discountPercentage: discountPercentageToday,
-          expiresAt: endOfToday.toISOString(),
-          title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
-          description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${resolvedProduct.name}.`,
-          storeId: selectedStore.id,
-          categoryOnDeal: categoryOnDealToday,
-        });
-      }
-    });
-    return generatedDeals;
+
+    // Filter from the already resolved 'products' list which now contain deal pricing.
+    return products
+      .filter(p => p.category === categoryOnDealToday && p.originalPrice && p.price < p.originalPrice && p.stock > 0)
+      .map(dealProduct => ({
+        id: `${dealProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
+        product: dealProduct, // This product already has deal price in .price and original in .originalPrice
+        discountPercentage: discountPercentageToday,
+        expiresAt: endOfToday.toISOString(),
+        title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
+        description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${dealProduct.name}.`,
+        storeId: selectedStore.id,
+        categoryOnDeal: categoryOnDealToday,
+      }));
   }, [selectedStore, products, loadingProducts]);
 
 
@@ -588,12 +621,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity,
     getCartItemQuantity,
     clearCart,
-    products, 
-    allProducts, 
-    deals, 
+    products,
+    allProducts,
+    deals,
     getCartTotal,
+    getCartTotalSavings,
     getTotalCartItems,
-    stores, 
+    stores,
     selectedStore,
     selectStore,
     isStoreSelectorOpen,
@@ -602,9 +636,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadingStores,
     loadingProducts,
   }), [
-    isAuthenticated, user, login, register, logout, updateUserAvatar, cart, addToCart, removeFromCart, 
-    updateCartQuantity, getCartItemQuantity, clearCart, products, allProducts, deals, getCartTotal, getTotalCartItems, stores, 
-    selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
+    isAuthenticated, user, login, register, logout, updateUserAvatar, cart, addToCart, removeFromCart,
+    updateCartQuantity, getCartItemQuantity, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, getTotalCartItems, stores,
+    selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
     loadingAuth, loadingStores, loadingProducts
   ]);
 
@@ -618,3 +652,4 @@ export function useAppContext() {
   }
   return context;
 }
+

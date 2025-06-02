@@ -5,12 +5,13 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { ResolvedProduct } from '@/lib/types'; 
+import type { ResolvedProduct } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { ShoppingCart, Plus, Minus } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Percent } from 'lucide-react'; // Added Percent
+import { Badge } from '@/components/ui/badge'; // Added Badge
 
 interface ProductCardProps {
-  product: ResolvedProduct; 
+  product: ResolvedProduct;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
@@ -18,7 +19,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const [currentImgSrc, setCurrentImgSrc] = useState(product.imageUrl);
 
   useEffect(() => {
-    setCurrentImgSrc(product.imageUrl); 
+    setCurrentImgSrc(product.imageUrl);
   }, [product.imageUrl]);
 
   const currentQuantityInCart = getCartItemQuantity(product.id);
@@ -46,13 +47,15 @@ export function ProductCard({ product }: ProductCardProps) {
       updateCartQuantity(product.id, currentQuantityInCart - 1);
     }
   };
-  
+
   const isOutOfStock = product.stock === 0;
   const canIncrease = currentQuantityInCart < product.stock;
+  const isDeal = product.originalPrice && product.originalPrice > product.price;
+  const discountPercent = isDeal ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
 
   return (
     <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300">
-      <CardHeader className="p-0">
+      <CardHeader className="p-0 relative"> {/* Added relative for badge positioning */}
         <div className="aspect-video relative w-full">
           <Image
             src={currentImgSrc}
@@ -62,16 +65,33 @@ export function ProductCard({ product }: ProductCardProps) {
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             data-ai-hint={product.dataAiHint || "product image"}
             onError={() => {
-              setCurrentImgSrc('/images/categories/default.png'); 
+              setCurrentImgSrc('/images/categories/default.png');
             }}
           />
         </div>
+        {isDeal && (
+          <Badge
+            variant="destructive"
+            className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
+          >
+            <Percent className="h-3 w-3 mr-1" /> {discountPercent}% OFF
+          </Badge>
+        )}
       </CardHeader>
       <CardContent className="p-4 flex-grow">
         <CardTitle className="text-xl font-headline mb-1">{product.name}</CardTitle>
         <p className="text-xs text-muted-foreground mb-1">{product.brand}</p>
         <CardDescription className="text-sm text-muted-foreground mb-2 h-20 overflow-y-auto">{product.description}</CardDescription>
-        <p className="text-lg font-semibold text-primary">${product.price.toFixed(2)}</p>
+        <div className="flex items-baseline space-x-2 mb-1">
+          <p className={`text-lg font-semibold ${isDeal ? 'text-destructive' : 'text-primary'}`}>
+            ${product.price.toFixed(2)}
+          </p>
+          {isDeal && product.originalPrice && (
+            <p className="text-sm line-through text-muted-foreground">
+              ${product.originalPrice.toFixed(2)}
+            </p>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">Category: {product.category}</p>
         {product.stock < 10 && product.stock > 0 && !isOutOfStock && (
           <p className="text-xs text-destructive">Only {product.stock} left in stock!</p>
@@ -107,3 +127,4 @@ export function ProductCard({ product }: ProductCardProps) {
     </Card>
   );
 }
+

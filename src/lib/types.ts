@@ -17,7 +17,7 @@ export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> =
   Monday: 'Flower',
   Tuesday: 'Edible',
   Wednesday: 'Pre-roll',
-  Thursday: 'Accessory', 
+  Thursday: 'Accessory',
   Friday: 'Vape',
 };
 
@@ -75,7 +75,7 @@ export const ProductSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
-  category: ProductCategoryEnum, 
+  category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   availability: z.array(StoreAvailabilitySchema)
     .min(1, { message: "Product must be available in at least one store." })
@@ -96,32 +96,30 @@ export interface Product extends Omit<ProductFormData, 'availability'> {
 // This "resolved" type is used by AppContext to provide product info to UI components
 // based on the selected store.
 export interface ResolvedProduct {
-  id: string; 
+  id: string;
   name: string;
   description: string;
   brand: string;
   category: ProductCategory;
   dataAiHint?: string;
-  storeId: string; 
-  price: number; 
-  stock: number; 
-  imageUrl: string; 
+  storeId: string;
+  price: number; // This is the effective price (could be deal price)
+  originalPrice?: number; // The base price if currently on deal, otherwise same as price or undefined
+  stock: number;
+  imageUrl: string;
 }
 
 
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
-// It represents a specific product that is currently on sale due to a daily category discount.
 export interface Deal {
-  id: string; 
-  product: ResolvedProduct; 
-  dealPrice: number;        
-  originalPrice: number;    
-  discountPercentage: number; 
-  expiresAt: string;        
-  title: string;            
-  description?: string;     
-  storeId: string;          
-  categoryOnDeal: ProductCategory; 
+  id: string;
+  product: ResolvedProduct; // This product's .price is the deal price, .originalPrice is its base store price
+  discountPercentage: number;
+  expiresAt: string;
+  title: string;
+  description?: string;
+  storeId: string;
+  categoryOnDeal: ProductCategory;
 }
 
 
@@ -135,6 +133,7 @@ export interface User {
 }
 
 export interface CartItem {
-  product: ResolvedProduct; 
+  product: ResolvedProduct; // This product will have its price (effective) and originalPrice (if applicable)
   quantity: number;
 }
+

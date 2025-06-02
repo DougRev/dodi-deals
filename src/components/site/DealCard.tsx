@@ -5,12 +5,12 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Deal, ResolvedProduct } from '@/lib/types'; 
+import type { Deal, ResolvedProduct } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { ShoppingCart, TimerIcon, Percent } from 'lucide-react';
 
 interface DealCardProps {
-  deal: Deal; 
+  deal: Deal;
 }
 
 function calculateTimeLeft(expiresAt: string) {
@@ -39,7 +39,7 @@ export function DealCard({ deal }: DealCardProps) {
   const [currentImgSrc, setCurrentImgSrc] = useState(deal.product.imageUrl);
 
   useEffect(() => {
-    setCurrentImgSrc(deal.product.imageUrl); 
+    setCurrentImgSrc(deal.product.imageUrl);
   }, [deal.product.imageUrl]);
 
   useEffect(() => {
@@ -56,16 +56,13 @@ export function DealCard({ deal }: DealCardProps) {
       return;
     }
     if (isAuthenticated) {
-      const productForCart: ResolvedProduct = {
-        ...deal.product, 
-        price: deal.dealPrice, 
-      };
-      addToCart(productForCart);
+      // deal.product already has the correct deal price and original price
+      addToCart(deal.product);
     } else {
       alert("Please log in to add items to your cart.");
     }
   };
-  
+
   const timerComponents = [];
   if (timeLeft.days > 0) timerComponents.push(`${timeLeft.days}d`);
   if (timeLeft.hours > 0 || timeLeft.days > 0) timerComponents.push(`${timeLeft.hours}h`);
@@ -79,14 +76,14 @@ export function DealCard({ deal }: DealCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative w-full">
           <Image
-            src={currentImgSrc} 
+            src={currentImgSrc}
             alt={deal.product.name}
             fill
             style={{ objectFit: 'cover' }}
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             data-ai-hint={deal.product.dataAiHint || "deal product"}
             onError={() => {
-              setCurrentImgSrc('/images/categories/default.png'); 
+              setCurrentImgSrc('/images/categories/default.png');
             }}
           />
         </div>
@@ -104,8 +101,10 @@ export function DealCard({ deal }: DealCardProps) {
           {deal.description || deal.product.description}
         </CardDescription>
         <div className="flex items-baseline space-x-2 mb-2">
-          <p className="text-2xl font-bold text-destructive">${deal.dealPrice.toFixed(2)}</p>
-          <p className="text-md line-through text-muted-foreground">${deal.originalPrice.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-destructive">${deal.product.price.toFixed(2)}</p>
+          {deal.product.originalPrice && (
+            <p className="text-md line-through text-muted-foreground">${deal.product.originalPrice.toFixed(2)}</p>
+          )}
         </div>
         {isDealActive ? (
           <div className="flex items-center text-sm text-accent font-medium p-2 bg-accent/10 rounded-md">
@@ -117,9 +116,9 @@ export function DealCard({ deal }: DealCardProps) {
         )}
       </CardContent>
       <CardFooter className="p-4">
-        <Button 
-          onClick={handleAddToCart} 
-          disabled={!isDealActive || deal.product.stock === 0 || !isAuthenticated} 
+        <Button
+          onClick={handleAddToCart}
+          disabled={!isDealActive || deal.product.stock === 0 || !isAuthenticated}
           className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <ShoppingCart className="mr-2 h-4 w-4" />
@@ -129,3 +128,4 @@ export function DealCard({ deal }: DealCardProps) {
     </Card>
   );
 }
+
