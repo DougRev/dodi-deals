@@ -2,11 +2,27 @@
 import { z } from 'zod';
 
 // Zod schema for store form validation
+
+export const DayOfWeekEnum = z.enum(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
+export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export const DailyDealItemSchema = z.object({
+  productId: z.string().nonempty({ message: "Product must be selected for the deal." }),
+  dealPrice: z.coerce.number().positive({ message: "Deal price must be a positive number." }),
+});
+export type DailyDealItem = z.infer<typeof DailyDealItemSchema>;
+
+// Use z.record for dailyDeals where keys are DayOfWeekEnum and values are arrays of DailyDealItemSchema
+// Making the array optional for a day, and the whole dailyDeals object optional for a store
+const DailyDealsMapSchema = z.record(DayOfWeekEnum, z.array(DailyDealItemSchema).optional());
+
 export const StoreSchema = z.object({
   name: z.string().min(3, { message: "Store name must be at least 3 characters." }),
   address: z.string().min(5, { message: "Address must be at least 5 characters." }),
   city: z.string().min(2, { message: "City must be at least 2 characters." }),
   hours: z.string().min(5, { message: "Operating hours must be specified." }),
+  dailyDeals: DailyDealsMapSchema.optional(),
 });
 
 // Type inferred from the Zod schema for form data
@@ -18,6 +34,7 @@ export interface Store {
   address: string;
   city: string;
   hours: string;
+  dailyDeals?: Partial<Record<DayOfWeek, DailyDealItem[]>>;
 }
 
 const ProductCategoryEnum = z.enum(['Vape', 'THCa', 'Accessory']);
@@ -66,21 +83,29 @@ export interface ResolvedProduct {
   category: ProductCategory;
   dataAiHint?: string;
   storeId: string;      // The ID of the store for which this product is resolved
-  price: number;        // Price in the specific store
+  price: number;        // Price in the specific store (original price)
   stock: number;        // Stock in the specific store
   imageUrl: string;     // Resolved image URL (storeSpecific or base) for this store context
 }
 
-
+// This is for the "Hot Deals" / "Special Offers" from the static seed data, which have an expiry
 export interface Deal {
   id: string;
-  product: ResolvedProduct; // Deal product should be the resolved one for a specific store
+  product: ResolvedProduct; 
   dealPrice: number;
   expiresAt: string;
   title: string;
   description?: string;
-  storeId: string; // The store this deal is specifically for
+  storeId: string; 
 }
+
+// This is for the new "Daily Recurring Deals" managed in Firestore per store
+export interface ResolvedDailyDealItem {
+  product: ResolvedProduct; // The full product details resolved for the store
+  dealPrice: number;
+  dayOfWeek: DayOfWeek;
+}
+
 
 export interface User {
   id: string; // Firebase UID
