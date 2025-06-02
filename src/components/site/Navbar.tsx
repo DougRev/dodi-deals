@@ -40,7 +40,7 @@ export function Navbar() {
             variant="outline" 
             size="sm" 
             onClick={() => setStoreSelectorOpen(true)} 
-            className='hidden md:flex items-center text-xs px-2 py-1 h-auto border-primary text-primary hover:bg-primary/10'
+            className='hidden md:flex items-center text-xs px-2 py-1 h-auto border-accent text-accent hover:bg-accent hover:text-accent-foreground'
         >
             <MapPin className="mr-1 h-3 w-3" />
             {selectedStore.name.replace('Dodi Deals - ', '')}
