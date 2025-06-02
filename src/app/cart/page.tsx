@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react'; // Import Suspense
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -13,7 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { Trash2, ShoppingBag, ArrowLeft, MapPin } from 'lucide-react';
 import type { ResolvedProduct } from '@/lib/types'; // Cart items use ResolvedProduct
 
-export default function CartPage() {
+// Internal component containing the original CartPage logic
+function CartPageInternal() {
   const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart, selectedStore, setStoreSelectorOpen, loadingAuth } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -154,5 +155,14 @@ export default function CartPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Default export wraps the internal component with Suspense
+export default function CartPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-10">Loading cart page...</div>}>
+      <CartPageInternal />
+    </Suspense>
   );
 }
