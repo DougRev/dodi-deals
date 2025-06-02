@@ -12,35 +12,39 @@ export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
 export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Accessory'];
 
-// Business rules for fixed daily categories
+// Business rules for fixed daily categories (used as fallback or informational)
 export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
   Monday: 'Flower',
   Tuesday: 'Edible',
   Wednesday: 'Pre-roll',
-  Thursday: 'Accessory', // For Glassware type items
+  Thursday: 'Accessory', 
   Friday: 'Vape',
 };
 
-// Schema for what's stored in Firestore per day for a store's daily deal configuration
-export const StoreDailyDealSettingSchema = z.object({
-  category: ProductCategoryEnum, // Category for the deal (fixed for Mon-Fri, selectable for Sat/Sun)
+// Schema for a Custom Deal Rule
+export const CustomDealRuleSchema = z.object({
+  id: z.string().optional(), // For UI key management with useFieldArray
+  selectedDays: z.array(DayOfWeekEnum)
+    .min(1, "At least one day must be selected for the deal rule.")
+    .refine(days => new Set(days).size === days.length, {
+      message: "Each day can only be selected once per rule.",
+    }),
+  category: ProductCategoryEnum,
   discountPercentage: z.coerce
     .number()
     .min(0, { message: "Discount must be 0 or greater." })
     .max(100, { message: "Discount cannot exceed 100%." })
     .default(0),
 });
-export type StoreDailyDealSetting = z.infer<typeof StoreDailyDealSettingSchema>;
+export type CustomDealRule = z.infer<typeof CustomDealRuleSchema>;
 
-// Schema for the `dailyDeals` object within a Store document/form
-const StoreDailyDealsSetupSchema = z.record(DayOfWeekEnum, StoreDailyDealSettingSchema.optional());
 
 export const StoreSchema = z.object({
   name: z.string().min(3, { message: "Store name must be at least 3 characters." }),
   address: z.string().min(5, { message: "Address must be at least 5 characters." }),
   city: z.string().min(2, { message: "City must be at least 2 characters." }),
   hours: z.string().min(5, { message: "Operating hours must be specified." }),
-  dailyDeals: StoreDailyDealsSetupSchema.optional().default({}), // Default to empty object
+  dailyDeals: z.array(CustomDealRuleSchema).optional().default([]),
 });
 
 // Type inferred from the Zod schema for form data
@@ -52,7 +56,7 @@ export interface Store {
   address: string;
   city: string;
   hours: string;
-  dailyDeals?: Partial<Record<DayOfWeek, StoreDailyDealSetting>>;
+  dailyDeals?: CustomDealRule[]; // Array of custom deal rules
 }
 
 
@@ -71,7 +75,7 @@ export const ProductSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
-  category: ProductCategoryEnum, // Uses updated categories
+  category: ProductCategoryEnum, 
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   availability: z.array(StoreAvailabilitySchema)
     .min(1, { message: "Product must be available in at least one store." })
@@ -92,32 +96,32 @@ export interface Product extends Omit<ProductFormData, 'availability'> {
 // This "resolved" type is used by AppContext to provide product info to UI components
 // based on the selected store.
 export interface ResolvedProduct {
-  id: string; // This is the original product ID from the 'products' collection
+  id: string; 
   name: string;
   description: string;
   brand: string;
   category: ProductCategory;
   dataAiHint?: string;
-  storeId: string; // The ID of the store for which this product is resolved
-  price: number; // The price at this specific store
-  stock: number; // The stock at this specific store
-  imageUrl: string; // The resolved image URL (store-specific or base)
+  storeId: string; 
+  price: number; 
+  stock: number; 
+  imageUrl: string; 
 }
 
 
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
 // It represents a specific product that is currently on sale due to a daily category discount.
 export interface Deal {
-  id: string; // Unique ID for the deal instance, e.g., `resolvedProduct.id + '-' + currentDay`
-  product: ResolvedProduct; // The specific product that is on sale (contains original price)
-  dealPrice: number;        // The calculated discounted price
-  originalPrice: number;    // The product's original price (same as product.price)
-  discountPercentage: number; // The percentage applied
-  expiresAt: string;        // Typically end of the current day
-  title: string;            // e.g., "Monday Flower Special!" or a generated title for the product on deal
-  description?: string;     // Could be specific to the deal or product's desc
-  storeId: string;          // Store where this deal is active
-  categoryOnDeal: ProductCategory; // The category that triggered this deal
+  id: string; 
+  product: ResolvedProduct; 
+  dealPrice: number;        
+  originalPrice: number;    
+  discountPercentage: number; 
+  expiresAt: string;        
+  title: string;            
+  description?: string;     
+  storeId: string;          
+  categoryOnDeal: ProductCategory; 
 }
 
 
@@ -131,7 +135,6 @@ export interface User {
 }
 
 export interface CartItem {
-  product: ResolvedProduct; // Note: The price in this ResolvedProduct should be the price it was added to cart at (deal or regular)
+  product: ResolvedProduct; 
   quantity: number;
 }
-

@@ -7,12 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"; // Keep Label for general use if needed elsewhere
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useForm, Controller } from "react-hook-form";
+import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { 
   StoreSchema, 
@@ -21,29 +22,16 @@ import {
   daysOfWeek, 
   type DayOfWeek, 
   type ProductCategory, 
-  productCategories, 
-  fixedDailyCategories,
-  type StoreDailyDealSetting
+  productCategories,
+  type CustomDealRule, // Import CustomDealRule
+  // fixedDailyCategories, // No longer directly used for form generation
+  // type StoreDailyDealSetting // Removed
 } from '@/lib/types';
 import { addStore, updateStore, deleteStore } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle } from 'lucide-react';
 import Link from 'next/link';
-
-const getDefaultDailyDealsFormValues = (): Partial<Record<DayOfWeek, StoreDailyDealSetting>> => {
-  const defaults: Partial<Record<DayOfWeek, StoreDailyDealSetting>> = {};
-  daysOfWeek.forEach(day => {
-    const fixedCategory = fixedDailyCategories[day];
-    if (fixedCategory) {
-      defaults[day] = { category: fixedCategory, discountPercentage: 0 };
-    } else {
-      // For Saturday/Sunday or other non-fixed days, allow admin to choose category, default to first available or Vape
-      defaults[day] = { category: productCategories[0] || 'Vape', discountPercentage: 0 };
-    }
-  });
-  return defaults;
-};
 
 
 export default function AdminStoresPage() {
@@ -52,7 +40,7 @@ export default function AdminStoresPage() {
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
-  const [loading, setLoading] = useState(false); // For form submission
+  const [loading, setLoading] = useState(false); 
 
   const form = useForm<StoreFormData>({
     resolver: zodResolver(StoreSchema),
@@ -61,34 +49,30 @@ export default function AdminStoresPage() {
       address: '',
       city: '',
       hours: '',
-      dailyDeals: getDefaultDailyDealsFormValues(),
+      dailyDeals: [], // Default to an empty array of rules
     },
+  });
+
+  const { fields: dealFields, append: appendDeal, remove: removeDeal } = useFieldArray({
+    control: form.control,
+    name: "dailyDeals",
+    keyName: "ruleId" // Use a different key name to avoid conflict if `id` is part of your rule data
   });
   
   useEffect(() => {
     if (isFormOpen) {
       if (currentStore) {
-        // Ensure all days are present in form.watch('dailyDeals'), defaulting if not in currentStore.dailyDeals
-        const dealsForForm: Partial<Record<DayOfWeek, StoreDailyDealSetting>> = {};
-        daysOfWeek.forEach(day => {
-          const existingDeal = currentStore.dailyDeals?.[day];
-          const fixedCategory = fixedDailyCategories[day];
-          if (existingDeal) {
-            dealsForForm[day] = existingDeal;
-          } else if (fixedCategory) {
-            dealsForForm[day] = { category: fixedCategory, discountPercentage: 0 };
-          } else {
-            dealsForForm[day] = { category: productCategories[0] || 'Vape', discountPercentage: 0 };
-          }
+        form.reset({ 
+          ...currentStore, 
+          dailyDeals: currentStore.dailyDeals?.map(deal => ({...deal, id: deal.id || crypto.randomUUID() })) || [] 
         });
-        form.reset({ ...currentStore, dailyDeals: dealsForForm });
       } else {
         form.reset({
           name: '',
           address: '',
           city: '',
           hours: '',
-          dailyDeals: getDefaultDailyDealsFormValues(),
+          dailyDeals: [],
         });
       }
     }
@@ -102,26 +86,18 @@ export default function AdminStoresPage() {
       address: '',
       city: '',
       hours: '',
-      dailyDeals: getDefaultDailyDealsFormValues(),
+      dailyDeals: [],
     });
     setIsFormOpen(true);
   };
 
   const handleEditStore = (store: Store) => {
     setCurrentStore(store);
-    const dealsForForm: Partial<Record<DayOfWeek, StoreDailyDealSetting>> = {};
-    daysOfWeek.forEach(day => {
-        const existingDeal = store.dailyDeals?.[day];
-        const fixedCategory = fixedDailyCategories[day];
-        if (existingDeal) {
-            dealsForForm[day] = existingDeal;
-        } else if (fixedCategory) { // If deal doesn't exist but day has a fixed cat, set it up
-            dealsForForm[day] = { category: fixedCategory, discountPercentage: 0 };
-        } else { // For Sat/Sun if no deal, setup with default category
-             dealsForForm[day] = { category: productCategories[0] || 'Vape', discountPercentage: 0 };
-        }
+    form.reset({ 
+      ...store, 
+      // Ensure each deal has a unique id for useFieldArray key prop if not already present
+      dailyDeals: store.dailyDeals?.map(deal => ({ ...deal, id: deal.id || crypto.randomUUID() })) || []
     });
-    form.reset({ ...store, dailyDeals: dealsForForm });
     setIsFormOpen(true);
   };
 
@@ -148,23 +124,9 @@ export default function AdminStoresPage() {
 
   const handleSaveStore = async (data: StoreFormData) => {
     setLoading(true);
-    // Ensure dailyDeals is populated correctly before saving
-    const populatedDailyDeals: Partial<Record<DayOfWeek, StoreDailyDealSetting>> = {};
-    daysOfWeek.forEach(day => {
-      const dealSetting = data.dailyDeals?.[day];
-      const fixedCat = fixedDailyCategories[day];
-      if (dealSetting) { // if a deal setting exists for the day (even if just default 0%)
-        populatedDailyDeals[day] = {
-          category: fixedCat || dealSetting.category, // Use fixed if available, else from form (for Sat/Sun)
-          discountPercentage: dealSetting.discountPercentage || 0,
-        };
-      } else if (fixedCat) { // If no setting but fixed cat exists, create a default 0%
-        populatedDailyDeals[day] = { category: fixedCat, discountPercentage: 0 };
-      }
-      // If neither (e.g. a Sat/Sun with no deal set), it will remain undefined and not saved.
-    });
-
-    const finalData = { ...data, dailyDeals: populatedDailyDeals };
+    // Remove temporary 'id' used for UI keys before saving to Firestore
+    const dailyDealsToSave = data.dailyDeals?.map(({ id, ...rest }) => rest) || [];
+    const finalData = { ...data, dailyDeals: dailyDealsToSave };
 
     try {
       if (currentStore) {
@@ -176,7 +138,7 @@ export default function AdminStoresPage() {
       }
       setIsFormOpen(false);
       setCurrentStore(null);
-      form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: getDefaultDailyDealsFormValues() });
+      form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [] });
     } catch (error: any) {
       console.error("Failed to save store:", error);
       toast({ title: "Error Saving Store", description: error.message || "Failed to save store.", variant: "destructive" });
@@ -192,7 +154,7 @@ export default function AdminStoresPage() {
           <h1 className="text-3xl font-bold font-headline text-primary flex items-center">
             <Building className="mr-3 h-8 w-8" /> Manage Stores
           </h1>
-          <p className="text-muted-foreground">Add, edit, or remove store locations and their daily category discounts.</p>
+          <p className="text-muted-foreground">Add, edit, or remove store locations and their custom daily deal rules.</p>
         </div>
         <Button onClick={handleAddNewStore} className="bg-accent hover:bg-accent/90 text-accent-foreground">
           <PlusCircle className="mr-2 h-5 w-5" /> Add New Store
@@ -203,94 +165,136 @@ export default function AdminStoresPage() {
           setIsFormOpen(isOpen);
           if (!isOpen) {
             setCurrentStore(null); 
-            form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: getDefaultDailyDealsFormValues() });
+            form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [] });
           }
         }}>
         <DialogContent className="sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-headline text-2xl text-primary flex items-center">
-             <Building className="mr-2 h-7 w-7"/> {currentStore ? 'Edit Store & Daily Discounts' : 'Add New Store'}
+             <Building className="mr-2 h-7 w-7"/> {currentStore ? 'Edit Store & Deal Rules' : 'Add New Store'}
             </DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSaveStore)} className="space-y-6 py-4">
-              {/* Store Info Fields: Name, Address, City, Hours - unchanged */}
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Store Name</FormLabel><FormControl><Input placeholder="Dodi Deals - Downtown" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="address" render={({ field }) => (<FormItem><FormLabel>Address</FormLabel><FormControl><Input placeholder="123 Main St" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="city" render={({ field }) => (<FormItem><FormLabel>City & State</FormLabel><FormControl><Input placeholder="Indianapolis, IN" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="hours" render={({ field }) => (<FormItem><FormLabel>Operating Hours</FormLabel><FormControl><Input placeholder="Mon-Sat: 9am - 9pm, Sun: 10am - 6pm" {...field} /></FormControl><FormMessage /></FormItem>)} />
               
-              <Accordion type="single" collapsible className="w-full border p-4 rounded-lg" defaultValue="daily-category-discounts">
-                <AccordionItem value="daily-category-discounts">
+              <Accordion type="single" collapsible className="w-full border p-4 rounded-lg" defaultValue="custom-deal-rules">
+                <AccordionItem value="custom-deal-rules">
                   <AccordionTrigger className="text-lg font-semibold hover:no-underline">
-                      <div className="flex items-center"><Gift className="mr-2 h-5 w-5 text-accent"/> Manage Daily Category Discounts</div>
+                      <div className="flex items-center"><Gift className="mr-2 h-5 w-5 text-accent"/> Manage Custom Deal Rules</div>
                   </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-3">
-                    {daysOfWeek.map((day) => {
-                      const fixedCategory = fixedDailyCategories[day];
-                      return (
-                        <Card key={day} className="p-4 bg-muted/30 shadow-sm">
-                          <FormLabel className="text-md font-semibold text-primary">{day}'s Discount</FormLabel>
-                          <div className="mt-2 space-y-3">
-                            <FormField
-                              control={form.control}
-                              name={`dailyDeals.${day}.category`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Category on Sale</FormLabel>
-                                  {fixedCategory ? (
-                                    <>
-                                      <Input value={fixedCategory} readOnly disabled className="bg-slate-100" />
-                                      <FormDescription>The category for {day} is fixed to {fixedCategory}.</FormDescription>
-                                    </>
-                                  ) : (
-                                    <Select 
-                                      onValueChange={(value) => field.onChange(value as ProductCategory)} 
-                                      value={field.value || (productCategories[0] || 'Vape')}
-                                      defaultValue={field.value || (productCategories[0] || 'Vape')}
-                                    >
-                                      <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
-                                      <SelectContent>
-                                        {productCategories.map(cat => (
-                                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                             <FormField
-                              control={form.control}
-                              name={`dailyDeals.${day}.discountPercentage`}
-                              render={({ field: { onChange, ...fieldProps } }) => (
-                                <FormItem>
-                                  <FormLabel className="flex items-center">
-                                    Discount Percentage <Percent className="ml-1 h-4 w-4 text-muted-foreground" />
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input 
-                                      type="number" 
-                                      placeholder="e.g., 10 for 10%" 
-                                      {...fieldProps}
-                                      value={fieldProps.value ?? 0} // Ensure value is controlled, provide 0 if undefined
-                                      onChange={e => onChange(parseFloat(e.target.value) || 0)} // Handle NaN with || 0
-                                      min="0" max="100" step="1"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        </Card>
-                      );
-                    })}
+                  <AccordionContent className="pt-4 space-y-4">
+                    {dealFields.map((ruleField, index) => (
+                      <Card key={ruleField.ruleId} className="p-4 bg-muted/30 shadow-sm relative">
+                         <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-2 right-2 h-6 w-6 text-destructive"
+                            onClick={() => removeDeal(index)}
+                          >
+                            <XCircle className="h-5 w-5" />
+                          </Button>
+                        <FormLabel className="text-md font-semibold text-primary mb-2 block">Deal Rule #{index + 1}</FormLabel>
+                        
+                        <FormField
+                          control={form.control}
+                          name={`dailyDeals.${index}.category`}
+                          render={({ field }) => (
+                            <FormItem className="mb-3">
+                              <FormLabel>Category on Sale</FormLabel>
+                              <Select 
+                                onValueChange={(value) => field.onChange(value as ProductCategory)} 
+                                value={field.value || ''}
+                                defaultValue={field.value || ''}
+                              >
+                                <FormControl><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  {productCategories.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`dailyDeals.${index}.discountPercentage`}
+                          render={({ field: { onChange, ...fieldProps } }) => (
+                            <FormItem className="mb-3">
+                              <FormLabel className="flex items-center">
+                                Discount Percentage <Percent className="ml-1 h-4 w-4 text-muted-foreground" />
+                              </FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  placeholder="e.g., 10 for 10%" 
+                                  {...fieldProps}
+                                  value={fieldProps.value ?? 0} 
+                                  onChange={e => onChange(parseFloat(e.target.value) || 0)}
+                                  min="0" max="100" step="1"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormItem className="mb-3">
+                            <FormLabel>Apply to Days</FormLabel>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-2 border rounded-md">
+                                {daysOfWeek.map((day) => (
+                                <FormField
+                                    key={day}
+                                    control={form.control}
+                                    name={`dailyDeals.${index}.selectedDays`}
+                                    render={({ field }) => {
+                                    const currentSelectedDays = Array.isArray(field.value) ? field.value : [];
+                                    return (
+                                        <FormItem className="flex flex-row items-start space-x-2 space-y-0">
+                                        <FormControl>
+                                            <Checkbox
+                                            checked={currentSelectedDays.includes(day)}
+                                            onCheckedChange={(checked) => {
+                                                return checked
+                                                ? field.onChange([...currentSelectedDays, day])
+                                                : field.onChange(
+                                                    currentSelectedDays.filter(
+                                                    (value) => value !== day
+                                                    )
+                                                );
+                                            }}
+                                            />
+                                        </FormControl>
+                                        <FormLabel className="text-sm font-normal pt-0.5">
+                                            {day}
+                                        </FormLabel>
+                                        </FormItem>
+                                    );
+                                    }}
+                                />
+                                ))}
+                            </div>
+                             <FormMessage>{form.formState.errors.dailyDeals?.[index]?.selectedDays?.message}</FormMessage>
+                        </FormItem>
+                      </Card>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendDeal({ selectedDays: [], category: productCategories[0], discountPercentage: 0, id: crypto.randomUUID() })}
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add Deal Rule
+                    </Button>
+                     <FormMessage>{form.formState.errors.dailyDeals?.root?.message || form.formState.errors.dailyDeals?.message}</FormMessage>
                     <p className="text-xs text-muted-foreground mt-4 p-2">
-                      Set the percentage discount for the specified product category for each day of the week.
-                      For Monday-Friday, the category is fixed. For Saturday & Sunday, you can select the category.
-                      A 0% discount means no deal is active for that category on that day.
+                      Create rules for category-wide discounts. Each rule specifies the category, discount percentage, and the days of the week it applies.
+                      If multiple rules apply to the same day, the first one listed will take precedence.
                     </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -316,7 +320,7 @@ export default function AdminStoresPage() {
             <AlertDialogTitle className="font-headline text-xl text-destructive">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the store
-              <span className="font-semibold"> {storeToDelete?.name}</span> and all its associated daily deals.
+              <span className="font-semibold"> {storeToDelete?.name}</span> and all its associated deal rules.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -353,6 +357,7 @@ export default function AdminStoresPage() {
                   <TableHead>Address</TableHead>
                   <TableHead>City</TableHead>
                   <TableHead>Hours</TableHead>
+                  <TableHead>Deal Rules</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -363,6 +368,7 @@ export default function AdminStoresPage() {
                     <TableCell>{store.address}</TableCell>
                     <TableCell>{store.city}</TableCell>
                     <TableCell>{store.hours}</TableCell>
+                    <TableCell>{store.dailyDeals?.length || 0} rule(s)</TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => handleEditStore(store)} className="text-accent border-accent hover:bg-accent/10">
                         <Edit className="mr-1 h-4 w-4" /> Edit
