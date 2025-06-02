@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,20 +12,20 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, type ProductCategory } from '@/lib/types';
+import { ProductSchema, type ProductFormData, type Product, type Store, type ProductCategory, type StoreAvailability } from '@/lib/types';
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 const productCategories: ProductCategory[] = ['Vape', 'THCa', 'Accessory'];
 
 export default function AdminProductsPage() {
-  const { allProducts, loadingProducts: loadingAppProducts, stores, loadingStores } = useAppContext();
+  const { allProducts: appProducts, loadingProducts: loadingAppProducts, stores, loadingStores } = useAppContext();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -37,33 +37,42 @@ export default function AdminProductsPage() {
     defaultValues: {
       name: '',
       description: '',
-      price: 0,
-      imageUrl: 'https://placehold.co/600x400.png',
+      brand: '',
+      baseImageUrl: 'https://placehold.co/600x400.png',
       category: 'Vape',
-      stock: 0,
-      storeId: '',
       dataAiHint: '',
+      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     },
+  });
+
+  const { fields, append, remove, replace } = useFieldArray({
+    control: form.control,
+    name: "availability"
   });
 
   useEffect(() => {
     if (isFormOpen) {
       if (currentProduct) {
+        // When editing, map availability to ensure all fields, including optional ones, are present
+        const currentAvailability = currentProduct.availability.map(avail => ({
+          storeId: avail.storeId,
+          price: Number(avail.price),
+          stock: Number(avail.stock),
+          storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
+        }));
         form.reset({
           ...currentProduct,
-          price: Number(currentProduct.price), // Ensure price and stock are numbers for the form
-          stock: Number(currentProduct.stock),
+          availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       } else {
         form.reset({
           name: '',
           description: '',
-          price: 0,
-          imageUrl: 'https://placehold.co/600x400.png',
+          brand: '',
+          baseImageUrl: 'https://placehold.co/600x400.png',
           category: 'Vape',
-          stock: 0,
-          storeId: stores.length > 0 ? stores[0].id : '', // Default to first store if available
           dataAiHint: '',
+          availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       }
     }
@@ -71,27 +80,30 @@ export default function AdminProductsPage() {
 
   const handleAddNewProduct = () => {
     setCurrentProduct(null);
-    // Reset form with default values, especially storeId if stores are loaded
     form.reset({
       name: '',
       description: '',
-      price: 0,
-      imageUrl: 'https://placehold.co/600x400.png',
+      brand: '',
+      baseImageUrl: 'https://placehold.co/600x400.png',
       category: 'Vape',
-      stock: 0,
-      storeId: stores.length > 0 ? stores[0].id : '',
       dataAiHint: '',
+      availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
     setIsFormOpen(true);
   };
 
   const handleEditProduct = (product: Product) => {
     setCurrentProduct(product);
-     form.reset({
+    const availabilityWithDefaults = product.availability.map(a => ({
+        ...a,
+        price: Number(a.price),
+        stock: Number(a.stock),
+        storeSpecificImageUrl: a.storeSpecificImageUrl || '',
+    }));
+    form.reset({
         ...product,
-        price: Number(product.price),
-        stock: Number(product.stock),
-      });
+        availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+    });
     setIsFormOpen(true);
   };
 
@@ -121,8 +133,12 @@ export default function AdminProductsPage() {
     try {
       const productDataPayload = {
         ...data,
-        price: Number(data.price),
-        stock: Number(data.stock),
+        availability: data.availability.map(avail => ({
+          ...avail,
+          price: Number(avail.price), // Ensure numbers
+          stock: Number(avail.stock),
+          storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl, // Set to undefined if empty string
+        })),
       };
 
       if (currentProduct) {
@@ -143,9 +159,7 @@ export default function AdminProductsPage() {
     }
   };
   
-  const getStoreName = (storeId: string) => {
-    return stores.find(s => s.id === storeId)?.name || 'Unknown Store';
-  }
+  const getStoreName = (storeId: string) => stores.find(s => s.id === storeId)?.name || 'Unknown';
 
   return (
     <div className="space-y-8">
@@ -154,7 +168,7 @@ export default function AdminProductsPage() {
           <h1 className="text-3xl font-bold font-headline text-primary flex items-center">
             <Package className="mr-3 h-8 w-8" /> Manage Products
           </h1>
-          <p className="text-muted-foreground">Add, edit, or remove product listings for Dodi Deals.</p>
+          <p className="text-muted-foreground">Add, edit, or remove product definitions for Dodi Deals.</p>
         </div>
         <Button onClick={handleAddNewProduct} className="bg-accent hover:bg-accent/90 text-accent-foreground">
           <PlusCircle className="mr-2 h-5 w-5" /> Add New Product
@@ -168,10 +182,10 @@ export default function AdminProductsPage() {
             form.reset();
           }
         }}>
-        <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-headline text-2xl text-primary">
-              {currentProduct ? 'Edit Product' : 'Add New Product'}
+              {currentProduct ? 'Edit Product Definition' : 'Add New Product Definition'}
             </DialogTitle>
           </DialogHeader>
           <Form {...form}>
@@ -182,9 +196,18 @@ export default function AdminProductsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Indigo Haze Vape Pen" {...field} />
-                    </FormControl>
+                    <FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="brand"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Brand</FormLabel>
+                    <FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -195,53 +218,19 @@ export default function AdminProductsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Detailed description of the product..." {...field} rows={4} />
-                    </FormControl>
+                    <FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="price"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Price ($)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="29.99" {...field} step="0.01" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Stock Quantity</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="50" {...field} step="1" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
+               <FormField
                 control={form.control}
                 name="category"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                      </FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {productCategories.map(category => (
                           <SelectItem key={category} value={category}>{category}</SelectItem>
@@ -254,39 +243,14 @@ export default function AdminProductsPage() {
               />
               <FormField
                 control={form.control}
-                name="storeId"
+                name="baseImageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Store</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingStores}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={loadingStores ? "Loading stores..." : "Select a store"} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {stores.map((store: Store) => (
-                          <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>The store where this product listing will appear.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="imageUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image URL</FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://placehold.co/600x400.png" {...field} />
-                    </FormControl>
+                    <FormLabel>Base Image URL</FormLabel>
+                    <FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>
                      {field.value && (
-                      <div className="mt-2 rounded-md overflow-hidden border border-muted w-32 h-32 relative">
-                        <Image src={field.value} alt="Product preview" layout="fill" objectFit="cover" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/>
+                      <div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative">
+                        <Image src={field.value} alt="Base product preview" layout="fill" objectFit="cover" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/>
                       </div>
                     )}
                     <FormMessage />
@@ -299,18 +263,91 @@ export default function AdminProductsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Image AI Hint (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., vape pen, cannabis flower (max 2 words)" {...field} />
-                    </FormControl>
-                    <FormDescription>Keywords for AI image search suggestions (max 2 words).</FormDescription>
+                    <FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl>
+                    <FormDescription>Keywords for AI image search (max 2 words).</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={formLoading}>
-                  Cancel
+
+              <div className="space-y-4 rounded-md border p-4">
+                <FormLabel className="text-md font-semibold text-primary">Store Availability</FormLabel>
+                {form.formState.errors.availability?.root && <FormMessage>{form.formState.errors.availability.root.message}</FormMessage>}
+                {fields.map((item, index) => (
+                  <Card key={item.id} className="p-4 space-y-3 relative shadow-sm">
+                    <FormLabel className="text-sm">Availability Entry #{index + 1}</FormLabel>
+                     {fields.length > 1 && (
+                       <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 text-destructive" onClick={() => remove(index)}>
+                         <XCircle className="h-5 w-5" />
+                       </Button>
+                     )}
+                    <FormField
+                      control={form.control}
+                      name={`availability.${index}.storeId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Store</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingStores}>
+                            <FormControl><SelectTrigger><SelectValue placeholder={loadingStores ? "Loading..." : "Select store"} /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {stores.map((store: Store) => (
+                                <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                        control={form.control}
+                        name={`availability.${index}.price`}
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Price ($)</FormLabel>
+                            <FormControl><Input type="number" placeholder="29.99" {...field} step="0.01" /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name={`availability.${index}.stock`}
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Stock</FormLabel>
+                            <FormControl><Input type="number" placeholder="50" {...field} step="1" /></FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+                     <FormField
+                      control={form.control}
+                      name={`availability.${index}.storeSpecificImageUrl`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Store Specific Image URL (Optional)</FormLabel>
+                          <FormControl><Input placeholder="Overrides base image for this store" {...field} /></FormControl>
+                          {field.value && (
+                            <div className="mt-2 rounded-md overflow-hidden border border-muted w-20 h-20 relative">
+                                <Image src={field.value} alt="Store specific preview" layout="fill" objectFit="cover" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/>
+                            </div>
+                           )}
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </Card>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={() => append({ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' })} disabled={loadingStores}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Store Availability
                 </Button>
+              </div>
+              
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={formLoading}>Cancel</Button>
                 <Button type="submit" disabled={formLoading || loadingStores} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   {formLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {currentProduct ? 'Save Changes' : 'Create Product'}
@@ -326,8 +363,7 @@ export default function AdminProductsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="font-headline text-xl text-destructive">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the product listing for
-              <span className="font-semibold"> {productToDelete?.name}</span>.
+              This action cannot be undone. This will permanently delete the product definition for <span className="font-semibold">{productToDelete?.name}</span> and all its store availability records.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -342,18 +378,16 @@ export default function AdminProductsPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Product List</CardTitle>
-          <CardDescription>Overview of all product listings across stores.</CardDescription>
+          <CardTitle>Product Definitions</CardTitle>
+          <CardDescription>Overview of all product definitions and their general availability.</CardDescription>
         </CardHeader>
         <CardContent>
           {loadingAppProducts || loadingStores ? (
-            <div className="flex justify-center items-center h-40">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-          ) : allProducts.length === 0 ? (
+            <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
+          ) : appProducts.length === 0 ? (
             <div className="text-center py-10">
               <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-lg">No products found.</p>
+              <p className="text-muted-foreground text-lg">No products defined yet.</p>
               <p className="text-muted-foreground text-sm">Click "Add New Product" to get started.</p>
             </div>
           ) : (
@@ -362,26 +396,28 @@ export default function AdminProductsPage() {
                 <TableRow>
                   <TableHead className="w-[80px]">Image</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Store</TableHead>
+                  <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead>Availability</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allProducts.map((product) => (
+                {appProducts.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="w-16 h-16 rounded-md overflow-hidden border border-muted relative">
-                        <Image src={product.imageUrl} alt={product.name} layout="fill" objectFit="cover" data-ai-hint={product.dataAiHint || "product image"}/>
+                        <Image src={product.baseImageUrl} alt={product.name} layout="fill" objectFit="cover" data-ai-hint={product.dataAiHint || "product image"}/>
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{getStoreName(product.storeId)}</TableCell>
+                    <TableCell>{product.brand}</TableCell>
                     <TableCell>{product.category}</TableCell>
-                    <TableCell className="text-right">${Number(product.price).toFixed(2)}</TableCell>
-                    <TableCell className="text-right">{product.stock}</TableCell>
+                    <TableCell>
+                        {product.availability?.length > 0 
+                            ? `${product.availability.length} store(s) - e.g., ${getStoreName(product.availability[0].storeId)} ($${product.availability[0].price.toFixed(2)})` 
+                            : "Not available"}
+                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)} className="text-accent border-accent hover:bg-accent/10">
                         <Edit className="mr-1 h-4 w-4" /> Edit
