@@ -168,16 +168,30 @@ export default function AdminProductsPage() {
     const currentAvailabilities = form.getValues('availability') || [];
     const existingStoreIds = new Set(currentAvailabilities.map(a => a.storeId));
     
+    let defaultPrice = 0;
+    let defaultStock = 0;
+
+    if (currentAvailabilities.length > 0 && currentAvailabilities[0]) {
+        defaultPrice = Number(currentAvailabilities[0].price) || 0;
+        defaultStock = Number(currentAvailabilities[0].stock) || 0;
+    }
+    
     let storesAddedCount = 0;
     stores.forEach(store => {
         if (!existingStoreIds.has(store.id)) {
-            append({ storeId: store.id, price: 0, stock: 0, storeSpecificImageUrl: '' });
-            existingStoreIds.add(store.id); // Add to set to prevent duplicate checks if stores array had duplicates
+            append({ 
+                storeId: store.id, 
+                price: defaultPrice, 
+                stock: defaultStock, 
+                storeSpecificImageUrl: '' 
+            });
+            existingStoreIds.add(store.id); 
             storesAddedCount++;
         }
     });
+
     if (storesAddedCount > 0) {
-        toast({ title: "Stores Populated", description: `${storesAddedCount} store(s) added to availability list.` });
+        toast({ title: "Stores Populated", description: `${storesAddedCount} store(s) added to availability list with default values.` });
     } else {
         toast({ title: "No New Stores", description: "All stores are already in the availability list or no stores available." });
     }
