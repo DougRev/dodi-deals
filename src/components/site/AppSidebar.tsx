@@ -109,10 +109,11 @@ export function AppSidebar() {
         <SidebarFooter className="p-2 border-t">
           {selectedStore && (
             <Button 
-                variant="outline" 
+                variant="ghost" 
                 size="sm" 
                 onClick={() => setStoreSelectorOpen(true)} 
-                className="w-full justify-start text-xs group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:aspect-square group-data-[collapsible=icon]:p-0"
+                className="w-full justify-start text-xs group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:aspect-square group-data-[collapsible=icon]:p-0
+                           border border-sidebar-foreground/50 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:border-sidebar-accent"
                 title={`Current Store: ${selectedStore.name}`}
               >
               <Settings className="group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:w-5" />
