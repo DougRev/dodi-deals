@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory } from '@/lib/types';
 import { daysOfWeek } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -22,18 +22,19 @@ interface AppContextType {
   register: (email: string, pass: string, name?: string) => Promise<boolean>;
   logout: () => void;
   updateUserAvatar: (newAvatarUrl: string) => Promise<boolean>;
+  updateUserProfileDetails: (newName: string) => Promise<boolean>;
   cart: CartItem[];
   addToCart: (product: ResolvedProduct, quantity?: number) => void;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   getCartItemQuantity: (productId: string) => number;
+  getTotalCartItems: () => number;
   clearCart: () => void;
   products: ResolvedProduct[];
   allProducts: Product[];
   deals: Deal[];
   getCartTotal: () => number;
   getCartTotalSavings: () => number;
-  getTotalCartItems: () => number;
   stores: Store[];
   selectedStore: Store | null;
   selectStore: (storeId: string | null) => void;
@@ -151,7 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [selectedStore]);
 
 
   useEffect(() => {
@@ -169,7 +170,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
     const userRef = doc(db, "users", firebaseUser.uid);
     let userSnap;
@@ -182,8 +182,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
-    let finalIsAdminValue = false;
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
+    const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
 
     const profileDataToSet: {
         email: string | null;
@@ -191,7 +191,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         points: number;
         isAdmin: boolean;
         createdAt: string;
-        avatarUrl?: string;
+        avatarUrl?: string; // Make avatarUrl optional here for type safety
       } = {
         email: firebaseUser.email,
         name: displayName,
@@ -199,61 +199,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isAdmin: isTheAdminEmail || (userSnap.exists() ? (userSnap.data() as User).isAdmin === true : false),
         createdAt: userSnap.exists() ? (userSnap.data() as User).createdAt : new Date().toISOString(),
       };
-
-    const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
+      
     if (determinedAvatarUrl) {
-      profileDataToSet.avatarUrl = determinedAvatarUrl;
+        profileDataToSet.avatarUrl = determinedAvatarUrl;
     }
 
-    finalIsAdminValue = profileDataToSet.isAdmin;
 
     if (!userSnap.exists()) {
       try {
+        // For new users, only include avatarUrl if it's defined
         const dataToSetForNewUser: any = { ...profileDataToSet };
         if (dataToSetForNewUser.avatarUrl === undefined) {
           delete dataToSetForNewUser.avatarUrl; // Remove avatarUrl if undefined for setDoc
         }
         await setDoc(userRef, dataToSetForNewUser);
+
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
             await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        finalIsAdminValue = false;
-        profileDataToSet.isAdmin = false;
+        profileDataToSet.isAdmin = false; // Ensure isAdmin is false if creation failed
       }
     } else {
+      // Existing user: update logic
       const existingData = userSnap.data() as User;
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData.isAdmin) {
         updates.isAdmin = true;
-        finalIsAdminValue = true;
       }
       if (displayName && existingData.name !== displayName) {
         updates.name = displayName;
       }
-       if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
-        updates.avatarUrl = determinedAvatarUrl;
+      if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
+         updates.avatarUrl = determinedAvatarUrl;
       } else if (!determinedAvatarUrl && existingData.avatarUrl) {
-         // To remove a field, you might need a specific sentinel value or handle it differently
-         // For simplicity, setting to undefined might not remove it, Firestore often ignores undefined on update.
-         // If truly needs removal, { avatarUrl: deleteField() } from 'firebase/firestore' would be used,
-         // but that complicates the User type. For now, let's assume setting to an empty string or null if no avatar.
-        updates.avatarUrl = undefined; // Or handle removal explicitly if required.
+         updates.avatarUrl = undefined; // Explicitly set to undefined if clearing
       }
-
 
       if (Object.keys(updates).length > 0) {
         try {
             const dataToUpdateForExistingUser: any = { ...updates };
-            if (dataToUpdateForExistingUser.avatarUrl === undefined && !determinedAvatarUrl) {
-                // If we intend to remove avatarUrl, we might need a specific sentinel or ensure it's not set
-                // For now, if determinedAvatarUrl is falsy, and we want to clear it.
-                // Firestore update with undefined usually means "do not change this field".
-                // Let's assume for now if determinedAvatarUrl is empty, we want to clear it.
-                // This might need admin.firestore.FieldValue.delete() for actual field removal.
-                // Keeping it simple for now: if new URL is empty, try to set empty in DB.
+            // If avatarUrl is explicitly undefined in updates, it might be intended to remove it
+            // However, Firestore update with undefined usually ignores the field.
+            // For actual removal, admin.firestore.FieldValue.delete() would be used.
+            // For simplicity here, we'll pass undefined, which means it won't be touched unless it's a new valid URL.
+            if ('avatarUrl' in dataToUpdateForExistingUser && dataToUpdateForExistingUser.avatarUrl === undefined) {
+                // If you want to remove the field, you'd do:
+                // dataToUpdateForExistingUser.avatarUrl = admin.firestore.FieldValue.delete();
+                // But that requires admin SDK context here, which we don't have client-side.
+                // So, if avatarUrl is undefined, we might just not send it to updateDoc.
+                // Or, for this case, let's assume if it's undefined in updates, we try to update the auth profile if needed,
+                // and rely on previous logic to have updated the Firestore if it was a valid URL.
+                // This part could be refined if explicit avatar removal from Firestore is needed via client SDK (e.g. setting to null or empty string).
             }
 
             await updateDoc(userRef, dataToUpdateForExistingUser);
@@ -270,8 +269,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       email: firebaseUser.email || '',
       name: profileDataToSet.name,
       points: profileDataToSet.points,
-      avatarUrl: profileDataToSet.avatarUrl,
-      isAdmin: finalIsAdminValue,
+      avatarUrl: profileDataToSet.avatarUrl, // This will be undefined if not set
+      isAdmin: profileDataToSet.isAdmin,
     };
     return profileToReturn;
   };
@@ -379,6 +378,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // createUserProfile will be called by onAuthStateChanged, no need to explicitly call here.
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -402,18 +402,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Authenticated", description: "You must be logged in to update your avatar.", variant: "destructive" });
       return false;
     }
+    setLoadingAuth(true);
     try {
       await updateProfile(auth.currentUser, { photoURL: newAvatarUrl });
       await updateUserAvatarInFirestore(auth.currentUser.uid, newAvatarUrl);
       setUser(prevUser => prevUser ? { ...prevUser, avatarUrl: newAvatarUrl } : null);
       toast({ title: "Avatar Updated", description: "Your profile picture has been changed." });
+      setLoadingAuth(false);
       return true;
     } catch (error: any) {
       console.error("Error updating avatar:", error);
       toast({ title: "Avatar Update Failed", description: error.message || "Could not update avatar.", variant: "destructive" });
+      setLoadingAuth(false);
       return false;
     }
-  }, [user, toast, setUser]);
+  }, [user, toast, setUser, setLoadingAuth]);
+
+  const updateUserProfileDetails = useCallback(async (newName: string): Promise<boolean> => {
+    if (!auth.currentUser || !user) {
+      toast({ title: "Not Authenticated", description: "You must be logged in to update your profile.", variant: "destructive" });
+      return false;
+    }
+    if (!newName || !newName.trim()) {
+      toast({ title: "Invalid Name", description: "Name cannot be empty.", variant: "destructive" });
+      return false;
+    }
+
+    setLoadingAuth(true);
+    try {
+      // Update Firebase Auth profile
+      await updateProfile(auth.currentUser, { displayName: newName });
+
+      // Update Firestore profile using the server action
+      await updateUserNameInFirestore(auth.currentUser.uid, newName);
+
+      // Update local context state
+      setUser(prevUser => prevUser ? { ...prevUser, name: newName } : null);
+
+      toast({ title: "Profile Updated", description: "Your name has been successfully updated." });
+      setLoadingAuth(false);
+      return true;
+    } catch (error: any) {
+      console.error("Error updating profile details:", error);
+      toast({ title: "Profile Update Failed", description: error.message || "Could not update your profile.", variant: "destructive" });
+      setLoadingAuth(false);
+      return false;
+    }
+  }, [user, toast, setUser, setLoadingAuth]);
+
 
   const logout = useCallback(async () => {
     setLoadingAuth(true);
@@ -485,6 +521,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return item ? item.quantity : 0;
   }, [cart, selectedStore]);
 
+  const getTotalCartItems = useCallback(() => {
+    return cart.reduce((total, item) => total + item.quantity, 0);
+  }, [cart]);
+
   const clearCart = useCallback(() => {
     setCart([]);
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
@@ -492,10 +532,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getCartTotal = useCallback(() => {
     return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-  }, [cart]);
-
-  const getTotalCartItems = useCallback(() => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
   }, [cart]);
 
   const getCartTotalSavings = useCallback(() => {
@@ -615,18 +651,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     register,
     logout,
     updateUserAvatar,
+    updateUserProfileDetails,
     cart,
     addToCart,
     removeFromCart,
     updateCartQuantity,
     getCartItemQuantity,
+    getTotalCartItems,
     clearCart,
     products,
     allProducts,
     deals,
     getCartTotal,
     getCartTotalSavings,
-    getTotalCartItems,
     stores,
     selectedStore,
     selectStore,
@@ -636,8 +673,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadingStores,
     loadingProducts,
   }), [
-    isAuthenticated, user, login, register, logout, updateUserAvatar, cart, addToCart, removeFromCart,
-    updateCartQuantity, getCartItemQuantity, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, getTotalCartItems, stores,
+    isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
+    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, stores,
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
     loadingAuth, loadingStores, loadingProducts
   ]);
@@ -652,4 +689,3 @@ export function useAppContext() {
   }
   return context;
 }
-

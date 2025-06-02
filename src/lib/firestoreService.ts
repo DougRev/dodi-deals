@@ -207,6 +207,22 @@ export async function updateUserAdminStatus(userId: string, isAdmin: boolean): P
   }
 }
 
+export async function updateUserNameInFirestore(userId: string, newName: string): Promise<void> {
+  const functionName = 'updateUserNameInFirestore';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Updating name for userId: ${userId} to: ${newName}`);
+
+  const userRef = adminDb!.collection('users').doc(userId);
+  try {
+    await userRef.update({ name: newName });
+    console.log(`[firestoreService][AdminSDK][${functionName}] User name updated successfully for ${userId}.`);
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user name for ${userId}:`, error);
+    throw error;
+  }
+}
+
 export async function updateUserAvatar(userId: string, avatarUrl: string): Promise<void> {
   const functionName = 'updateUserAvatar';
   ensureAdminDbInitialized(functionName);
@@ -222,4 +238,3 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
     throw error; // Re-throw the error to be caught by the calling function in AppContext
   }
 }
-

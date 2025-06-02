@@ -12,6 +12,9 @@ import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2 } from 'lucide-react'; 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const avatarOptions = [
   '/icons/profile-icons/avatar1.png',
@@ -23,11 +26,16 @@ const avatarOptions = [
 ];
 
 function ProfilePageInternal() {
-  const { isAuthenticated, user, logout, loadingAuth, updateUserAvatar } = useAppContext(); 
+  const { isAuthenticated, user, logout, loadingAuth, updateUserAvatar, updateUserProfileDetails } = useAppContext(); 
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null | undefined>(user?.avatarUrl);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editedName, setEditedName] = useState(user?.name || '');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
 
   useEffect(() => {
     if (!loadingAuth && !isAuthenticated) {
@@ -38,7 +46,10 @@ function ProfilePageInternal() {
 
   useEffect(() => {
     setSelectedAvatarUrl(user?.avatarUrl);
-  }, [user?.avatarUrl]);
+    if (user?.name) {
+      setEditedName(user.name);
+    }
+  }, [user?.avatarUrl, user?.name]);
 
   if (loadingAuth || !isAuthenticated || !user) { 
     return (
@@ -60,6 +71,25 @@ function ProfilePageInternal() {
     setIsUpdatingAvatar(false);
   };
 
+  const handleOpenEditModal = () => {
+    setEditedName(user?.name || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleProfileDetailsUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editedName.trim()) {
+      // Basic validation, context function handles more robust validation + toast
+      return;
+    }
+    setIsUpdatingProfile(true);
+    const success = await updateUserProfileDetails(editedName);
+    setIsUpdatingProfile(false);
+    if (success) {
+      setIsEditModalOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <header className="text-center">
@@ -78,7 +108,7 @@ function ProfilePageInternal() {
                       {user.name ? user.name.charAt(0).toUpperCase() : <UserCircle className="h-12 w-12"/>}
                   </AvatarFallback>
                 </Avatar>
-                {isUpdatingAvatar && (
+                {(isUpdatingAvatar || isUpdatingProfile) && ( // Show loader if avatar or name is updating
                     <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full mb-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
@@ -97,16 +127,16 @@ function ProfilePageInternal() {
                   <button
                     key={path}
                     onClick={() => handleAvatarSelect(path)}
-                    disabled={isUpdatingAvatar}
+                    disabled={isUpdatingAvatar || isUpdatingProfile}
                     className={cn(
                       "relative rounded-md overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                       selectedAvatarUrl === path ? "border-primary ring-2 ring-primary" : "border-transparent hover:border-accent",
-                      isUpdatingAvatar && selectedAvatarUrl === path ? "opacity-70" : "",
-                      isUpdatingAvatar && selectedAvatarUrl !== path ? "opacity-50 cursor-not-allowed" : ""
+                      (isUpdatingAvatar && selectedAvatarUrl === path) || isUpdatingProfile ? "opacity-70" : "",
+                      (isUpdatingAvatar && selectedAvatarUrl !== path) || isUpdatingProfile ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
                     <Image src={path} alt={`Avatar option`} width={80} height={80} className="aspect-square object-cover" data-ai-hint="profile avatar option"/>
-                    {selectedAvatarUrl === path && !isUpdatingAvatar && (
+                    {selectedAvatarUrl === path && !isUpdatingAvatar && !isUpdatingProfile && (
                       <div className="absolute inset-0 flex items-center justify-center bg-primary/70">
                         <CheckCircle className="h-6 w-6 text-primary-foreground" />
                       </div>
@@ -119,12 +149,18 @@ function ProfilePageInternal() {
                   </button>
                 ))}
               </div>
-              <Button variant="outline" className="w-full text-accent border-accent hover:bg-accent/10 mt-4" disabled>
-                <Edit3 className="mr-2 h-4 w-4" /> Edit Profile Details (Coming Soon)
+              <Button 
+                variant="outline" 
+                className="w-full text-accent border-accent hover:bg-accent/10 mt-4" 
+                onClick={handleOpenEditModal}
+                disabled={isUpdatingProfile || isUpdatingAvatar}
+              >
+                <Edit3 className="mr-2 h-4 w-4" /> 
+                {isUpdatingProfile ? 'Updating...' : 'Edit Profile Details'}
               </Button>
             </CardContent>
           </Card>
-           <Button onClick={logout} variant="destructive" className="w-full">
+           <Button onClick={logout} variant="destructive" className="w-full" disabled={isUpdatingProfile || isUpdatingAvatar}>
             <LogOut className="mr-2 h-4 w-4" /> Log Out
           </Button>
         </div>
@@ -146,6 +182,42 @@ function ProfilePageInternal() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Profile Details</DialogTitle>
+            <DialogDescription>
+              Make changes to your display name here. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleProfileDetailsUpdate} className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="name" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="name"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                className="col-span-3"
+                disabled={isUpdatingProfile}
+              />
+            </div>
+          
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={isUpdatingProfile}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isUpdatingProfile || !editedName.trim()}>
+                {isUpdatingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
