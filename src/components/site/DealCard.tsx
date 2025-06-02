@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Deal, ResolvedProduct } from '@/lib/types'; // Deal now contains a ResolvedProduct
+import type { Deal, ResolvedProduct } from '@/lib/types'; 
 import { useAppContext } from '@/hooks/useAppContext';
 import { ShoppingCart, TimerIcon, Percent } from 'lucide-react';
 
@@ -36,6 +36,11 @@ function calculateTimeLeft(expiresAt: string) {
 export function DealCard({ deal }: DealCardProps) {
   const { addToCart, isAuthenticated, selectedStore } = useAppContext();
   const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(deal.expiresAt));
+  const [currentImgSrc, setCurrentImgSrc] = useState(deal.product.imageUrl);
+
+  useEffect(() => {
+    setCurrentImgSrc(deal.product.imageUrl); // Update image if deal.product.imageUrl changes
+  }, [deal.product.imageUrl]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -51,10 +56,9 @@ export function DealCard({ deal }: DealCardProps) {
       return;
     }
     if (isAuthenticated) {
-      // Create a version of the ResolvedProduct with the deal price for the cart
       const productForCart: ResolvedProduct = {
-        ...deal.product, // Spread the original resolved product details
-        price: deal.dealPrice, // Override price with the deal price
+        ...deal.product, 
+        price: deal.dealPrice, 
       };
       addToCart(productForCart);
     } else {
@@ -75,11 +79,14 @@ export function DealCard({ deal }: DealCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative w-full">
           <Image
-            src={deal.product.imageUrl} 
+            src={currentImgSrc} 
             alt={deal.product.name}
             layout="fill"
             objectFit="cover"
             data-ai-hint={deal.product.dataAiHint || "deal product"}
+            onError={() => {
+              setCurrentImgSrc('/images/categories/default.png'); // Fallback to default.png
+            }}
           />
         </div>
       </CardHeader>

@@ -2,18 +2,24 @@
 "use client";
 
 import Image from 'next/image';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { ResolvedProduct } from '@/lib/types'; // Updated to use ResolvedProduct
+import type { ResolvedProduct } from '@/lib/types'; 
 import { useAppContext } from '@/hooks/useAppContext';
 import { ShoppingCart } from 'lucide-react';
 
 interface ProductCardProps {
-  product: ResolvedProduct; // Product is now a ResolvedProduct
+  product: ResolvedProduct; 
 }
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addToCart, isAuthenticated, selectedStore } = useAppContext();
+  const [currentImgSrc, setCurrentImgSrc] = useState(product.imageUrl);
+
+  useEffect(() => {
+    setCurrentImgSrc(product.imageUrl); // Update image if product prop changes
+  }, [product.imageUrl]);
 
   const handleAddToCart = () => {
     if (!selectedStore) {
@@ -21,7 +27,6 @@ export function ProductCard({ product }: ProductCardProps) {
         return;
     }
     if (isAuthenticated) {
-      // product is already resolved for the selected store
       addToCart(product);
     } else {
       alert("Please log in to add items to your cart.");
@@ -33,11 +38,14 @@ export function ProductCard({ product }: ProductCardProps) {
       <CardHeader className="p-0">
         <div className="aspect-video relative w-full">
           <Image
-            src={product.imageUrl} // Use resolved imageUrl
+            src={currentImgSrc}
             alt={product.name}
             layout="fill"
             objectFit="cover"
             data-ai-hint={product.dataAiHint || "product image"}
+            onError={() => {
+              setCurrentImgSrc('/images/categories/default.png'); // Fallback to default.png
+            }}
           />
         </div>
       </CardHeader>

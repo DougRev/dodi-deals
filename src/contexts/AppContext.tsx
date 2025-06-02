@@ -9,10 +9,10 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule } from '@/lib/types'; // Removed StoreAvailability, DayOfWeek, ProductCategory
-import { daysOfWeek } from '@/lib/types'; // Import daysOfWeek
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory } from '@/lib/types';
+import { daysOfWeek } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-// import { dailyDeals as allInitialDealsSeed } from '@/data/deals'; // No longer using static deals seed
+// Removed initialProducts import as it's not directly used here anymore, firestoreService handles seeding.
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore } from '@/lib/firestoreService';
 
 
@@ -98,7 +98,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setStores(initialStoresSeedData);
       }
       
-      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectFinally: Store | null = null;
 
       if (savedStoreId) {
@@ -108,11 +108,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSelectedStoreState(storeToSelectFinally); 
 
       if (!storeToSelectFinally && currentStoresList.length > 0) {
-        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         setStoreSelectorOpen(true); 
       } else if (!storeToSelectFinally && currentStoresList.length === 0) {
         setStores([]); 
-        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         setStoreSelectorOpen(true); 
       } else if (storeToSelectFinally) {
         setStoreSelectorOpen(false);
@@ -122,7 +122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
       
-      const savedStoreId = localStorage.getItem(DODI_SELECTED_STORE_KEY);
+      const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectOnError: Store | null = null;
       if (savedStoreId) {
           storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreId) || null;
@@ -141,7 +141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [selectedStore]); // Added selectedStore dependency to re-evaluate if it changes externally
 
 
   useEffect(() => {
@@ -186,9 +186,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           points: 0,
           isAdmin: finalIsAdminValue,
           createdAt: new Date().toISOString(),
-          avatarUrl: firebaseAuthPhotoURL || existingAvatarUrl, // Prefer firebase auth, then existing (though should be same), then undefined
+          avatarUrl: firebaseAuthPhotoURL || existingAvatarUrl,
         });
-        // Ensure Firebase Auth profile is also updated if a name was derived or default
         if (firebaseUser.displayName !== displayName || (firebaseAuthPhotoURL && firebaseUser.photoURL !== firebaseAuthPhotoURL)) {
             await updateProfile(firebaseUser, { displayName: displayName, photoURL: firebaseAuthPhotoURL || existingAvatarUrl });
         }
@@ -209,7 +208,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
         updates.name = firebaseUser.displayName;
       }
-       // Sync avatarUrl from Firebase Auth to Firestore if it's different or Firestore doesn't have one
       if (firebaseAuthPhotoURL && existingData.avatarUrl !== firebaseAuthPhotoURL) {
         updates.avatarUrl = firebaseAuthPhotoURL;
       }
@@ -269,13 +267,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (selectedStore) {
       const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
-      const storedCart = localStorage.getItem(cartKey);
+      const storedCart = typeof window !== 'undefined' ? localStorage.getItem(cartKey) : null;
       if (storedCart) {
         try {
           setCart(JSON.parse(storedCart));
         } catch (e) {
           setCart([]);
-          localStorage.removeItem(cartKey);
+          if (typeof window !== 'undefined') localStorage.removeItem(cartKey);
         }
       } else {
         setCart([]);
@@ -286,12 +284,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedStore]);
 
   useEffect(() => {
-    if (selectedStore && cart.length > 0) { 
-      const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
-      localStorage.setItem(cartKey, JSON.stringify(cart));
-    } else if (selectedStore && cart.length === 0) { 
-      const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
-      localStorage.removeItem(cartKey);
+    if (typeof window !== 'undefined') {
+      if (selectedStore && cart.length > 0) { 
+        const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
+        localStorage.setItem(cartKey, JSON.stringify(cart));
+      } else if (selectedStore && cart.length === 0) { 
+        const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
+        localStorage.removeItem(cartKey);
+      }
     }
   }, [cart, selectedStore]);
   
@@ -304,16 +304,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
-        localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
+        if (typeof window !== 'undefined') localStorage.setItem(DODI_SELECTED_STORE_KEY, store.id);
         setStoreSelectorOpen(false);
       }
     } else {
       setSelectedStoreState(null);
-      localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+      if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
       setCart([]);
       setStoreSelectorOpen(true);
     }
-  }, [stores, selectedStore]); 
+  }, [stores, selectedStore, toast, setCart, setSelectedStoreState, setStoreSelectorOpen]); 
 
   const login = useCallback(async (email: string, pass: string) => {
     setLoadingAuth(true);
@@ -327,18 +327,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setLoadingAuth(false); 
       return false; 
     } 
-  }, []);
+  }, [toast]);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      // The createUserProfile function, called by onAuthStateChanged, will handle Firestore document creation and initial name setting.
-      // We can still update Firebase Auth profile display name here if provided.
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // We don't set photoURL here during registration; avatar selection is a separate step.
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -355,7 +352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setLoadingAuth(false);
       return false;
     }
-  }, []);
+  }, [toast]);
 
   const updateUserAvatar = useCallback(async (newAvatarUrl: string) => {
     if (!auth.currentUser || !user) {
@@ -363,13 +360,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
     try {
-      // Update Firebase Auth profile
       await updateProfile(auth.currentUser, { photoURL: newAvatarUrl });
-      
-      // Update Firestore (via server action)
       await updateUserAvatarInFirestore(auth.currentUser.uid, newAvatarUrl);
-      
-      // Update local state
       setUser(prevUser => prevUser ? { ...prevUser, avatarUrl: newAvatarUrl } : null);
       toast({ title: "Avatar Updated", description: "Your profile picture has been changed." });
       return true;
@@ -378,23 +370,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Avatar Update Failed", description: error.message || "Could not update avatar.", variant: "destructive" });
       return false;
     }
-  }, [user]);
+  }, [user, toast, setUser]);
 
   const logout = useCallback(async () => {
+    setLoadingAuth(true);
     try {
       await firebaseSignOut(auth);
-      setCart([]); 
-      if (selectedStore) {
-          const cartKey = `${DODI_CART_KEY_PREFIX}${selectedStore.id}`;
-          localStorage.removeItem(cartKey);
+      setUser(null);
+      setIsAuthenticated(false);
+      setCart([]);
+      setSelectedStoreState(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(DODI_CART_KEY_PREFIX)) {
+            localStorage.removeItem(key);
+          }
+        });
+        router.push('/'); 
       }
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      router.push('/'); 
     } catch (error: any) {
       console.error("Firebase logout error:", error);
       toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
-    } 
-  }, [router, selectedStore]);
+    } finally {
+        setLoadingAuth(false);
+    }
+  }, [auth, setUser, setIsAuthenticated, setCart, setSelectedStoreState, toast, router, setLoadingAuth]); // Added router and setLoadingAuth
+
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
     if (!selectedStore) {
@@ -402,26 +405,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setStoreSelectorOpen(true);
       return;
     }
-    // The product passed to addToCart should already have its price set correctly (deal price or regular price).
-    // The CartItem stores this resolved product directly.
     setCart((prevCart) => {
       const existingItem = prevCart.find(item => item.product.id === product.id && item.product.storeId === product.storeId);
       if (existingItem) {
         return prevCart.map(item =>
           (item.product.id === product.id && item.product.storeId === product.storeId)
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) } // Use stock from passed product
+            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) } 
             : item
         );
       }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }]; // Use stock from passed product
+      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }]; 
     });
     toast({ title: "Item Added", description: `${product.name} added to cart.` });
-  }, [selectedStore]);
+  }, [selectedStore, toast, setCart, setStoreSelectorOpen]);
 
   const removeFromCart = useCallback((originalProductId: string) => {
     setCart((prevCart) => prevCart.filter(item => item.product.id !== originalProductId));
     toast({ title: "Item Removed", description: "Item removed from cart." });
-  }, []);
+  }, [toast, setCart]);
 
   const updateCartQuantity = useCallback((originalProductId: string, quantity: number) => {
     setCart((prevCart) =>
@@ -431,15 +432,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : item
       ).filter(item => item.quantity > 0) 
     );
-  }, []);
+  }, [setCart]);
 
   const clearCart = useCallback(() => {
     setCart([]);
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
-  }, []);
+  }, [toast, setCart]);
 
   const getCartTotal = useCallback(() => {
-    // Cart items store ResolvedProduct with the price it was added at (deal or regular)
     return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
   }, [cart]);
 
@@ -448,9 +448,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
-      if (!p.availability) return; // Guard against undefined availability
+      if (!p.availability) return; 
       const availabilityForStore = p.availability.find(avail => avail.storeId === selectedStore.id);
       if (availabilityForStore) {
+        let currentImageUrl = p.baseImageUrl; 
+
+        if (availabilityForStore.storeSpecificImageUrl && availabilityForStore.storeSpecificImageUrl.trim() !== '') {
+          currentImageUrl = availabilityForStore.storeSpecificImageUrl;
+        } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
+          currentImageUrl = p.baseImageUrl; 
+        } else {
+          currentImageUrl = `/images/categories/${p.category.toLowerCase()}.png`;
+        }
+
         resolved.push({
           id: p.id,
           name: p.name,
@@ -461,7 +471,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           storeId: selectedStore.id,
           price: availabilityForStore.price,
           stock: availabilityForStore.stock,
-          imageUrl: availabilityForStore.storeSpecificImageUrl || p.baseImageUrl,
+          imageUrl: currentImageUrl,
         });
       }
     });
@@ -472,41 +482,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!selectedStore || loadingProducts || products.length === 0 || !selectedStore.dailyDeals || selectedStore.dailyDeals.length === 0) {
       return [];
     }
-
+  
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; 
+  
     let activeRule: CustomDealRule | undefined = undefined;
-
+  
     for (const rule of selectedStore.dailyDeals) {
-      if (rule && Array.isArray(rule.selectedDays) && typeof rule.category === 'string' && typeof rule.discountPercentage === 'number') {
-        if (rule.selectedDays.includes(currentDayOfWeek) && rule.discountPercentage > 0) {
-          activeRule = rule;
-          break; 
-        }
+      if (
+        rule &&
+        Array.isArray(rule.selectedDays) &&
+        rule.selectedDays.includes(currentDayOfWeek) &&
+        typeof rule.category === 'string' &&
+        typeof rule.discountPercentage === 'number' &&
+        rule.discountPercentage > 0 
+      ) {
+        activeRule = rule;
+        break; 
       }
     }
-
+  
     if (!activeRule) {
       return [];
     }
     
-    const categoryOnDealToday = activeRule.category;
+    const categoryOnDealToday = activeRule.category as ProductCategory; 
     const discountPercentageToday = activeRule.discountPercentage;
-
+  
     const generatedDeals: Deal[] = [];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
-
+  
     products.forEach(resolvedProduct => {
       if (resolvedProduct.category === categoryOnDealToday && resolvedProduct.stock > 0) {
         const originalPrice = resolvedProduct.price;
         const dealPrice = parseFloat((originalPrice * (1 - discountPercentageToday / 100)).toFixed(2));
-
+  
         generatedDeals.push({
           id: `${resolvedProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
-          product: resolvedProduct,
+          product: resolvedProduct, 
           dealPrice: dealPrice,
-          originalPrice: originalPrice,
+          originalPrice: originalPrice, 
           discountPercentage: discountPercentageToday,
           expiresAt: endOfToday.toISOString(),
           title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
@@ -561,3 +577,6 @@ export function useAppContext() {
   }
   return context;
 }
+
+
+    
