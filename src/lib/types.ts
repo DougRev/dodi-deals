@@ -77,6 +77,7 @@ export const ProductSchema = z.object({
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
+  isFeatured: z.boolean().optional().default(false), // Added isFeatured
   availability: z.array(StoreAvailabilitySchema)
     .min(1, { message: "Product must be available in at least one store." })
     .refine(items => new Set(items.map(item => item.storeId)).size === items.length, {
@@ -90,6 +91,7 @@ export type ProductFormData = z.infer<typeof ProductSchema>;
 // Main Product interface for Firestore (matches structure of ProductSchema)
 export interface Product extends Omit<ProductFormData, 'availability'> {
   id: string;
+  isFeatured?: boolean; // Added isFeatured
   availability: StoreAvailability[];
 }
 
@@ -102,6 +104,7 @@ export interface ResolvedProduct {
   brand: string;
   category: ProductCategory;
   dataAiHint?: string;
+  isFeatured?: boolean; // Added isFeatured
   storeId: string;
   price: number; // This is the effective price (could be deal price)
   originalPrice?: number; // The base price if currently on deal, otherwise same as price or undefined

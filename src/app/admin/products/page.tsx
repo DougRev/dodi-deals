@@ -12,13 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability } from '@/lib/types'; 
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star } from 'lucide-react'; // Added Star
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -39,6 +40,7 @@ export default function AdminProductsPage() {
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape', 
       dataAiHint: '',
+      isFeatured: false, // Default for new products
       availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     },
   });
@@ -59,6 +61,7 @@ export default function AdminProductsPage() {
         }));
         form.reset({
           ...currentProduct,
+          isFeatured: currentProduct.isFeatured || false,
           category: currentProduct.category || (productCategories[0] || 'Vape'), 
           availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
@@ -70,11 +73,12 @@ export default function AdminProductsPage() {
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: productCategories[0] || 'Vape', 
           dataAiHint: '',
+          isFeatured: false,
           availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       }
     }
-  }, [isFormOpen, currentProduct, form.reset]); // DEPENDENCY ARRAY CHANGED HERE
+  }, [isFormOpen, currentProduct, form.reset]);
 
   const handleAddNewProduct = () => {
     setCurrentProduct(null);
@@ -85,6 +89,7 @@ export default function AdminProductsPage() {
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape', 
       dataAiHint: '',
+      isFeatured: false,
       availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], 
     });
     setIsFormOpen(true);
@@ -100,6 +105,7 @@ export default function AdminProductsPage() {
     }));
     form.reset({
         ...product,
+        isFeatured: product.isFeatured || false,
         category: product.category || (productCategories[0] || 'Vape'), 
         availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
@@ -132,6 +138,7 @@ export default function AdminProductsPage() {
     try {
       const productDataPayload = {
         ...data,
+        isFeatured: data.isFeatured || false,
         availability: data.availability.map(avail => ({
           ...avail,
           price: Number(avail.price),
@@ -253,28 +260,30 @@ export default function AdminProductsPage() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSaveProduct)} className="space-y-6 py-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Product Name</FormLabel>
-                    <FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="brand"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Brand</FormLabel>
-                    <FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Product Name</FormLabel>
+                      <FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="brand"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Brand</FormLabel>
+                      <FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name="description"
@@ -286,24 +295,38 @@ export default function AdminProductsPage() {
                   </FormItem>
                 )}
               />
-               <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || (productCategories[0] || 'Vape')} defaultValue={field.value || (productCategories[0] || 'Vape')}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {productCategories.map(category => (
-                          <SelectItem key={category} value={category}>{category}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || (productCategories[0] || 'Vape')} defaultValue={field.value || (productCategories[0] || 'Vape')}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {productCategories.map(category => (
+                            <SelectItem key={category} value={category}>{category}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dataAiHint"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Image AI Hint (Optional)</FormLabel>
+                      <FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl>
+                      <FormDescription>Keywords for AI image search (max 2 words).</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
                 name="baseImageUrl"
@@ -320,18 +343,30 @@ export default function AdminProductsPage() {
                   </FormItem>
                 )}
               />
-              <FormField
+               <FormField
                 control={form.control}
-                name="dataAiHint"
+                name="isFeatured"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image AI Hint (Optional)</FormLabel>
-                    <FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl>
-                    <FormDescription>Keywords for AI image search (max 2 words).</FormDescription>
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        Feature this product on the homepage?
+                      </FormLabel>
+                      <FormDescription>
+                        Featured products are highlighted to users.
+                      </FormDescription>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
 
               <div className="space-y-4 rounded-md border p-4">
                 <div className="flex justify-between items-center">
@@ -464,6 +499,7 @@ export default function AdminProductsPage() {
                 <TableRow>
                   <TableHead className="w-[80px]">Image</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Featured</TableHead>
                   <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Availability</TableHead>
@@ -479,6 +515,9 @@ export default function AdminProductsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>
+                      {product.isFeatured ? <Star className="h-5 w-5 text-yellow-500 fill-yellow-400" /> : <Star className="h-5 w-5 text-muted-foreground/50" />}
+                    </TableCell>
                     <TableCell>{product.brand}</TableCell>
                     <TableCell>{product.category}</TableCell>
                     <TableCell>
@@ -509,6 +548,3 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
-
-    

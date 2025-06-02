@@ -6,14 +6,18 @@ import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin, Loader2 } from 'lucide-react';
+import { ArrowRight, MapPin, Loader2, Star } from 'lucide-react'; // Added Star
 import { Card, CardContent } from '@/components/ui/card';
+
+const MAX_FEATURED_PRODUCTS_ON_HOMEPAGE = 3;
 
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   
-  // Show only a few featured products from the current store's products
-  const featuredProducts = products.slice(0, 3);
+  // Filter for featured products available at the selected store
+  const featuredProducts = products
+    .filter(p => p.isFeatured)
+    .slice(0, MAX_FEATURED_PRODUCTS_ON_HOMEPAGE);
 
   if (loadingStores || (!selectedStore && !loadingStores)) { // Show loader if stores are loading, or prompt if loading is done but no store
     if (!selectedStore && !loadingStores) {
@@ -67,7 +71,9 @@ export default function HomePage() {
 
       <section>
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold font-headline text-primary">Featured Products</h2>
+          <h2 className="text-3xl font-bold font-headline text-primary flex items-center">
+            <Star className="mr-2 h-7 w-7 text-yellow-400 fill-yellow-400" /> Featured Products
+          </h2>
           <Button asChild variant="link" className="text-accent">
             <Link href="/products">
               View All Products <ArrowRight className="ml-2 h-4 w-4" />
@@ -86,6 +92,7 @@ export default function HomePage() {
            <Card className="text-center py-12 shadow-lg">
             <CardContent>
               <p className="text-center text-lg text-muted-foreground">No featured products available at {selectedStore.name} at the moment.</p>
+               <p className="text-sm text-muted-foreground mt-2">Admins can mark products as featured in the Product Management section.</p>
             </CardContent>
           </Card>
         )}

@@ -252,7 +252,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 // So, if avatarUrl is undefined, we might just not send it to updateDoc.
                 // Or, for this case, let's assume if it's undefined in updates, we try to update the auth profile if needed,
                 // and rely on previous logic to have updated the Firestore if it was a valid URL.
-                // This part could be refined if explicit avatar removal from Firestore is needed via client SDK (e.g. setting to null or empty string).
             }
 
             await updateDoc(userRef, dataToUpdateForExistingUser);
@@ -590,6 +589,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           brand: p.brand,
           category: p.category,
           dataAiHint: p.dataAiHint,
+          isFeatured: p.isFeatured || false, // Carry over isFeatured
           storeId: selectedStore.id,
           price: effectivePrice,
           originalPrice: isProductOnDeal ? originalPriceValue : undefined, // Set originalPrice only if on deal

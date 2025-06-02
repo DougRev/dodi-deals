@@ -1,3 +1,4 @@
+
 // scripts/importProducts.ts
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -101,6 +102,7 @@ async function importProducts() {
       category: entry.category,
       baseImageUrl: DEFAULT_BASE_IMAGE_URL,
       dataAiHint: entry.dataAiHint,
+      isFeatured: entry.isFeatured || false, // Add isFeatured here
       availability: availability,
     };
 

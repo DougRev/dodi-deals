@@ -1,3 +1,4 @@
+
 // scripts/productImportData.ts
 import type { ProductCategory } from '@/lib/types';
 
@@ -7,6 +8,7 @@ export interface ProductImportEntry {
   category: ProductCategory;
   brand: string;
   dataAiHint: string;
+  isFeatured?: boolean; // Added isFeatured
 }
 
 export const productsToImport: ProductImportEntry[] = [
@@ -17,6 +19,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Dodi Hemp",
     dataAiHint: "flower indica",
+    isFeatured: true,
   },
   {
     name: "Exotic Indoor THCa Flower – RS11",
@@ -24,6 +27,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Dodi Hemp",
     dataAiHint: "flower hybrid",
+    isFeatured: true,
   },
   {
     name: "Exotic Indoor THCa Flower – Peanut Butter Breath",
@@ -31,6 +35,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Dodi Hemp",
     dataAiHint: "flower hybrid",
+    isFeatured: false,
   },
   {
     name: "AAA Indoor THCa Flower - Jelly Runtz",
@@ -38,6 +43,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Dodi Hemp",
     dataAiHint: "flower hybrid",
+    isFeatured: true,
   },
   {
     name: "AAA Indoor THCa Flower - Lemon Cherry Sherbert",
@@ -45,6 +51,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Cookies",
     dataAiHint: "flower cookies",
+    isFeatured: false,
   },
   {
     name: "$99 1 OZ THCa Flower",
@@ -52,6 +59,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Flower",
     brand: "Dodi Hemp",
     dataAiHint: "flower bulk",
+    isFeatured: false,
   },
 
   // THCa Prerolls
@@ -61,6 +69,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll diamond",
+    isFeatured: true,
   },
   {
     name: "Blunts",
@@ -68,6 +77,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll blunt",
+    isFeatured: false,
   },
   {
     name: "Hash Core Prerolls",
@@ -75,6 +85,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll hash",
+    isFeatured: false,
   },
   {
     name: "Kief Coated Mini Prerolls",
@@ -82,6 +93,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll kief",
+    isFeatured: false,
   },
   {
     name: "Mini Prerolls",
@@ -89,6 +101,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll mini",
+    isFeatured: false,
   },
   {
     name: "Single Prerolls",
@@ -96,6 +109,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll single",
+    isFeatured: false,
   },
   {
     name: "Snow Coated Mini Prerolls",
@@ -103,6 +117,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Pre-roll",
     brand: "Dodi Hemp",
     dataAiHint: "preroll snow",
+    isFeatured: false,
   },
 
   // Cartridges (Mapped to Vape)
@@ -112,6 +127,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape sativa",
+    isFeatured: true,
   },
   {
     name: "1 Gram Cartridge - Forbidden Fruit",
@@ -119,6 +135,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape indica",
+    isFeatured: false,
   },
   {
     name: "1 Gram Cartridge - Sour Lemon Mac",
@@ -126,6 +143,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "1 Gram Cartridge - Grapes N Cream",
@@ -133,6 +151,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "1 Gram Cartridge - Black Lime",
@@ -140,6 +159,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "1 Gram Cartridge - Banana Runtz",
@@ -147,6 +167,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
 
   // Disposables (Mapped to Vape)
@@ -156,6 +177,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape indica",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Sour Lemon Mac",
@@ -163,6 +185,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Black Lime",
@@ -170,6 +193,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Zlushiez",
@@ -177,6 +201,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Live Resin", // Differentiating Delta 8
     dataAiHint: "vape live_resin",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - White Truffle",
@@ -184,6 +209,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Live Resin", // Differentiating Delta 8
     dataAiHint: "vape live_resin",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Jenny Kush",
@@ -191,6 +217,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape hybrid",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Slap Cakes",
@@ -198,6 +225,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Live Resin", // Differentiating Delta 8
     dataAiHint: "vape live_resin",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - Jelly Doughnutz",
@@ -205,6 +233,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape thca",
+    isFeatured: true,
   },
   {
     name: "2 Gram Disposable - Pineapple Express",
@@ -212,6 +241,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Hemp",
     dataAiHint: "vape sativa",
+    isFeatured: true,
   },
   {
     name: "2 Gram Disposable - Lemon Cherry Gelato",
@@ -219,6 +249,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Live Resin", // Differentiating Delta 8
     dataAiHint: "vape live_resin",
+    isFeatured: false,
   },
   {
     name: "2 Gram Disposable - dodi Berry",
@@ -226,6 +257,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Vape",
     brand: "Dodi Live Resin", // Differentiating Delta 8
     dataAiHint: "vape berry",
+    isFeatured: false,
   },
 
   // Edibles
@@ -235,6 +267,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Edible",
     brand: "Dodi Hemp",
     dataAiHint: "edible gummy",
+    isFeatured: true,
   },
   {
     name: "High Potency + Diamonds Gummies Starblast - 10 Ct Jar",
@@ -242,6 +275,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Edible",
     brand: "Dodi Hemp",
     dataAiHint: "edible gummy_diamond",
+    isFeatured: false,
   },
   {
     name: "High Potency + Diamonds Gummies Sour Zaps - 10 Ct Jar",
@@ -249,6 +283,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Edible",
     brand: "Dodi Hemp",
     dataAiHint: "edible gummy_sour",
+    isFeatured: false,
   },
   {
     name: "High Potency + Diamonds Gummies Purple Punch - 10 Ct Jar",
@@ -256,6 +291,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Edible",
     brand: "Dodi Hemp",
     dataAiHint: "edible gummy_grape",
+    isFeatured: false,
   },
   {
     name: "Rise & Shine Gummies - 20 Ct Jar",
@@ -263,6 +299,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Edible",
     brand: "Dodi Hemp",
     dataAiHint: "edible gummy_rise",
+    isFeatured: false,
   },
 
   // Tinctures (Mapped to Concentrate)
@@ -272,6 +309,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "tincture rise",
+    isFeatured: false,
   },
   {
     name: "Tincture - Knockout",
@@ -279,6 +317,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "tincture knockout",
+    isFeatured: false,
   },
 
   // Concentrates
@@ -288,6 +327,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "concentrate diamond_sauce",
+    isFeatured: true,
   },
   {
     name: "THCa Diamonds + Sauce - 2 Gram - Banana Runtz",
@@ -295,6 +335,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "concentrate diamond_sauce",
+    isFeatured: false,
   },
   {
     name: "THCa Diamonds + Sauce - 2 Gram - Grapes N Cream",
@@ -302,6 +343,7 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "concentrate diamond_sauce",
+    isFeatured: false,
   },
   {
     name: "THCa Diamonds - 99.9% THCa - 2 Gram",
@@ -309,5 +351,6 @@ export const productsToImport: ProductImportEntry[] = [
     category: "Concentrate",
     brand: "Dodi Hemp",
     dataAiHint: "concentrate diamond",
+    isFeatured: false,
   },
 ];
