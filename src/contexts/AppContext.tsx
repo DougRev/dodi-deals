@@ -105,17 +105,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
       }
       
-      setSelectedStoreState(storeToSelectFinally); 
+      // Logic to set initial selected store and manage dialog visibility
+      // This part runs inside the onSnapshot callback, so it reacts to store data changes
+      // We capture the current selectedStore's ID *before* any potential update
+      const currentSelectedStoreIdBeforeUpdate = selectedStore ? selectedStore.id : null;
 
-      if (!storeToSelectFinally && currentStoresList.length > 0) {
+      if (storeToSelectFinally) {
+        // If a valid store is found from localStorage
+        if (currentSelectedStoreIdBeforeUpdate !== storeToSelectFinally.id) {
+          setSelectedStoreState(storeToSelectFinally); // Update if different or not set
+        }
+        setStoreSelectorOpen(false); // Close selector if a store is successfully selected
+      } else {
+        // No valid saved store, or no saved store ID at all
         if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        setStoreSelectorOpen(true); 
-      } else if (!storeToSelectFinally && currentStoresList.length === 0) {
-        setStores([]); 
-        if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        setStoreSelectorOpen(true); 
-      } else if (storeToSelectFinally) {
-        setStoreSelectorOpen(false);
+        
+        // If no store is currently selected (e.g. app first load, or previous selection was invalid)
+        if (!currentSelectedStoreIdBeforeUpdate) {
+          if (currentStoresList.length > 0) {
+            setStoreSelectorOpen(true); // Open selector if there are stores to choose from
+          } else {
+            setStoreSelectorOpen(true); // Also open if no stores (to show empty or error state)
+          }
+        }
+        // If a store was already selected, and now local storage is invalid, we keep the current selection
+        // and don't re-open the dialog unless `selectedStore` becomes null for other reasons.
       }
       setLoadingStores(false); 
     }, (error) => {
@@ -130,9 +144,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSelectedStoreState(storeToSelectOnError); 
       setStores(initialStoresSeedData); 
       
-      if (!selectedStore && initialStoresSeedData.length > 0) {
+      const isAnyStoreSelectedAfterErrorHandling = !!(selectedStore || storeToSelectOnError);
+
+      if (!isAnyStoreSelectedAfterErrorHandling && initialStoresSeedData.length > 0) {
           setStoreSelectorOpen(true);
-      } else if (selectedStore) {
+      } else if (isAnyStoreSelectedAfterErrorHandling) {
           setStoreSelectorOpen(false);
       } else { 
           setStoreSelectorOpen(true);
@@ -141,7 +157,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [selectedStore]); // Added selectedStore dependency to re-evaluate if it changes externally
+  }, []); // Empty dependency array: runs once to set up listener and initial state
 
 
   useEffect(() => {
@@ -245,7 +261,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             setUser(null);
             setIsAuthenticated(false);
-            await firebaseSignOut(auth); 
+            if (typeof window !== 'undefined') await firebaseSignOut(auth); 
           }
         } else {
           setUser(null);
@@ -260,7 +276,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -375,28 +390,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     setLoadingAuth(true);
     try {
-      await firebaseSignOut(auth);
-      setUser(null);
-      setIsAuthenticated(false);
-      setCart([]);
-      setSelectedStoreState(null);
       if (typeof window !== 'undefined') {
+        await firebaseSignOut(auth);
+        setUser(null);
+        setIsAuthenticated(false);
+        setCart([]);
+        setSelectedStoreState(null); 
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
             localStorage.removeItem(key);
           }
         });
-        router.push('/'); 
+        router.push('/');
+        toast({ title: "Logged Out", description: "You have been successfully logged out." });
       }
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
     } catch (error: any) {
       console.error("Firebase logout error:", error);
-      toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
+      if (typeof window !== 'undefined') { 
+        toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
+      }
     } finally {
         setLoadingAuth(false);
     }
-  }, [auth, setUser, setIsAuthenticated, setCart, setSelectedStoreState, toast, router, setLoadingAuth]); // Added router and setLoadingAuth
+  }, [auth, router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -458,7 +475,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
           currentImageUrl = p.baseImageUrl; 
         } else {
-          currentImageUrl = `/images/categories/${p.category.toLowerCase()}.png`;
+          const categoryPath = p.category && typeof p.category === 'string' ? p.category.toLowerCase() : 'default';
+          currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
         resolved.push({
@@ -577,6 +595,3 @@ export function useAppContext() {
   }
   return context;
 }
-
-
-    

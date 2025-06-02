@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Suspense, useEffect } from 'react'; // Import Suspense
+import { Suspense, useEffect } from 'react'; 
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Trash2, ShoppingBag, ArrowLeft, MapPin } from 'lucide-react';
-import type { ResolvedProduct } from '@/lib/types'; // Cart items use ResolvedProduct
+import type { ResolvedProduct } from '@/lib/types'; 
 
 // Internal component containing the original CartPage logic
 function CartPageInternal() {
@@ -50,7 +50,6 @@ function CartPageInternal() {
   }
 
   const handleQuantityChange = (productId: string, newQuantity: number) => {
-    // productId is the original product ID from ResolvedProduct
     if (newQuantity >= 0) {
       updateCartQuantity(productId, newQuantity);
     }
@@ -83,10 +82,11 @@ function CartPageInternal() {
               <Card key={item.product.id} className="flex flex-col md:flex-row items-center p-4 gap-4 shadow-md">
                 <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-md overflow-hidden shrink-0">
                   <Image 
-                    src={item.product.imageUrl} // Resolved imageUrl
+                    src={item.product.imageUrl} 
                     alt={item.product.name} 
-                    layout="fill" 
-                    objectFit="cover" 
+                    fill
+                    style={{ objectFit: 'cover' }}
+                    sizes="(max-width: 640px) 96px, 128px"
                     data-ai-hint={item.product.dataAiHint || "product image"}/>
                 </div>
                 <div className="flex-grow">

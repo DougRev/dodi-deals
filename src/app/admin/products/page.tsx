@@ -14,15 +14,13 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability } from '@/lib/types'; // Updated import for productCategories
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability } from '@/lib/types'; 
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
 import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-
-// Removed local productCategories, using from '@/lib/types'
 
 export default function AdminProductsPage() {
   const { allProducts: appProducts, loadingProducts: loadingAppProducts, stores, loadingStores } = useAppContext();
@@ -39,7 +37,7 @@ export default function AdminProductsPage() {
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: productCategories[0] || 'Vape', // Use updated productCategories
+      category: productCategories[0] || 'Vape', 
       dataAiHint: '',
       availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     },
@@ -61,7 +59,7 @@ export default function AdminProductsPage() {
         }));
         form.reset({
           ...currentProduct,
-          category: currentProduct.category || (productCategories[0] || 'Vape'), // Ensure category is set
+          category: currentProduct.category || (productCategories[0] || 'Vape'), 
           availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       } else {
@@ -70,7 +68,7 @@ export default function AdminProductsPage() {
           description: '',
           brand: '',
           baseImageUrl: 'https://placehold.co/600x400.png',
-          category: productCategories[0] || 'Vape', // Use updated productCategories
+          category: productCategories[0] || 'Vape', 
           dataAiHint: '',
           availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
@@ -85,7 +83,7 @@ export default function AdminProductsPage() {
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: productCategories[0] || 'Vape', // Use updated productCategories
+      category: productCategories[0] || 'Vape', 
       dataAiHint: '',
       availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
@@ -102,7 +100,7 @@ export default function AdminProductsPage() {
     }));
     form.reset({
         ...product,
-        category: product.category || (productCategories[0] || 'Vape'), // Ensure category
+        category: product.category || (productCategories[0] || 'Vape'), 
         availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
     setIsFormOpen(true);
@@ -288,7 +286,7 @@ export default function AdminProductsPage() {
                     <FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>
                      {field.value && (
                       <div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative">
-                        <Image src={field.value} alt="Base product preview" layout="fill" objectFit="cover" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/>
+                        <Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/>
                       </div>
                     )}
                     <FormMessage />
@@ -375,7 +373,7 @@ export default function AdminProductsPage() {
                           <FormControl><Input placeholder="Overrides base image for this store" {...field} /></FormControl>
                           {field.value && (
                             <div className="mt-2 rounded-md overflow-hidden border border-muted w-20 h-20 relative">
-                                <Image src={field.value} alt="Store specific preview" layout="fill" objectFit="cover" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/>
+                                <Image src={field.value} alt="Store specific preview" fill style={{ objectFit: 'cover' }} sizes="80px" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/>
                             </div>
                            )}
                           <FormMessage />
@@ -450,7 +448,7 @@ export default function AdminProductsPage() {
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="w-16 h-16 rounded-md overflow-hidden border border-muted relative">
-                        <Image src={product.baseImageUrl} alt={product.name} layout="fill" objectFit="cover" data-ai-hint={product.dataAiHint || "product image"}/>
+                        <Image src={product.baseImageUrl} alt={product.name} fill style={{ objectFit: 'cover' }} sizes="64px" data-ai-hint={product.dataAiHint || "product image"}/>
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>

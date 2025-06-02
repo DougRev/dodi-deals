@@ -18,7 +18,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const [currentImgSrc, setCurrentImgSrc] = useState(product.imageUrl);
 
   useEffect(() => {
-    setCurrentImgSrc(product.imageUrl); // Update image if product prop changes
+    setCurrentImgSrc(product.imageUrl); 
   }, [product.imageUrl]);
 
   const handleAddToCart = () => {
@@ -40,11 +40,12 @@ export function ProductCard({ product }: ProductCardProps) {
           <Image
             src={currentImgSrc}
             alt={product.name}
-            layout="fill"
-            objectFit="cover"
+            fill
+            style={{ objectFit: 'cover' }}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             data-ai-hint={product.dataAiHint || "product image"}
             onError={() => {
-              setCurrentImgSrc('/images/categories/default.png'); // Fallback to default.png
+              setCurrentImgSrc('/images/categories/default.png'); 
             }}
           />
         </div>

@@ -52,10 +52,10 @@ function ProfilePageInternal() {
   const handleAvatarSelect = async (avatarPath: string) => {
     if (isUpdatingAvatar || user.avatarUrl === avatarPath) return;
     setIsUpdatingAvatar(true);
-    setSelectedAvatarUrl(avatarPath); // Optimistically update UI
+    setSelectedAvatarUrl(avatarPath); 
     const success = await updateUserAvatar(avatarPath);
     if (!success) {
-        setSelectedAvatarUrl(user.avatarUrl); // Revert if update failed
+        setSelectedAvatarUrl(user.avatarUrl); 
     }
     setIsUpdatingAvatar(false);
   };

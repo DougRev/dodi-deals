@@ -39,7 +39,7 @@ export function DealCard({ deal }: DealCardProps) {
   const [currentImgSrc, setCurrentImgSrc] = useState(deal.product.imageUrl);
 
   useEffect(() => {
-    setCurrentImgSrc(deal.product.imageUrl); // Update image if deal.product.imageUrl changes
+    setCurrentImgSrc(deal.product.imageUrl); 
   }, [deal.product.imageUrl]);
 
   useEffect(() => {
@@ -81,11 +81,12 @@ export function DealCard({ deal }: DealCardProps) {
           <Image
             src={currentImgSrc} 
             alt={deal.product.name}
-            layout="fill"
-            objectFit="cover"
+            fill
+            style={{ objectFit: 'cover' }}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             data-ai-hint={deal.product.dataAiHint || "deal product"}
             onError={() => {
-              setCurrentImgSrc('/images/categories/default.png'); // Fallback to default.png
+              setCurrentImgSrc('/images/categories/default.png'); 
             }}
           />
         </div>
