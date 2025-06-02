@@ -14,7 +14,7 @@ import {
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings } from 'lucide-react';
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft } from 'lucide-react';
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
@@ -22,10 +22,10 @@ export function AppSidebar() {
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarContent className="flex flex-col">
-        <SidebarHeader className="p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:h-10">
-          <Link href="/" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+        <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
+          <Link href="/" className="flex items-center gap-2">
             <DodiLogo className="group-data-[collapsible=icon]:hidden" />
-            <span className="sr-only group-data-[collapsible=icon]:not-sr-only">DD</span>
+            <PanelLeft className="hidden group-data-[collapsible=icon]:block h-6 w-6 text-sidebar-foreground" />
           </Link>
         </SidebarHeader>
 
