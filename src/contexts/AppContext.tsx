@@ -105,31 +105,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeToSelectFinally = currentStoresList.find(s => s.id === savedStoreId) || null;
       }
       
-      // Logic to set initial selected store and manage dialog visibility
-      // This part runs inside the onSnapshot callback, so it reacts to store data changes
-      // We capture the current selectedStore's ID *before* any potential update
       const currentSelectedStoreIdBeforeUpdate = selectedStore ? selectedStore.id : null;
 
       if (storeToSelectFinally) {
-        // If a valid store is found from localStorage
         if (currentSelectedStoreIdBeforeUpdate !== storeToSelectFinally.id) {
-          setSelectedStoreState(storeToSelectFinally); // Update if different or not set
+          setSelectedStoreState(storeToSelectFinally); 
         }
-        setStoreSelectorOpen(false); // Close selector if a store is successfully selected
+        setStoreSelectorOpen(false); 
       } else {
-        // No valid saved store, or no saved store ID at all
         if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         
-        // If no store is currently selected (e.g. app first load, or previous selection was invalid)
         if (!currentSelectedStoreIdBeforeUpdate) {
           if (currentStoresList.length > 0) {
-            setStoreSelectorOpen(true); // Open selector if there are stores to choose from
+            setStoreSelectorOpen(true); 
           } else {
-            setStoreSelectorOpen(true); // Also open if no stores (to show empty or error state)
+            setStoreSelectorOpen(true); 
           }
         }
-        // If a store was already selected, and now local storage is invalid, we keep the current selection
-        // and don't re-open the dialog unless `selectedStore` becomes null for other reasons.
       }
       setLoadingStores(false); 
     }, (error) => {
@@ -157,7 +149,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []); // Empty dependency array: runs once to set up listener and initial state
+  }, []);
 
 
   useEffect(() => {
@@ -195,17 +187,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (!userSnap.exists()) {
       finalIsAdminValue = isTheAdminEmail;
+      
+      const profileDataToSet: {
+        email: string | null;
+        name: string;
+        points: number;
+        isAdmin: boolean;
+        createdAt: string;
+        avatarUrl?: string; 
+      } = {
+        email: firebaseUser.email,
+        name: displayName,
+        points: 0,
+        isAdmin: finalIsAdminValue,
+        createdAt: new Date().toISOString(),
+      };
+
+      const determinedAvatarUrl = firebaseAuthPhotoURL || existingAvatarUrl; // existingAvatarUrl will be undefined
+      if (determinedAvatarUrl) { // Only add avatarUrl if it's truthy (not null or undefined or empty string)
+        profileDataToSet.avatarUrl = determinedAvatarUrl;
+      }
+
       try {
-        await setDoc(userRef, {
-          email: firebaseUser.email,
-          name: displayName,
-          points: 0,
-          isAdmin: finalIsAdminValue,
-          createdAt: new Date().toISOString(),
-          avatarUrl: firebaseAuthPhotoURL || existingAvatarUrl,
-        });
-        if (firebaseUser.displayName !== displayName || (firebaseAuthPhotoURL && firebaseUser.photoURL !== firebaseAuthPhotoURL)) {
-            await updateProfile(firebaseUser, { displayName: displayName, photoURL: firebaseAuthPhotoURL || existingAvatarUrl });
+        await setDoc(userRef, profileDataToSet);
+        if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
+            await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
@@ -224,9 +230,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser.displayName && existingData.name !== firebaseUser.displayName) {
         updates.name = firebaseUser.displayName;
       }
-      if (firebaseAuthPhotoURL && existingData.avatarUrl !== firebaseAuthPhotoURL) {
-        updates.avatarUrl = firebaseAuthPhotoURL;
+      const currentAuthAvatar = firebaseAuthPhotoURL || existingData.avatarUrl;
+      if (currentAuthAvatar && existingData.avatarUrl !== currentAuthAvatar) {
+        updates.avatarUrl = currentAuthAvatar;
       }
+
 
       if (Object.keys(updates).length > 0) {
         try {
@@ -475,7 +483,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
           currentImageUrl = p.baseImageUrl; 
         } else {
-          const categoryPath = p.category && typeof p.category === 'string' ? p.category.toLowerCase() : 'default';
+          const categoryPath = p.category && typeof p.category === 'string' ? p.category.toLowerCase().replace(/\s+/g, '-') : 'default';
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
