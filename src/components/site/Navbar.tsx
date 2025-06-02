@@ -5,12 +5,13 @@ import Link from 'next/link';
 import DodiLogo from '@/components/icons/DodiLogo';
 import { AuthButton } from '@/components/site/AuthButton';
 import { Button } from '@/components/ui/button';
-// import { SidebarTrigger } from '@/components/ui/sidebar'; // Removed
+import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar'; // Import useSidebar
 import { ShoppingCart, MapPin, Edit, Award, Loader2 } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
 
 export function Navbar() {
   const { selectedStore, setStoreSelectorOpen, user, isAuthenticated, loadingStores } = useAppContext();
+  const { isMobile } = useSidebar(); // Get mobile state
 
   const renderStoreButton = () => {
     if (loadingStores && !selectedStore) {
@@ -20,7 +21,7 @@ export function Navbar() {
         </Button>
       );
     }
-    if (!selectedStore && !loadingStores) { // Added check for !loadingStores
+    if (!selectedStore && !loadingStores) { 
       return (
         <Button 
           variant="outline" 
@@ -33,7 +34,7 @@ export function Navbar() {
         </Button>
       );
     }
-     if (selectedStore) { // Explicitly check if selectedStore exists
+     if (selectedStore) { 
         return (
         <Button 
             variant="outline" 
@@ -47,15 +48,15 @@ export function Navbar() {
         </Button>
         );
     }
-    return null; // Return null if no condition is met (e.g. loading but store already selected)
+    return null; 
   };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between px-4 md:px-6">
         <div className="flex items-center space-x-2 md:space-x-4">
-          {/* <SidebarTrigger /> Removed */}
-          <Link href="/" className="flex items-center space-x-2"> {/* Logo always visible now, or controlled by sidebar visibility */}
+          {isMobile && <SidebarTrigger />} {/* Only show SidebarTrigger on mobile */}
+          <Link href="/" className="flex items-center space-x-2">
             <DodiLogo />
           </Link>
         </div>

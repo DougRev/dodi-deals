@@ -24,25 +24,29 @@ export function AppSidebar() {
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarContent className="flex flex-col">
-        <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
-          {/* On mobile, this header content might be hidden if the sidebar is a sheet.
-              The trigger to open the sheet itself is now missing from the Navbar.
-              This setup is primarily for desktop icon-collapsible behavior. */}
-          {!isMobile && state === 'expanded' ? (
-            <div className="flex items-center justify-between w-full pl-1 pr-1">
-              <Link href="/" className="flex items-center gap-2">
-                <DodiLogo />
-              </Link>
-              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground">
-                <PanelLeft /> 
+        {/* Sidebar header is primarily for desktop expand/collapse trigger now */}
+        {!isMobile && (
+           <SidebarHeader className="p-2 h-14 flex items-center group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:justify-center">
+            {state === 'expanded' ? (
+              <div className="flex items-center justify-between w-full pl-1 pr-1">
+                <Link href="/" className="flex items-center gap-2">
+                  <DodiLogo />
+                </Link>
+                <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground">
+                  <PanelLeft /> 
+                </Button>
+              </div>
+            ) : (
+              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground group-data-[collapsible=icon]:mx-auto">
+                <PanelRight /> 
               </Button>
-            </div>
-          ) : !isMobile && state === 'collapsed' ? (
-            <Button variant="ghost" size="icon" onClick={toggleSidebar} className="h-7 w-7 text-sidebar-foreground group-data-[collapsible=icon]:mx-auto">
-              <PanelRight /> 
-            </Button>
-          ) : null /* On mobile, this internal header trigger isn't primary for opening the sheet */}
-        </SidebarHeader>
+            )}
+          </SidebarHeader>
+        )}
+        {/* On mobile, if a header is needed for the sheet, it can be added here conditionally. 
+            For now, a simple top padding or let the Navbar handle the visual top. */}
+        {isMobile && <div className="h-10" /> /* Placeholder for potential mobile sheet header spacing */}
+
 
         <SidebarMenu className="flex-1 overflow-y-auto p-2">
           <SidebarMenuItem>
