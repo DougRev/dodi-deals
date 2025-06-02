@@ -60,7 +60,7 @@ export default function AdminProductsPage() {
         form.reset({
           ...currentProduct,
           category: currentProduct.category || (productCategories[0] || 'Vape'), 
-          availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+          availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       } else {
         form.reset({
@@ -70,7 +70,7 @@ export default function AdminProductsPage() {
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: productCategories[0] || 'Vape', 
           dataAiHint: '',
-          availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+          availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], // Ensure placeholder has empty storeId
         });
       }
     }
@@ -85,7 +85,7 @@ export default function AdminProductsPage() {
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape', 
       dataAiHint: '',
-      availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], // Ensure placeholder has empty storeId
     });
     setIsFormOpen(true);
   };
@@ -101,7 +101,7 @@ export default function AdminProductsPage() {
     form.reset({
         ...product,
         category: product.category || (productCategories[0] || 'Vape'), 
-        availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+        availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
     setIsFormOpen(true);
   };
@@ -176,7 +176,7 @@ export default function AdminProductsPage() {
         defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
         defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
         
-        remove(0); // Remove the placeholder. `fields` (from useFieldArray) will be empty for subsequent appends.
+        remove(0); // Remove the placeholder.
         
         // Append all stores.
         stores.forEach(store => {
@@ -195,15 +195,11 @@ export default function AdminProductsPage() {
         }
     } else {
         // Scenario 2: Form has existing items, or is empty.
-        // Populate with stores not already in the list.
         if (currentFormAvailabilities.length > 0 && currentFormAvailabilities[0]) {
             defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
             defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
         }
-        // Else, if form is empty, defaults are 0,0.
-
-        // `fields` from useFieldArray is the reactive list of current field items.
-        // We map it to get the store IDs actually present in the form fields.
+        
         const existingStoreIdsInForm = new Set(fields.map(field => form.getValues(`availability.${fields.indexOf(field)}.storeId`)).filter(id => id && id.trim() !== ''));
         
         stores.forEach(store => {
