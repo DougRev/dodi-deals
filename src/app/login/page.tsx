@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react'; // Import Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link'; // Import Link
 import { Button } from '@/components/ui/button';
@@ -11,12 +11,12 @@ import { Label } from '@/components/ui/label';
 import { useAppContext } from '@/hooks/useAppContext';
 import { LogIn, UserPlus } from 'lucide-react';
 
-export default function LoginPage() {
-  const { login, isAuthenticated, loadingAuth } = useAppContext(); 
+function LoginPageInternal() {
+  const { login, isAuthenticated, loadingAuth } = useAppContext();
   const router = useRouter();
-  const searchParams = useSearchParams(); 
-  const [email, setEmail] = useState('user@example.com'); 
-  const [password, setPassword] = useState('password'); 
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('user@example.com');
+  const [password, setPassword] = useState('password');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -27,8 +27,8 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router, searchParams, loadingAuth]);
 
-  if (loadingAuth || (!loadingAuth && isAuthenticated)) { 
-    return <div className="text-center py-10">Loading...</div>; 
+  if (loadingAuth || (!loadingAuth && isAuthenticated)) {
+    return <div className="text-center py-10">Loading...</div>;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,8 +39,6 @@ export default function LoginPage() {
     setLoading(false);
     if (success) {
       // Redirect is handled by useEffect
-      // const redirectUrl = searchParams.get('redirect') || '/profile';
-      // router.push(redirectUrl);
     } else {
       // Error is handled by the context's toast
     }
@@ -98,5 +96,13 @@ export default function LoginPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-10">Loading login page...</div>}>
+      <LoginPageInternal />
+    </Suspense>
   );
 }
