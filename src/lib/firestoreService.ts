@@ -14,18 +14,18 @@ import type { StoreFormData } from '@/lib/types';
 // Helper function to ensure adminDb is initialized
 function ensureAdminDbInitialized(callingFunctionName: string) {
   if (adminInitializationError) {
-    const errorMessage = `[firestoreService][${callingFunctionName}] Firebase Admin SDK failed to initialize: ${adminInitializationError.message}. Check server startup logs for errors from 'firebaseAdmin.ts'.`;
+    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK failed to initialize: ${adminInitializationError.message}. Check server startup logs for errors from 'firebaseAdmin.ts'.`;
     console.error(errorMessage);
     throw new Error(errorMessage);
   }
   if (!adminDb) {
-    const errorMessage = `[firestoreService][${callingFunctionName}] Firebase Admin SDK (adminDb) is null or undefined after initialization attempt. This indicates a critical failure in 'firebaseAdmin.ts'. Check server logs.`;
+    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK (adminDb) is null or undefined after initialization attempt. This indicates a critical failure in 'firebaseAdmin.ts'. Check server logs.`;
     console.error(errorMessage);
     throw new Error(errorMessage);
   }
   // Check 3: for invalid but truthy adminDb
   if (typeof adminDb.collection !== 'function' || typeof adminDb.doc !== 'function') {
-    const errorMessage = `[firestoreService][${callingFunctionName}] Firebase Admin SDK (adminDb) is defined but appears to be an invalid Firestore instance (missing essential methods like .collection() or .doc()). This suggests a problem with the 'firebase-admin' module or the admin app instance. Check server logs for 'firebaseAdmin.ts' output. AdminDb type: ${typeof adminDb}, AdminDb value: ${String(adminDb).substring(0,100)}`;
+    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK (adminDb) is defined but appears to be an invalid Firestore instance (missing essential methods like .collection() or .doc()). This suggests a problem with the 'firebase-admin' module or the admin app instance. Check server logs for 'firebaseAdmin.ts' output. AdminDb type: ${typeof adminDb}, AdminDb value: ${String(adminDb).substring(0,100)}`;
     console.error(errorMessage);
     throw new Error(errorMessage);
   }
@@ -222,3 +222,4 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
     throw error; // Re-throw the error to be caught by the calling function in AppContext
   }
 }
+
