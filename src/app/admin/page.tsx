@@ -29,16 +29,18 @@ export default function AdminDashboardPage() {
           </Card>
         </Link>
 
-        <Card className="opacity-50 cursor-not-allowed"> {/* Disabled for now */}
-          <CardHeader>
-            <Package className="h-10 w-10 mb-2 text-muted-foreground" />
-            <CardTitle>Manage Products</CardTitle>
-            <CardDescription>Update product details and inventory. (Coming Soon)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" disabled>Go to Products</Button>
-          </CardContent>
-        </Card>
+        <Link href="/admin/products" passHref>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <CardHeader>
+              <Package className="h-10 w-10 mb-2 text-accent" />
+              <CardTitle>Manage Products</CardTitle>
+              <CardDescription>Update product details, stock, and assign to stores.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full">Go to Products</Button>
+            </CardContent>
+          </Card>
+        </Link>
 
         <Card className="opacity-50 cursor-not-allowed"> {/* Disabled for now */}
           <CardHeader>
