@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react'; // Import Suspense
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useAppContext } from '@/hooks/useAppContext';
 import { UserPlus, LogIn } from 'lucide-react';
 
-export default function RegisterPage() {
+function RegisterPageInternal() {
   const { register, isAuthenticated, loadingAuth } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,10 +50,8 @@ export default function RegisterPage() {
     setLoading(false);
     if (success) {
       // Redirect is handled by useEffect based on isAuthenticated state change
-      // router.push('/profile'); // No need to push here, useEffect will handle it
     } else {
-      // Error messages are handled by the context's toast, local setError can be used for form-specific errors
-      // setError('Failed to create account. Please try again.'); // Context usually handles this
+      // Error messages are handled by the context's toast
     }
   };
 
@@ -121,5 +119,13 @@ export default function RegisterPage() {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-10">Loading registration page...</div>}>
+      <RegisterPageInternal />
+    </Suspense>
   );
 }
