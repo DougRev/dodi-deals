@@ -14,7 +14,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, type ProductCategory, type StoreAvailability } from '@/lib/types';
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability } from '@/lib/types'; // Updated import for productCategories
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
@@ -22,7 +22,7 @@ import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, Sto
 import Link from 'next/link';
 import Image from 'next/image';
 
-const productCategories: ProductCategory[] = ['Vape', 'THCa', 'Accessory'];
+// Removed local productCategories, using from '@/lib/types'
 
 export default function AdminProductsPage() {
   const { allProducts: appProducts, loadingProducts: loadingAppProducts, stores, loadingStores } = useAppContext();
@@ -39,7 +39,7 @@ export default function AdminProductsPage() {
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: 'Vape',
+      category: productCategories[0] || 'Vape', // Use updated productCategories
       dataAiHint: '',
       availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     },
@@ -61,6 +61,7 @@ export default function AdminProductsPage() {
         }));
         form.reset({
           ...currentProduct,
+          category: currentProduct.category || (productCategories[0] || 'Vape'), // Ensure category is set
           availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
       } else {
@@ -69,7 +70,7 @@ export default function AdminProductsPage() {
           description: '',
           brand: '',
           baseImageUrl: 'https://placehold.co/600x400.png',
-          category: 'Vape',
+          category: productCategories[0] || 'Vape', // Use updated productCategories
           dataAiHint: '',
           availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
         });
@@ -84,7 +85,7 @@ export default function AdminProductsPage() {
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: 'Vape',
+      category: productCategories[0] || 'Vape', // Use updated productCategories
       dataAiHint: '',
       availability: [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
@@ -101,6 +102,7 @@ export default function AdminProductsPage() {
     }));
     form.reset({
         ...product,
+        category: product.category || (productCategories[0] || 'Vape'), // Ensure category
         availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
     });
     setIsFormOpen(true);
@@ -265,7 +267,7 @@ export default function AdminProductsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || (productCategories[0] || 'Vape')} defaultValue={field.value || (productCategories[0] || 'Vape')}>
                       <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {productCategories.map(category => (
@@ -482,5 +484,3 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
-    
