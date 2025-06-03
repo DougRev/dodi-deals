@@ -409,12 +409,6 @@ export async function deductUserPoints(userId: string, pointsToDeduct: number): 
 
   const userRef = adminDb!.collection('users').doc(userId);
   try {
-    // For a non-transactional update, Firestore's FieldValue.increment is safer for counters.
-    // However, we also need to check if points are sufficient.
-    // This requires a read, then a write, which is not atomic without a transaction.
-    // For simplicity here, we'll do a read then write, acknowledging the race condition risk
-    // if this function were called concurrently for the same user from different places.
-    // The transactional version handles this correctly.
     const userDoc = await userRef.get();
     if (!userDoc.exists) {
       throw new Error(`User ${userId} not found.`);
@@ -433,4 +427,32 @@ export async function deductUserPoints(userId: string, pointsToDeduct: number): 
   }
 }
 
+export async function getUserOrders(userId: string): Promise<Order[]> {
+  const functionName = 'getUserOrders';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Fetching orders for userId: ${userId}`);
+
+  const ordersColRef = adminDb!.collection('orders');
+  try {
+    const snapshot = await ordersColRef
+      .where('userId', '==', userId)
+      .orderBy('orderDate', 'desc')
+      .get();
+
+    if (snapshot.empty) {
+      console.log(`[firestoreService][AdminSDK][${functionName}] No orders found for user ${userId}.`);
+      return [];
+    }
+
+    const orders = snapshot.docs.map(docSnap => {
+      return { id: docSnap.id, ...docSnap.data() } as Order;
+    });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Found ${orders.length} orders for user ${userId}.`);
+    return orders;
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error fetching orders for user ${userId}:`, error);
+    throw error; // Re-throw the error to be handled by the caller
+  }
+}
     

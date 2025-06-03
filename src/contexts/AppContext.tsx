@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, deductUserPoints as deductUserPointsNonTransactional } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, deductUserPoints as deductUserPointsNonTransactional, getUserOrders } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -48,6 +48,9 @@ interface AppContextType {
   applyRedemption: (option: RedemptionOption) => void;
   removeRedemption: () => void;
   finalizeOrder: () => Promise<void>;
+  userOrders: Order[];
+  loadingUserOrders: boolean;
+  fetchUserOrders: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -71,6 +74,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
   const [appliedRedemption, setAppliedRedemption] = useState<RedemptionOption | null>(null);
+
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
+  const [loadingUserOrders, setLoadingUserOrders] = useState<boolean>(false);
 
   const router = useRouter();
 
@@ -176,6 +182,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsubscribe();
   }, []);
+
+  const fetchUserOrders = useCallback(async () => {
+    if (user && isAuthenticated) {
+      setLoadingUserOrders(true);
+      try {
+        const orders = await getUserOrders(user.id);
+        setUserOrders(orders);
+      } catch (error) {
+        console.error("Error fetching user orders:", error);
+        toast({ title: "Error", description: "Could not load your order history.", variant: "destructive" });
+        setUserOrders([]);
+      } finally {
+        setLoadingUserOrders(false);
+      }
+    } else {
+      setUserOrders([]);
+    }
+  }, [user, isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      fetchUserOrders();
+    } else {
+      setUserOrders([]); // Clear orders if user logs out or is not authenticated
+    }
+  }, [isAuthenticated, user, fetchUserOrders]);
+
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
     const userRef = doc(db, "users", firebaseUser.uid);
@@ -306,6 +339,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
+            // fetchUserOrders(); // Moved to separate useEffect to trigger on user/auth change
           } else {
             setUser(null);
             setIsAuthenticated(false);
@@ -479,6 +513,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCart([]);
         setSelectedStoreState(null);
         setAppliedRedemption(null);
+        setUserOrders([]); // Clear orders on logout
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -496,7 +531,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
         setLoadingAuth(false);
     }
-  }, [router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption]);
+  }, [router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption, setUserOrders]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -631,16 +666,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (appliedRedemption) {
         setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
       }
-
+      
+      await fetchUserOrders(); // Refresh order history
       toast({ title: "Order Placed!", description: `Your order for pickup at ${selectedStore.name} has been submitted.`});
       clearCart(); 
       router.push('/profile'); 
     } catch (error: any) {
       console.error("Error finalizing order:", error);
       toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
-      // Do not clear cart or update local points if the transaction failed
     }
-  }, [user, selectedStore, cart, appliedRedemption, clearCart, router, toast, setUser]);
+  }, [user, selectedStore, cart, appliedRedemption, clearCart, router, toast, setUser, fetchUserOrders]);
 
 
   const products = useMemo(() => {
@@ -777,11 +812,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     applyRedemption,
     removeRedemption,
     finalizeOrder,
+    userOrders,
+    loadingUserOrders,
+    fetchUserOrders,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, stores,
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
-    loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder
+    loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
+    userOrders, loadingUserOrders, fetchUserOrders
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;

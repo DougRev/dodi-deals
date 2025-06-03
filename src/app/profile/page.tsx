@@ -6,16 +6,19 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2 } from 'lucide-react'; 
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, ListChecks } from 'lucide-react'; 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import type { Order } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
 
 const avatarOptions = [
   '/icons/profile-icons/avatar1.png',
@@ -26,8 +29,24 @@ const avatarOptions = [
   '/icons/profile-icons/avatar6.png',
 ];
 
+function formatOrderDate(isoDate: string) {
+  return new Date(isoDate).toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
 function ProfilePageInternal() {
-  const { isAuthenticated, user, logout, loadingAuth, updateUserAvatar, updateUserProfileDetails } = useAppContext(); 
+  const { 
+    isAuthenticated, 
+    user, 
+    logout, 
+    loadingAuth, 
+    updateUserAvatar, 
+    updateUserProfileDetails,
+    userOrders,
+    loadingUserOrders,
+    fetchUserOrders // Ensure this is available if you want to manually refresh
+  } = useAppContext(); 
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
@@ -52,6 +71,14 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
 
+  // Fetch orders when component mounts if user is authenticated, AppContext also does this.
+  // This is mostly for potential manual refresh scenarios or direct navigation.
+  useEffect(() => {
+    if (isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
+        fetchUserOrders();
+    }
+  }, [isAuthenticated, user, fetchUserOrders, userOrders.length, loadingUserOrders]);
+
   if (loadingAuth || !isAuthenticated || !user) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
@@ -64,18 +91,13 @@ function ProfilePageInternal() {
   const handleAvatarSelect = async (avatarPath: string) => {
     if (isUpdatingAvatar || user.avatarUrl === avatarPath || isUpdatingProfile) return;
     setIsUpdatingAvatar(true);
-    // Optimistically update UI, AppContext will confirm or revert
-    // setSelectedAvatarUrl(avatarPath); 
     const success = await updateUserAvatar(avatarPath);
-    if (!success && user) { // Revert if failed
-        //setSelectedAvatarUrl(user.avatarUrl); 
-    }
     setIsUpdatingAvatar(false);
   };
 
   const handleOpenEditModal = () => {
     setEditedName(user?.name || '');
-    setSelectedAvatarUrl(user?.avatarUrl); // Ensure dialog avatar selection starts fresh based on current user state
+    setSelectedAvatarUrl(user?.avatarUrl); 
     setIsEditModalOpen(true);
   };
 
@@ -87,22 +109,29 @@ function ProfilePageInternal() {
     if (isUpdatingAvatar || isUpdatingProfile) return;
 
     setIsUpdatingProfile(true);
-    const success = await updateUserProfileDetails(editedName);
+    await updateUserProfileDetails(editedName);
     setIsUpdatingProfile(false);
-    if (success) {
-      // Optionally close dialog if name update is the only thing left,
-      // but since avatar can be changed independently, maybe keep it open.
-      // setIsEditModalOpen(false); 
-    }
   };
 
   const combinedLoading = isUpdatingAvatar || isUpdatingProfile;
+
+  const getStatusBadgeVariant = (status: Order['status']): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status) {
+      case "Pending Confirmation": return "default";
+      case "Preparing": return "secondary";
+      case "Ready for Pickup": return "outline"; // Using outline for accent-like color
+      case "Completed": return "default"; // Using default for a subtle completed state
+      case "Cancelled": return "destructive";
+      default: return "secondary";
+    }
+  };
+
 
   return (
     <div className="space-y-8">
       <header className="text-center">
         <h1 className="text-4xl font-bold font-headline text-primary">Your Profile</h1>
-        <p className="text-lg text-muted-foreground">Manage your account details and view your points.</p>
+        <p className="text-lg text-muted-foreground">Manage your account details, view points, and order history.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -147,18 +176,95 @@ function ProfilePageInternal() {
 
         <div className="md:col-span-2 space-y-6">
           <PointsDisplay />
+          
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle className="text-lg font-medium">Order History</CardTitle>
-              <CardDescription>View your past in-store pickup orders.</CardDescription>
+              <CardTitle className="text-xl font-medium flex items-center">
+                <ShoppingBag className="mr-3 h-6 w-6 text-primary" /> Order History
+              </CardTitle>
+              <CardDescription>Review your past in-store pickup orders.</CardDescription>
             </CardHeader>
-            <CardContent className="text-center py-10">
-              <ShoppingBag className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No order history yet. (Feature coming soon)</p>
-              <Button asChild variant="link" className="mt-2 text-accent">
-                <Link href="/products">Start Shopping</Link>
-              </Button>
+            <CardContent>
+              {loadingUserOrders ? (
+                <div className="flex justify-center items-center py-10">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                </div>
+              ) : userOrders.length === 0 ? (
+                <div className="text-center py-10">
+                  <ListChecks className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No order history yet.</p>
+                  <Button asChild variant="link" className="mt-2 text-accent">
+                    <Link href="/products">Start Shopping</Link>
+                  </Button>
+                </div>
+              ) : (
+                <Accordion type="single" collapsible className="w-full space-y-4">
+                  {userOrders.map((order) => (
+                    <AccordionItem value={order.id} key={order.id} className="border border-border rounded-lg shadow-sm">
+                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full text-left">
+                          <div className="mb-2 sm:mb-0">
+                            <p className="text-xs text-muted-foreground">Order ID: {order.id.substring(0,8)}...</p>
+                            <p className="text-md font-semibold text-primary">{formatOrderDate(order.orderDate)}</p>
+                          </div>
+                          <div className="flex flex-col items-start sm:items-end">
+                             <Badge variant={getStatusBadgeVariant(order.status)} className="mb-1 text-xs">{order.status}</Badge>
+                             <p className="text-lg font-bold text-accent">${order.finalTotal.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 py-3 border-t border-border bg-background rounded-b-lg">
+                        <p className="text-sm font-medium mb-1 text-muted-foreground">Pickup at: <span className="font-semibold text-foreground">{order.storeName}</span></p>
+                        <p className="text-xs text-muted-foreground mb-3">{order.pickupInstructions}</p>
+                        <h4 className="text-md font-semibold mb-2 flex items-center"><Package className="mr-2 h-5 w-5 text-primary"/>Items:</h4>
+                        <ul className="space-y-2">
+                          {order.items.map((item, index) => (
+                            <li key={`${order.id}-item-${index}`} className="flex justify-between items-center text-sm p-2 bg-muted/30 rounded-md">
+                              <div>
+                                <span className="font-medium text-foreground">{item.productName}</span>
+                                <span className="text-muted-foreground"> (x{item.quantity})</span>
+                              </div>
+                              <span className="font-semibold text-foreground">${(item.pricePerItem * item.quantity).toFixed(2)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <Separator className="my-3"/>
+                        {order.subtotal !== order.finalTotal && (
+                           <div className="text-sm space-y-1 mb-1">
+                               <div className="flex justify-between">
+                                   <span>Subtotal:</span>
+                                   <span>${order.subtotal.toFixed(2)}</span>
+                               </div>
+                               {order.discountApplied && order.discountApplied > 0 && (
+                                   <div className="flex justify-between text-destructive">
+                                       <span>Points Discount:</span>
+                                       <span>-${order.discountApplied.toFixed(2)}</span>
+                                   </div>
+                               )}
+                           </div>
+                        )}
+                         <div className="flex justify-between font-bold text-md mt-2">
+                            <span>Total Paid:</span>
+                            <span>${order.finalTotal.toFixed(2)}</span>
+                        </div>
+                         {order.pointsRedeemed && order.pointsRedeemed > 0 && (
+                             <p className="text-xs text-muted-foreground text-right mt-1">({order.pointsRedeemed} points redeemed)</p>
+                         )}
+
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
+            {userOrders.length > 0 && (
+                 <CardFooter>
+                    <Button variant="link" className="mx-auto text-accent" onClick={fetchUserOrders} disabled={loadingUserOrders}>
+                        {loadingUserOrders ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                        Refresh Order History
+                    </Button>
+                 </CardFooter>
+            )}
           </Card>
         </div>
       </div>
@@ -193,7 +299,7 @@ function ProfilePageInternal() {
                       <CheckCircle className="h-6 w-6 text-primary-foreground" />
                     </div>
                   )}
-                   {isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path && ( // Show loader only when this avatar is selected AND an update is in progress for it
+                   {isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path && ( 
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                       <Loader2 className="h-5 w-5 animate-spin text-white" />
                     </div>
@@ -244,3 +350,4 @@ export default function ProfilePage() {
     </Suspense>
   );
 }
+
