@@ -9,7 +9,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrder as createOrderInFirestore, deductUserPoints as deductUserPointsInFirestore } from '@/lib/firestoreService';
@@ -189,10 +189,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
-    // Use provided name, then Firebase Auth display name, then email part, then default
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
     const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
-    const determinedAssignedStoreId = userSnap.exists() ? (userSnap.data() as User).assignedStoreId : null;
+    const existingData = userSnap.exists() ? userSnap.data() as User : null;
+    
+    const determinedAssignedStoreId = existingData?.assignedStoreId || null;
+    const determinedStoreRole = existingData?.storeRole || null;
 
     const profileDataToSet: {
         email: string | null;
@@ -202,56 +204,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: string;
         avatarUrl?: string;
         assignedStoreId?: string | null;
+        storeRole?: StoreRole | null;
       } = {
         email: firebaseUser.email,
         name: displayName,
-        points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
-        isAdmin: isTheAdminEmail || (userSnap.exists() ? (userSnap.data() as User).isAdmin === true : false),
-        createdAt: userSnap.exists() ? (userSnap.data() as User).createdAt : new Date().toISOString(),
+        points: existingData?.points ?? 0,
+        isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
+        createdAt: existingData?.createdAt || new Date().toISOString(),
         assignedStoreId: determinedAssignedStoreId,
+        storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole, // Admins don't have store roles
       };
       
     if (determinedAvatarUrl) {
         profileDataToSet.avatarUrl = determinedAvatarUrl;
     }
+    if (profileDataToSet.isAdmin) { // Ensure admins have null storeId and storeRole
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
+    }
+
 
     if (!userSnap.exists()) {
       try {
         const dataToSetForNewUser: any = { ...profileDataToSet };
         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
-        if (dataToSetForNewUser.assignedStoreId === undefined) dataToSetForNewUser.assignedStoreId = null; 
+        // Ensure default nulls for new users if not admin
+        if (!dataToSetForNewUser.isAdmin) {
+            dataToSetForNewUser.assignedStoreId = dataToSetForNewUser.assignedStoreId || null;
+            dataToSetForNewUser.storeRole = dataToSetForNewUser.storeRole || null;
+        }
         
         await setDoc(userRef, dataToSetForNewUser);
 
-        // Update Firebase Auth profile if it differs or if name was explicitly provided
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
             await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
         }
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        profileDataToSet.isAdmin = false;
+        // Revert isAdmin if profile creation failed for a potential admin, to be safe
+        profileDataToSet.isAdmin = false; 
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
       }
-    } else {
-      const existingData = userSnap.data() as User;
+    } else { // User exists, check for updates
       const updates: Partial<User> = {};
-      if (isTheAdminEmail && !existingData.isAdmin) {
+      if (isTheAdminEmail && !existingData?.isAdmin) {
         updates.isAdmin = true;
         updates.assignedStoreId = null;
+        updates.storeRole = null;
       }
-      if (displayName && existingData.name !== displayName) {
+      if (displayName && existingData?.name !== displayName) {
         updates.name = displayName;
       }
-      if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
+      if (determinedAvatarUrl && existingData?.avatarUrl !== determinedAvatarUrl) {
          updates.avatarUrl = determinedAvatarUrl;
-      } else if (!determinedAvatarUrl && existingData.avatarUrl) {
-         updates.avatarUrl = undefined; 
+      } else if (!determinedAvatarUrl && existingData?.avatarUrl) {
+         updates.avatarUrl = undefined; // Or null if preferred
       }
       
-      if (updates.isAdmin) {
-          updates.assignedStoreId = null;
-      } else if (determinedAssignedStoreId !== existingData.assignedStoreId) {
-          updates.assignedStoreId = determinedAssignedStoreId;
+      // If isAdmin status changed in Firestore (e.g. by an admin tool directly)
+      if (existingData?.isAdmin && !isTheAdminEmail && profileDataToSet.isAdmin !== existingData.isAdmin) {
+         // Reflect this change if it wasn't due to ADMIN_EMAIL override
       }
 
 
@@ -264,6 +278,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
              console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
         }
       }
+       // Merge existing fields if no updates were made, but ensure isAdmin rules are applied
+        if (profileDataToSet.isAdmin) {
+            profileDataToSet.assignedStoreId = null;
+            profileDataToSet.storeRole = null;
+        } else {
+            profileDataToSet.assignedStoreId = existingData?.assignedStoreId || null;
+            profileDataToSet.storeRole = existingData?.storeRole || null;
+        }
     }
 
     const profileToReturn: User = {
@@ -274,6 +296,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       avatarUrl: profileDataToSet.avatarUrl,
       isAdmin: profileDataToSet.isAdmin,
       assignedStoreId: profileDataToSet.assignedStoreId,
+      storeRole: profileDataToSet.storeRole,
     };
     return profileToReturn;
   };
@@ -383,13 +406,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      // The onAuthStateChanged listener will call createUserProfile,
-      // which now takes the provided name into account for the initial profile creation.
-      // If 'name' is provided, we also update Firebase Auth profile directly here for immediate reflection.
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // Auth state change will handle setting user and isAuthenticated
+      // onAuthStateChanged will call createUserProfile which now handles name, storeId, storeRole defaults
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {

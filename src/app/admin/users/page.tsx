@@ -10,15 +10,16 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Removed TabsContent, not needed here
 import { getAllUsers, updateUserConfiguration } from '@/lib/firestoreService';
-import type { User, Store } from '@/lib/types';
+import type { User, Store, StoreRole } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { Users, ShieldCheck, Loader2, UserCircle, StoreIcon, Building, Search as SearchIcon } from 'lucide-react';
+import { Users, ShieldCheck, Loader2, UserCircle, StoreIcon, Building, Search as SearchIcon, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 
 type UserFilter = "all" | "admins" | "storeStaff" | "generalUsers";
+const storeRoles: StoreRole[] = ['Employee', 'Manager'];
 
 export default function AdminUsersPage() {
   const { user: currentAdminUser, stores, loadingStores: appContextLoadingStores } = useAppContext();
@@ -51,9 +52,10 @@ export default function AdminUsersPage() {
     }
     setUpdatingUserId(userId);
     try {
-      await updateUserConfiguration(userId, { isAdmin });
+      // When making a user an admin, their storeId and storeRole are nulled by firestoreService
+      await updateUserConfiguration(userId, { isAdmin }); 
       setAllUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, isAdmin, assignedStoreId: isAdmin ? null : u.assignedStoreId } : u))
+        prevUsers.map(u => (u.id === userId ? { ...u, isAdmin, assignedStoreId: isAdmin ? null : u.assignedStoreId, storeRole: isAdmin ? null : u.storeRole } : u))
       );
       toast({ title: "User Updated", description: `Admin status for the user has been ${isAdmin ? 'granted' : 'revoked'}.` });
     } catch (error: any) {
@@ -71,12 +73,17 @@ export default function AdminUsersPage() {
     }
     setUpdatingUserId(userId);
     try {
-      await updateUserConfiguration(userId, { assignedStoreId: storeId });
+      // If assigning to a store, default role to 'Employee' if not already set or changing.
+      // If unassigning, role will be nulled.
+      const currentUser = allUsers.find(u => u.id === userId);
+      const newRole = storeId ? (currentUser?.storeRole || 'Employee') : null;
+
+      await updateUserConfiguration(userId, { assignedStoreId: storeId, storeRole: newRole });
       setAllUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, assignedStoreId: storeId } : u))
+        prevUsers.map(u => (u.id === userId ? { ...u, assignedStoreId: storeId, storeRole: newRole } : u))
       );
       const storeName = storeId ? stores.find(s => s.id === storeId)?.name : 'Unassigned';
-      toast({ title: "User Updated", description: `User has been assigned to ${storeName || 'the selected store'}.` });
+      toast({ title: "User Updated", description: `User assignment changed to ${storeName || 'the selected store'}. Role set to ${newRole || 'N/A'}.` });
     } catch (error: any) {
       console.error("Failed to update store assignment:", error);
       toast({ title: "Update Failed", description: error.message || "Could not update store assignment.", variant: "destructive" });
@@ -84,6 +91,28 @@ export default function AdminUsersPage() {
       setUpdatingUserId(null);
     }
   };
+  
+  const handleStoreRoleChange = async (userId: string, role: StoreRole | null) => {
+    const userToUpdate = allUsers.find(u => u.id === userId);
+    if (!userToUpdate || userToUpdate.isAdmin || !userToUpdate.assignedStoreId) {
+      toast({ title: "Action Not Allowed", description: "Role can only be set for non-admin users assigned to a store.", variant: "default" });
+      return;
+    }
+    setUpdatingUserId(userId);
+    try {
+      await updateUserConfiguration(userId, { storeRole: role });
+      setAllUsers(prevUsers =>
+        prevUsers.map(u => (u.id === userId ? { ...u, storeRole: role } : u))
+      );
+      toast({ title: "User Updated", description: `User's store role set to ${role || 'N/A'}.` });
+    } catch (error: any) {
+      console.error("Failed to update store role:", error);
+      toast({ title: "Update Failed", description: error.message || "Could not update store role.", variant: "destructive" });
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
 
   const filteredUsers = useMemo(() => {
     let usersToFilter = [...allUsers];
@@ -167,6 +196,7 @@ export default function AdminUsersPage() {
                     <TableHead>Email</TableHead>
                     <TableHead className="text-center">Admin</TableHead>
                     <TableHead>Assigned Store</TableHead>
+                    <TableHead>Store Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -184,7 +214,7 @@ export default function AdminUsersPage() {
                       <TableCell>{user.email}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center space-x-2">
-                          {updatingUserId === user.id ? (
+                          {updatingUserId === user.id && !user.isAdmin && !user.assignedStoreId ? ( // Show loader only if this specific action is for admin toggle
                             <Loader2 className="h-5 w-5 animate-spin" />
                           ) : (
                             <Switch
@@ -202,11 +232,11 @@ export default function AdminUsersPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {updatingUserId === user.id && !user.isAdmin ? (
+                        {updatingUserId === user.id && typeof user.assignedStoreId !== 'undefined' && !user.isAdmin ? ( // Loader for store assignment change
                           <Loader2 className="h-5 w-5 animate-spin" />
                         ) : user.isAdmin ? (
                           <span className="text-muted-foreground italic text-sm flex items-center">
-                            <ShieldCheck className="h-4 w-4 mr-1 text-muted-foreground/70" /> Admins (Global)
+                            <ShieldCheck className="h-4 w-4 mr-1 text-muted-foreground/70" /> Global Admin
                           </span>
                         ) : (
                           <Select
@@ -214,8 +244,8 @@ export default function AdminUsersPage() {
                             onValueChange={(value) => handleStoreAssignmentChange(user.id, value === "unassigned" ? null : value)}
                             disabled={!!updatingUserId || appContextLoadingStores}
                           >
-                            <SelectTrigger className="w-[220px] h-9 text-sm">
-                              <SelectValue placeholder={appContextLoadingStores ? "Loading stores..." : "Select store"} />
+                            <SelectTrigger className="w-[200px] h-9 text-sm">
+                              <SelectValue placeholder={appContextLoadingStores ? "Loading..." : "Select store"} />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unassigned">
@@ -234,6 +264,32 @@ export default function AdminUsersPage() {
                           </Select>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {updatingUserId === user.id && typeof user.storeRole !== 'undefined' && user.assignedStoreId && !user.isAdmin ? ( // Loader for role change
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : !user.isAdmin && user.assignedStoreId ? (
+                          <Select
+                            value={user.storeRole || "Employee"} // Default to Employee if null but assigned
+                            onValueChange={(value) => handleStoreRoleChange(user.id, value as StoreRole)}
+                            disabled={!!updatingUserId}
+                          >
+                            <SelectTrigger className="w-[150px] h-9 text-sm">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {storeRoles.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                   <span className="flex items-center">
+                                    <Briefcase className="h-4 w-4 mr-2 text-muted-foreground" /> {role}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground italic text-sm">N/A</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -250,4 +306,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-

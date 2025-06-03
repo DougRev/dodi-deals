@@ -125,6 +125,7 @@ export interface Deal {
   categoryOnDeal: ProductCategory;
 }
 
+export type StoreRole = 'Manager' | 'Employee';
 
 export interface User {
   id: string;
@@ -133,7 +134,8 @@ export interface User {
   points: number;
   avatarUrl?: string;
   isAdmin: boolean;
-  assignedStoreId?: string | null; // Added for store assignment
+  assignedStoreId?: string | null;
+  storeRole?: StoreRole | null; // Role within the assigned store
 }
 
 export interface CartItem {

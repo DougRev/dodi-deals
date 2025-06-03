@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData } from '@/lib/types';
+import type { Product, User, Order, StoreFormData, StoreRole } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 
@@ -177,13 +177,13 @@ export async function getAllUsers(): Promise<User[]> {
   const usersColRef = adminDb!.collection('users');
   try {
     const snapshot = await usersColRef.get();
-    // Make sure to include assignedStoreId, defaulting to null if not present
     return snapshot.docs.map(docSnap => {
       const data = docSnap.data();
       return { 
         id: docSnap.id, 
         ...data,
-        assignedStoreId: data.assignedStoreId || null 
+        assignedStoreId: data.assignedStoreId || null,
+        storeRole: data.storeRole || null, // Ensure storeRole is fetched
       } as User;
     });
   } catch (error) {
@@ -192,39 +192,72 @@ export async function getAllUsers(): Promise<User[]> {
   }
 }
 
-export async function updateUserConfiguration(userId: string, updates: { isAdmin?: boolean; assignedStoreId?: string | null }): Promise<void> {
+export async function updateUserConfiguration(
+  userId: string,
+  updates: {
+    isAdmin?: boolean;
+    assignedStoreId?: string | null;
+    storeRole?: StoreRole | null;
+  }
+): Promise<void> {
   const functionName = 'updateUserConfiguration';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId: ${userId} with updates:`, JSON.stringify(updates));
+  console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId: ${userId} with raw updates:`, JSON.stringify(updates));
 
   const userRef = adminDb!.collection('users').doc(userId);
-  const updateData: Partial<User> = {};
+  const updatePayload: { [key: string]: any } = {};
 
+  // Determine isAdmin status first
   if (typeof updates.isAdmin === 'boolean') {
-    updateData.isAdmin = updates.isAdmin;
-    // If making user an admin, unassign them from any store
-    if (updates.isAdmin) {
-      updateData.assignedStoreId = null;
+    updatePayload.isAdmin = updates.isAdmin;
+  }
+
+  // If isAdmin is being set to true, or is already true and not being changed
+  const effectiveIsAdmin = updatePayload.isAdmin ?? (await userRef.get().then(doc => doc.exists && (doc.data() as User).isAdmin));
+
+  if (effectiveIsAdmin) {
+    updatePayload.assignedStoreId = null;
+    updatePayload.storeRole = null;
+  } else {
+    // Handle assignedStoreId
+    if (updates.assignedStoreId !== undefined) {
+      updatePayload.assignedStoreId = updates.assignedStoreId;
+    }
+
+    // Handle storeRole
+    if (updatePayload.assignedStoreId === null) { // If unassigning store (either directly or because isAdmin became true)
+      updatePayload.storeRole = null;
+    } else if (updates.storeRole !== undefined) { // If storeRole is explicitly provided
+        // Only set role if a store is (or will be) assigned
+        if (updatePayload.assignedStoreId !== undefined && updatePayload.assignedStoreId !== null) {
+             updatePayload.storeRole = updates.storeRole;
+        } else if (updatePayload.assignedStoreId === undefined) { // storeId not changing in this update, check current
+            const currentDoc = await userRef.get();
+            if (currentDoc.exists && (currentDoc.data() as User).assignedStoreId) {
+                updatePayload.storeRole = updates.storeRole;
+            } else if (updates.storeRole !== null) { // trying to set a role without any store assigned
+                 console.warn(`[firestoreService][AdminSDK][${functionName}] User ${userId} has no assigned store. Cannot set storeRole to '${updates.storeRole}'. Role will be set to null.`);
+                 updatePayload.storeRole = null;
+            } else {
+                 updatePayload.storeRole = null; // setting role to null is fine
+            }
+        }
+    } else if (updatePayload.assignedStoreId && updatePayload.storeRole === undefined) {
+        // If store is being assigned and no role is specified, default to 'Employee'
+        // This can happen if admin picks a store, and we need a default role.
+        updatePayload.storeRole = 'Employee';
     }
   }
-  // Only update assignedStoreId if it's explicitly provided and user is not being made admin in the same call
-  // or if it's explicitly set to null (unassign)
-  if (updates.assignedStoreId !== undefined && (updateData.isAdmin === false || updateData.isAdmin === undefined)) {
-    updateData.assignedStoreId = updates.assignedStoreId;
-  } else if (updates.assignedStoreId === null && updateData.isAdmin === undefined) {
-    updateData.assignedStoreId = null; // Allows explicitly unassigning
-  }
-
-
-  if (Object.keys(updateData).length === 0) {
+  
+  if (Object.keys(updatePayload).length === 0) {
     console.log(`[firestoreService][AdminSDK][${functionName}] No valid updates to perform for user ${userId}.`);
     return;
   }
 
   try {
-    await userRef.update(updateData);
-    console.log(`[firestoreService][AdminSDK][${functionName}] User ${userId} configuration updated successfully with:`, updateData);
+    await userRef.update(updatePayload);
+    console.log(`[firestoreService][AdminSDK][${functionName}] User ${userId} configuration updated successfully with:`, updatePayload);
   } catch (error) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user configuration for ${userId}:`, error);
     throw error;
