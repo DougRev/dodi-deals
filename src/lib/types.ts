@@ -125,7 +125,10 @@ export interface Deal {
   categoryOnDeal: ProductCategory;
 }
 
-export type StoreRole = 'Manager' | 'Employee';
+export const StoreRoleEnum = z.enum(['Manager', 'Employee']);
+export type StoreRole = z.infer<typeof StoreRoleEnum>;
+export const storeRoles: StoreRole[] = ['Manager', 'Employee'];
+
 
 export interface User {
   id: string;
@@ -144,7 +147,10 @@ export interface CartItem {
 }
 
 // Order related types
-export type OrderStatus = "Pending Confirmation" | "Preparing" | "Ready for Pickup" | "Completed" | "Cancelled";
+export const OrderStatusEnum = z.enum(["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"]);
+export type OrderStatus = z.infer<typeof OrderStatusEnum>;
+export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"];
+
 
 export interface OrderItem {
   productId: string;

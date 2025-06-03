@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem } from '@/lib/types'; // Added OrderItem
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus } from '@/lib/types'; // Added OrderItem, OrderStatus
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 
@@ -243,7 +243,11 @@ export async function updateUserConfiguration(
             }
         }
     } else if (updatePayload.assignedStoreId && updatePayload.storeRole === undefined) {
-        updatePayload.storeRole = 'Employee';
+        // If assigning to a store and role isn't specified, default to Employee
+        const currentDoc = await userRef.get();
+        if (currentDoc.exists && !(currentDoc.data() as User).storeRole) {
+             updatePayload.storeRole = 'Employee';
+        }
     }
   }
   
@@ -453,6 +457,55 @@ export async function getUserOrders(userId: string): Promise<Order[]> {
   } catch (error) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error fetching orders for user ${userId}:`, error);
     throw error; // Re-throw the error to be handled by the caller
+  }
+}
+
+export async function getStoreOrdersByStatus(storeId: string, statuses: OrderStatus[]): Promise<Order[]> {
+  const functionName = 'getStoreOrdersByStatus';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Fetching orders for storeId: ${storeId} with statuses: ${statuses.join(', ')}`);
+
+  const ordersColRef = adminDb!.collection('orders');
+  try {
+    const snapshot = await ordersColRef
+      .where('storeId', '==', storeId)
+      .where('status', 'in', statuses)
+      .orderBy('orderDate', 'asc') // Usually want oldest pending orders first
+      .get();
+
+    if (snapshot.empty) {
+      console.log(`[firestoreService][AdminSDK][${functionName}] No orders found for store ${storeId} with specified statuses.`);
+      return [];
+    }
+
+    const orders = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Order));
+    console.log(`[firestoreService][AdminSDK][${functionName}] Found ${orders.length} orders.`);
+    return orders;
+  } catch (error: any) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error fetching store orders by status:`, error);
+    // Check if it's an index error
+    if (error.message && error.message.includes("query requires an index")) {
+        console.error(`[firestoreService][AdminSDK][${functionName}] Firestore index missing. Please create the following composite index:`);
+        console.error(`Collection: orders, Fields: storeId (ASC), status (ASC), orderDate (ASC)`);
+    }
+    throw error;
+  }
+}
+
+export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
+  const functionName = 'updateOrderStatus';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}`);
+
+  const orderRef = adminDb!.collection('orders').doc(orderId);
+  try {
+    await orderRef.update({ status: newStatus });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated successfully to ${newStatus}.`);
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating order status for ${orderId}:`, error);
+    throw error;
   }
 }
     

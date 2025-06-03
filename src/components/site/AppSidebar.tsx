@@ -19,7 +19,7 @@ import {
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays } from 'lucide-react';
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays, Briefcase } from 'lucide-react'; // Added Briefcase
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
@@ -97,6 +97,17 @@ export function AppSidebar() {
                 <Link href="/profile">
                   <UserCircle />
                   <span>Profile</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          
+          {isAuthenticated && user?.storeRole === 'Manager' && user.assignedStoreId && (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Manage Store Orders" className="w-full justify-start">
+                <Link href="/manager/orders">
+                  <Briefcase />
+                  <span>Manage Orders</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
