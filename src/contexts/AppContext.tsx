@@ -198,16 +198,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } else {
       setUserOrders([]);
+      setLoadingUserOrders(false); 
     }
   }, [user, isAuthenticated]);
 
   useEffect(() => {
-    // Temporarily disable automatic order fetching to prevent profile page error
-    if (false && isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
+    if (isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
         fetchUserOrders();
-    } else if (!isAuthenticated || !user) { // Still clear orders if user logs out
+    } else if (!isAuthenticated || !user) { 
         setUserOrders([]);
-        setLoadingUserOrders(false); // Ensure loading is false if no user
+        setLoadingUserOrders(false); 
     }
   }, [isAuthenticated, user, fetchUserOrders, userOrders.length, loadingUserOrders]);
 
@@ -668,9 +668,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
       }
       
-      // Re-enable order fetching if you want it immediately after placing an order
-      // For now, it's disabled to prevent the profile page error.
-      // if (user) fetchUserOrders(); 
+      if (user) fetchUserOrders(); 
       toast({ title: "Order Placed!", description: `Your order for pickup at ${selectedStore.name} has been submitted.`});
       clearCart(); 
       router.push('/profile'); 

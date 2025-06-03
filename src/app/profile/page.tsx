@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, ListChecks } from 'lucide-react'; 
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays } from 'lucide-react'; 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -45,7 +45,7 @@ function ProfilePageInternal() {
     updateUserProfileDetails,
     userOrders,
     loadingUserOrders,
-    fetchUserOrders // Ensure this is available if you want to manually refresh
+    fetchUserOrders 
   } = useAppContext(); 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -71,8 +71,6 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
 
-  // Fetch orders when component mounts if user is authenticated, AppContext also does this.
-  // This is mostly for potential manual refresh scenarios or direct navigation.
   useEffect(() => {
     if (isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
         fetchUserOrders();
@@ -119,8 +117,8 @@ function ProfilePageInternal() {
     switch (status) {
       case "Pending Confirmation": return "default";
       case "Preparing": return "secondary";
-      case "Ready for Pickup": return "outline"; // Using outline for accent-like color
-      case "Completed": return "default"; // Using default for a subtle completed state
+      case "Ready for Pickup": return "outline"; 
+      case "Completed": return "default"; 
       case "Cancelled": return "destructive";
       default: return "secondary";
     }
@@ -191,7 +189,7 @@ function ProfilePageInternal() {
                 </div>
               ) : userOrders.length === 0 ? (
                 <div className="text-center py-10">
-                  <ListChecks className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <ShoppingBag className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">No order history yet.</p>
                   <Button asChild variant="link" className="mt-2 text-accent">
                     <Link href="/products">Start Shopping</Link>
