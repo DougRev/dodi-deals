@@ -15,7 +15,24 @@ import type { ResolvedProduct } from '@/lib/types';
 
 // Internal component containing the original CartPage logic
 function CartPageInternal() {
-  const { isAuthenticated, cart, removeFromCart, updateCartQuantity, getCartTotal, getCartTotalSavings, clearCart, selectedStore, setStoreSelectorOpen, loadingAuth } = useAppContext();
+  const { 
+    isAuthenticated, 
+    cart, 
+    removeFromCart, 
+    updateCartQuantity, 
+    getCartTotal, 
+    getCartTotalSavings, 
+    clearCart, 
+    selectedStore, 
+    setStoreSelectorOpen, 
+    loadingAuth,
+    user, // For displaying points
+    redemptionOptions,
+    appliedRedemption,
+    applyRedemption,
+    removeRedemption,
+    finalizeOrder // Ensure this is destructured
+  } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -57,6 +74,8 @@ function CartPageInternal() {
 
   const cartTotal = getCartTotal();
   const totalSavings = getCartTotalSavings();
+  const subtotalBeforeRedemption = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+
 
   return (
     <div className="space-y-8">
@@ -144,14 +163,46 @@ function CartPageInternal() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-semibold">${cartTotal.toFixed(2)}</span>
+                  <span className="font-semibold">${subtotalBeforeRedemption.toFixed(2)}</span>
                 </div>
-                {totalSavings > 0 && (
-                  <div className="flex justify-between text-destructive">
-                    <span className="flex items-center"><Percent className="h-4 w-4 mr-1" /> Deal Savings</span>
-                    <span className="font-semibold">-${totalSavings.toFixed(2)}</span>
+
+                {user && user.points > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm font-medium text-muted-foreground">Redeem Points (Available: {user.points})</p>
+                    {redemptionOptions.map(option => (
+                      <Button
+                        key={option.id}
+                        variant={appliedRedemption?.id === option.id ? "default" : "outline"}
+                        size="sm"
+                        className="w-full justify-between"
+                        onClick={() => applyRedemption(option)}
+                        disabled={user.points < option.pointsRequired || subtotalBeforeRedemption < option.discountAmount}
+                      >
+                        <span>{option.description}</span>
+                        <span>-{option.pointsRequired} pts</span>
+                      </Button>
+                    ))}
+                    {appliedRedemption && (
+                      <Button variant="link" size="sm" onClick={removeRedemption} className="text-destructive p-0 h-auto">
+                        Remove Discount
+                      </Button>
+                    )}
                   </div>
                 )}
+                
+                {appliedRedemption && (
+                  <div className="flex justify-between text-destructive">
+                    <span className="flex items-center"><Percent className="h-4 w-4 mr-1" /> Points Discount</span>
+                    <span className="font-semibold">-${appliedRedemption.discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                {(totalSavings > 0 && (!appliedRedemption || totalSavings > appliedRedemption.discountAmount)) && (
+                  <div className="flex justify-between text-green-600">
+                    <span className="flex items-center"><Percent className="h-4 w-4 mr-1" /> Deal Savings</span>
+                    <span className="font-semibold">-${(totalSavings - (appliedRedemption?.discountAmount || 0)).toFixed(2)}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tax (Calculated at pickup)</span>
                   <span className="font-semibold">TBD</span>
@@ -159,14 +210,18 @@ function CartPageInternal() {
                 <Separator />
                 <div className="flex justify-between text-xl font-bold">
                   <span>Estimated Total</span>
-                  <span className="text-primary">${(cartTotal).toFixed(2)}</span> {/* Subtotal is already deal-adjusted */}
+                  <span className="text-primary">${(cartTotal).toFixed(2)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Final payment and applicable taxes will be handled at {selectedStore.name} upon pickup.
                 </p>
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" size="lg" onClick={() => alert(`Proceeding to in-store pickup at ${selectedStore.name}! Please visit us to complete your order.`)}>
+                <Button 
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
+                  size="lg" 
+                  onClick={finalizeOrder} // Updated onClick handler
+                >
                   Confirm for In-Store Pickup
                 </Button>
                 <Button asChild variant="outline" className="w-full">
