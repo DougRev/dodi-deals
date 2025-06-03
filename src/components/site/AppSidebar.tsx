@@ -19,7 +19,7 @@ import {
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight } from 'lucide-react';
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays } from 'lucide-react';
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
@@ -71,6 +71,14 @@ export function AppSidebar() {
               <Link href="/products">
                 <List />
                 <span>Products</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Store Deals Calendar" className="w-full justify-start">
+              <Link href="/store-deals">
+                <CalendarDays />
+                <span>Store Deals</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
