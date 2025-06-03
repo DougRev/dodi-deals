@@ -10,8 +10,8 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/site/AppSidebar';
 
 export const metadata: Metadata = {
-  title: 'Dodi Deals',
-  description: 'Your local source for vapes and THCa products in Indiana.',
+  title: 'Dodi Deals - Indiana\'s Choice for Vapes & THCa',
+  description: 'Discover daily deals on vapes, THCa flower, edibles, and more at Dodi Deals. Order online for convenient in-store pickup across Indiana.',
 };
 
 export default function RootLayout({
@@ -45,3 +45,4 @@ export default function RootLayout({
     </html>
   );
 }
+

@@ -42,17 +42,20 @@ export default function AdminDashboardPage() {
           </Card>
         </Link>
 
-        <Card className="opacity-50 cursor-not-allowed"> {/* Disabled for now */}
-          <CardHeader>
-            <Users className="h-10 w-10 mb-2 text-muted-foreground" />
-            <CardTitle>Manage Users</CardTitle>
-            <CardDescription>View users and manage admin roles. (Coming Soon)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" disabled>Go to Users</Button>
-          </CardContent>
-        </Card>
+        <Link href="/admin/users" passHref>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <CardHeader>
+              <Users className="h-10 w-10 mb-2 text-accent" />
+              <CardTitle>Manage Users</CardTitle>
+              <CardDescription>View users and manage admin roles.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full">Go to Users</Button>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );
 }
+
