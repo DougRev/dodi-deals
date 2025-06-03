@@ -9,10 +9,10 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory } from '@/lib/types';
-import { daysOfWeek } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus } from '@/lib/types';
+import { daysOfWeek, REDEMPTION_OPTIONS } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrder as createOrderInFirestore, deductUserPoints as deductUserPointsInFirestore } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -43,6 +43,11 @@ interface AppContextType {
   loadingAuth: boolean;
   loadingStores: boolean;
   loadingProducts: boolean;
+  redemptionOptions: RedemptionOption[];
+  appliedRedemption: RedemptionOption | null;
+  applyRedemption: (option: RedemptionOption) => void;
+  removeRedemption: () => void;
+  finalizeOrder: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -64,6 +69,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null);
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
+
+  const [appliedRedemption, setAppliedRedemption] = useState<RedemptionOption | null>(null);
 
   const router = useRouter();
 
@@ -184,6 +191,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
     const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
+    const determinedAssignedStoreId = userSnap.exists() ? (userSnap.data() as User).assignedStoreId : null;
 
     const profileDataToSet: {
         email: string | null;
@@ -191,27 +199,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         points: number;
         isAdmin: boolean;
         createdAt: string;
-        avatarUrl?: string; // Make avatarUrl optional here for type safety
+        avatarUrl?: string;
+        assignedStoreId?: string | null;
       } = {
         email: firebaseUser.email,
         name: displayName,
         points: userSnap.exists() && userSnap.data().points !== undefined ? userSnap.data().points : 0,
         isAdmin: isTheAdminEmail || (userSnap.exists() ? (userSnap.data() as User).isAdmin === true : false),
         createdAt: userSnap.exists() ? (userSnap.data() as User).createdAt : new Date().toISOString(),
+        assignedStoreId: determinedAssignedStoreId,
       };
       
     if (determinedAvatarUrl) {
         profileDataToSet.avatarUrl = determinedAvatarUrl;
     }
 
-
     if (!userSnap.exists()) {
       try {
-        // For new users, only include avatarUrl if it's defined
         const dataToSetForNewUser: any = { ...profileDataToSet };
-        if (dataToSetForNewUser.avatarUrl === undefined) {
-          delete dataToSetForNewUser.avatarUrl; // Remove avatarUrl if undefined for setDoc
-        }
+        if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
+        if (dataToSetForNewUser.assignedStoreId === undefined) dataToSetForNewUser.assignedStoreId = null; // Ensure it's null if not set
+        
         await setDoc(userRef, dataToSetForNewUser);
 
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
@@ -220,14 +228,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        profileDataToSet.isAdmin = false; // Ensure isAdmin is false if creation failed
+        profileDataToSet.isAdmin = false;
       }
     } else {
-      // Existing user: update logic
       const existingData = userSnap.data() as User;
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData.isAdmin) {
         updates.isAdmin = true;
+        updates.assignedStoreId = null; // Admins are not assigned to a store
       }
       if (displayName && existingData.name !== displayName) {
         updates.name = displayName;
@@ -235,26 +243,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (determinedAvatarUrl && existingData.avatarUrl !== determinedAvatarUrl) {
          updates.avatarUrl = determinedAvatarUrl;
       } else if (!determinedAvatarUrl && existingData.avatarUrl) {
-         updates.avatarUrl = undefined; // Explicitly set to undefined if clearing
+         updates.avatarUrl = undefined; 
       }
+      // Ensure assignedStoreId is correctly handled:
+      // If user becomes admin, assignedStoreId should be null.
+      // Otherwise, respect the determinedAssignedStoreId or existingData.assignedStoreId
+      if (updates.isAdmin) {
+          updates.assignedStoreId = null;
+      } else if (determinedAssignedStoreId !== existingData.assignedStoreId) {
+          updates.assignedStoreId = determinedAssignedStoreId;
+      }
+
 
       if (Object.keys(updates).length > 0) {
         try {
-            const dataToUpdateForExistingUser: any = { ...updates };
-            // If avatarUrl is explicitly undefined in updates, it might be intended to remove it
-            // However, Firestore update with undefined usually ignores the field.
-            // For actual removal, admin.firestore.FieldValue.delete() would be used.
-            // For simplicity here, we'll pass undefined, which means it won't be touched unless it's a new valid URL.
-            if ('avatarUrl' in dataToUpdateForExistingUser && dataToUpdateForExistingUser.avatarUrl === undefined) {
-                // If you want to remove the field, you'd do:
-                // dataToUpdateForExistingUser.avatarUrl = admin.firestore.FieldValue.delete();
-                // But that requires admin SDK context here, which we don't have client-side.
-                // So, if avatarUrl is undefined, we might just not send it to updateDoc.
-                // Or, for this case, let's assume if it's undefined in updates, we try to update the auth profile if needed,
-                // and rely on previous logic to have updated the Firestore if it was a valid URL.
-            }
-
-            await updateDoc(userRef, dataToUpdateForExistingUser);
+            await updateDoc(userRef, updates);
             if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
             if (updates.avatarUrl && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
         } catch (error: any) {
@@ -268,8 +271,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       email: firebaseUser.email || '',
       name: profileDataToSet.name,
       points: profileDataToSet.points,
-      avatarUrl: profileDataToSet.avatarUrl, // This will be undefined if not set
+      avatarUrl: profileDataToSet.avatarUrl,
       isAdmin: profileDataToSet.isAdmin,
+      assignedStoreId: profileDataToSet.assignedStoreId,
     };
     return profileToReturn;
   };
@@ -319,8 +323,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCart([]);
       }
+       // Clear applied redemption when store changes or cart loads
+      setAppliedRedemption(null);
     } else if (!selectedStore) {
        setCart([]);
+       setAppliedRedemption(null);
     }
   }, [selectedStore]);
 
@@ -342,6 +349,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (store) {
         if (selectedStore?.id !== store.id) {
           setCart([]);
+          setAppliedRedemption(null); // Clear redemption on store change
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
@@ -352,9 +360,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSelectedStoreState(null);
       if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
       setCart([]);
+      setAppliedRedemption(null);
       setStoreSelectorOpen(true);
     }
-  }, [stores, selectedStore, setCart, setSelectedStoreState, setStoreSelectorOpen]);
+  }, [stores, selectedStore, setCart, setSelectedStoreState, setStoreSelectorOpen, toast, setAppliedRedemption]);
 
   const login = useCallback(async (email: string, pass: string) => {
     setLoadingAuth(true);
@@ -377,7 +386,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user.displayName !== name) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // createUserProfile will be called by onAuthStateChanged, no need to explicitly call here.
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -429,15 +437,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setLoadingAuth(true);
     try {
-      // Update Firebase Auth profile
       await updateProfile(auth.currentUser, { displayName: newName });
-
-      // Update Firestore profile using the server action
       await updateUserNameInFirestore(auth.currentUser.uid, newName);
-
-      // Update local context state
       setUser(prevUser => prevUser ? { ...prevUser, name: newName } : null);
-
       toast({ title: "Profile Updated", description: "Your name has been successfully updated." });
       setLoadingAuth(false);
       return true;
@@ -459,6 +461,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(false);
         setCart([]);
         setSelectedStoreState(null);
+        setAppliedRedemption(null);
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -476,7 +479,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
         setLoadingAuth(false);
     }
-  }, [router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth]);
+  }, [router, toast, setCart, setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -526,21 +529,99 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => {
     setCart([]);
+    setAppliedRedemption(null);
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
-  }, [toast, setCart]);
+  }, [toast, setCart, setAppliedRedemption]);
 
   const getCartTotal = useCallback(() => {
-    return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-  }, [cart]);
+    const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
+  }, [cart, appliedRedemption]);
 
   const getCartTotalSavings = useCallback(() => {
-    return cart.reduce((totalSavings, item) => {
+    let savings = cart.reduce((totalSavings, item) => {
       if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
         totalSavings += (item.product.originalPrice - item.product.price) * item.quantity;
       }
       return totalSavings;
     }, 0);
-  }, [cart]);
+    if (appliedRedemption) {
+      savings += appliedRedemption.discountAmount;
+    }
+    return savings;
+  }, [cart, appliedRedemption]);
+
+  const applyRedemption = useCallback((option: RedemptionOption) => {
+    if (!user) {
+      toast({ title: "Login Required", description: "Please log in to use points.", variant: "destructive" });
+      return;
+    }
+    if (user.points < option.pointsRequired) {
+      toast({ title: "Not Enough Points", description: `You need ${option.pointsRequired} points for this reward. You have ${user.points}.`, variant: "destructive" });
+      return;
+    }
+    const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    if (subtotal < option.discountAmount) {
+      toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount.`, variant: "destructive" });
+      return;
+    }
+    setAppliedRedemption(option);
+    toast({ title: "Discount Applied", description: `${option.description} applied to your cart.` });
+  }, [user, cart, toast, setAppliedRedemption]);
+
+  const removeRedemption = useCallback(() => {
+    setAppliedRedemption(null);
+    toast({ title: "Discount Removed", description: "Points discount has been removed from your cart." });
+  }, [toast, setAppliedRedemption]);
+
+  const finalizeOrder = useCallback(async () => {
+    if (!user || !selectedStore || cart.length === 0) {
+      toast({ title: "Cannot Finalize", description: "User not logged in, no store selected, or cart is empty.", variant: "destructive"});
+      return;
+    }
+
+    const orderItems: OrderItem[] = cart.map(item => ({
+      productId: item.product.id,
+      productName: item.product.name,
+      quantity: item.quantity,
+      pricePerItem: item.product.price,
+      originalPricePerItem: item.product.originalPrice,
+    }));
+
+    const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
+    const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
+
+    const orderData: Omit<Order, 'id' | 'orderDate' | 'status'> = {
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name,
+      storeId: selectedStore.id,
+      storeName: selectedStore.name,
+      items: orderItems,
+      subtotal: subtotal,
+      discountApplied: appliedRedemption?.discountAmount,
+      pointsRedeemed: appliedRedemption?.pointsRequired,
+      finalTotal: finalTotal,
+      pickupInstructions: `Please visit ${selectedStore.name} at ${selectedStore.address} during open hours. Bring a valid ID for pickup.`,
+    };
+
+    try {
+      await createOrderInFirestore(orderData);
+
+      if (appliedRedemption) {
+        await deductUserPointsInFirestore(user.id, appliedRedemption.pointsRequired);
+        setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
+      }
+
+      toast({ title: "Order Placed!", description: `Your order for pickup at ${selectedStore.name} has been submitted.`});
+      clearCart(); // This will also clear appliedRedemption
+      router.push('/profile'); // Redirect to profile or an order confirmation page
+    } catch (error: any) {
+      console.error("Error finalizing order:", error);
+      toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
+    }
+  }, [user, selectedStore, cart, appliedRedemption, clearCart, router, toast]);
+
 
   const products = useMemo(() => {
     if (!selectedStore || loadingProducts || allProducts.length === 0) return [];
@@ -589,10 +670,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           brand: p.brand,
           category: p.category,
           dataAiHint: p.dataAiHint,
-          isFeatured: p.isFeatured || false, // Carry over isFeatured
+          isFeatured: p.isFeatured || false,
           storeId: selectedStore.id,
           price: effectivePrice,
-          originalPrice: isProductOnDeal ? originalPriceValue : undefined, // Set originalPrice only if on deal
+          originalPrice: isProductOnDeal ? originalPriceValue : undefined,
           stock: availabilityForStore.stock,
           imageUrl: currentImageUrl,
         });
@@ -628,12 +709,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
-    // Filter from the already resolved 'products' list which now contain deal pricing.
     return products
       .filter(p => p.category === categoryOnDealToday && p.originalPrice && p.price < p.originalPrice && p.stock > 0)
       .map(dealProduct => ({
         id: `${dealProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
-        product: dealProduct, // This product already has deal price in .price and original in .originalPrice
+        product: dealProduct,
         discountPercentage: discountPercentageToday,
         expiresAt: endOfToday.toISOString(),
         title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
@@ -672,11 +752,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadingAuth,
     loadingStores,
     loadingProducts,
+    redemptionOptions: REDEMPTION_OPTIONS,
+    appliedRedemption,
+    applyRedemption,
+    removeRedemption,
+    finalizeOrder,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, stores,
     selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
-    loadingAuth, loadingStores, loadingProducts
+    loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -689,3 +774,4 @@ export function useAppContext() {
   }
   return context;
 }
+

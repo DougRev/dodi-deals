@@ -1,17 +1,11 @@
 
 'use server';
 
-// Remove client-side imports like: import { collection, getDocs, writeBatch, doc, addDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
-// We will use methods directly from adminDb or its child references.
 import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
-// clientAuth might still be used for getting current user for logging/auditing, but not for Firestore operations here.
-// import { auth as clientAuth } from '@/lib/firebase';
-import type { Product, User } from '@/lib/types'; // Removed Store as it's not directly used in this file's functions
+import type { Product, User, Order, StoreFormData } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
-import type { StoreFormData } from '@/lib/types';
 
-// Helper function to ensure adminDb is initialized
 function ensureAdminDbInitialized(callingFunctionName: string) {
   if (adminInitializationError) {
     const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK failed to initialize: ${adminInitializationError.message}. Check server startup logs for errors from 'firebaseAdmin.ts'.`;
@@ -23,7 +17,6 @@ function ensureAdminDbInitialized(callingFunctionName: string) {
     console.error(errorMessage);
     throw new Error(errorMessage);
   }
-  // Check 3: for invalid but truthy adminDb
   if (typeof adminDb.collection !== 'function' || typeof adminDb.doc !== 'function') {
     const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK (adminDb) is defined but appears to be an invalid Firestore instance (missing essential methods like .collection() or .doc()). This suggests a problem with the 'firebase-admin' module or the admin app instance. Check server logs for 'firebaseAdmin.ts' output. AdminDb type: ${typeof adminDb}, AdminDb value: ${String(adminDb).substring(0,100)}`;
     console.error(errorMessage);
@@ -31,7 +24,6 @@ function ensureAdminDbInitialized(callingFunctionName: string) {
   }
 }
 
-// This function uses Admin SDK, bypassing rules.
 export async function seedInitialData() {
   const functionName = 'seedInitialData';
   ensureAdminDbInitialized(functionName);
@@ -185,27 +177,60 @@ export async function getAllUsers(): Promise<User[]> {
   const usersColRef = adminDb!.collection('users');
   try {
     const snapshot = await usersColRef.get();
-    return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as User));
+    // Make sure to include assignedStoreId, defaulting to null if not present
+    return snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return { 
+        id: docSnap.id, 
+        ...data,
+        assignedStoreId: data.assignedStoreId || null 
+      } as User;
+    });
   } catch (error) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error getting all users:`, error);
     throw error;
   }
 }
 
-export async function updateUserAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
-  const functionName = 'updateUserAdminStatus';
+export async function updateUserConfiguration(userId: string, updates: { isAdmin?: boolean; assignedStoreId?: string | null }): Promise<void> {
+  const functionName = 'updateUserConfiguration';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId:`, userId, 'isAdmin:', isAdmin);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId: ${userId} with updates:`, JSON.stringify(updates));
 
   const userRef = adminDb!.collection('users').doc(userId);
+  const updateData: Partial<User> = {};
+
+  if (typeof updates.isAdmin === 'boolean') {
+    updateData.isAdmin = updates.isAdmin;
+    // If making user an admin, unassign them from any store
+    if (updates.isAdmin) {
+      updateData.assignedStoreId = null;
+    }
+  }
+  // Only update assignedStoreId if it's explicitly provided and user is not being made admin in the same call
+  // or if it's explicitly set to null (unassign)
+  if (updates.assignedStoreId !== undefined && (updateData.isAdmin === false || updateData.isAdmin === undefined)) {
+    updateData.assignedStoreId = updates.assignedStoreId;
+  } else if (updates.assignedStoreId === null && updateData.isAdmin === undefined) {
+    updateData.assignedStoreId = null; // Allows explicitly unassigning
+  }
+
+
+  if (Object.keys(updateData).length === 0) {
+    console.log(`[firestoreService][AdminSDK][${functionName}] No valid updates to perform for user ${userId}.`);
+    return;
+  }
+
   try {
-    await userRef.update({ isAdmin });
+    await userRef.update(updateData);
+    console.log(`[firestoreService][AdminSDK][${functionName}] User ${userId} configuration updated successfully with:`, updateData);
   } catch (error) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user admin status for ${userId}:`, error);
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user configuration for ${userId}:`, error);
     throw error;
   }
 }
+
 
 export async function updateUserNameInFirestore(userId: string, newName: string): Promise<void> {
   const functionName = 'updateUserNameInFirestore';
@@ -235,6 +260,55 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
     console.log(`[firestoreService][AdminSDK][${functionName}] User avatar updated successfully for ${userId}.`);
   } catch (error) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user avatar for ${userId}:`, error);
-    throw error; // Re-throw the error to be caught by the calling function in AppContext
+    throw error;
+  }
+}
+
+export async function createOrder(orderData: Omit<Order, 'id' | 'orderDate' | 'status'>): Promise<string> {
+  const functionName = 'createOrder';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  const fullOrderData: Omit<Order, 'id'> = {
+    ...orderData,
+    orderDate: new Date().toISOString(),
+    status: "Pending Confirmation",
+  };
+  console.log(`[firestoreService][AdminSDK][${functionName}] Creating order with data:`, JSON.stringify(fullOrderData));
+
+  const ordersColRef = adminDb!.collection('orders');
+  try {
+    const docRef = await ordersColRef.add(fullOrderData);
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order created successfully with ID: ${docRef.id}`);
+    return docRef.id;
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error creating order:`, error);
+    throw error;
+  }
+}
+
+export async function deductUserPoints(userId: string, pointsToDeduct: number): Promise<void> {
+  const functionName = 'deductUserPoints';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Deducting ${pointsToDeduct} points from user ${userId}`);
+
+  const userRef = adminDb!.collection('users').doc(userId);
+  try {
+    await adminDb!.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new Error(`User ${userId} not found.`);
+      }
+      const currentPoints = (userDoc.data() as User).points || 0;
+      if (currentPoints < pointsToDeduct) {
+        throw new Error(`User ${userId} does not have enough points. Has ${currentPoints}, needs ${pointsToDeduct}.`);
+      }
+      const newPoints = currentPoints - pointsToDeduct;
+      transaction.update(userRef, { points: newPoints });
+    });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Points deducted successfully for user ${userId}.`);
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error deducting points for user ${userId}:`, error);
+    throw error;
   }
 }

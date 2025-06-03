@@ -77,7 +77,7 @@ export const ProductSchema = z.object({
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
-  isFeatured: z.boolean().optional().default(false), // Added isFeatured
+  isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
     .min(1, { message: "Product must be available in at least one store." })
     .refine(items => new Set(items.map(item => item.storeId)).size === items.length, {
@@ -91,7 +91,7 @@ export type ProductFormData = z.infer<typeof ProductSchema>;
 // Main Product interface for Firestore (matches structure of ProductSchema)
 export interface Product extends Omit<ProductFormData, 'availability'> {
   id: string;
-  isFeatured?: boolean; // Added isFeatured
+  isFeatured?: boolean;
   availability: StoreAvailability[];
 }
 
@@ -104,7 +104,7 @@ export interface ResolvedProduct {
   brand: string;
   category: ProductCategory;
   dataAiHint?: string;
-  isFeatured?: boolean; // Added isFeatured
+  isFeatured?: boolean;
   storeId: string;
   price: number; // This is the effective price (could be deal price)
   originalPrice?: number; // The base price if currently on deal, otherwise same as price or undefined
@@ -116,7 +116,7 @@ export interface ResolvedProduct {
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
 export interface Deal {
   id: string;
-  product: ResolvedProduct; // This product's .price is the deal price, .originalPrice is its base store price
+  product: ResolvedProduct;
   discountPercentage: number;
   expiresAt: string;
   title: string;
@@ -133,10 +133,52 @@ export interface User {
   points: number;
   avatarUrl?: string;
   isAdmin: boolean;
+  assignedStoreId?: string | null; // Added for store assignment
 }
 
 export interface CartItem {
-  product: ResolvedProduct; // This product will have its price (effective) and originalPrice (if applicable)
+  product: ResolvedProduct;
   quantity: number;
 }
 
+// Order related types
+export type OrderStatus = "Pending Confirmation" | "Preparing" | "Ready for Pickup" | "Completed" | "Cancelled";
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  pricePerItem: number; // Price at the time of order
+  originalPricePerItem?: number; // Original price if it was a deal item
+}
+
+export interface Order {
+  id: string; // Firestore document ID
+  userId: string;
+  userEmail: string;
+  userName: string;
+  storeId: string;
+  storeName: string;
+  items: OrderItem[];
+  subtotal: number; // Sum of item.pricePerItem * item.quantity
+  discountApplied?: number; // Discount from points redemption
+  pointsRedeemed?: number;
+  finalTotal: number; // subtotal - discountApplied
+  orderDate: string; // ISO string
+  status: OrderStatus;
+  pickupInstructions?: string;
+}
+
+// For Points Redemption
+export interface RedemptionOption {
+  id: string;
+  pointsRequired: number;
+  discountAmount: number; // in dollars
+  description: string;
+}
+
+export const REDEMPTION_OPTIONS: RedemptionOption[] = [
+  { id: 'redeem_5', pointsRequired: 500, discountAmount: 5, description: '$5 Off (500 Points)' },
+  { id: 'redeem_10', pointsRequired: 950, discountAmount: 10, description: '$10 Off (950 Points)' },
+  { id: 'redeem_20', pointsRequired: 1800, discountAmount: 20, description: '$20 Off (1800 Points)' },
+];

@@ -8,22 +8,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getAllUsers, updateUserAdminStatus } from '@/lib/firestoreService';
-import type { User } from '@/lib/types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getAllUsers, updateUserConfiguration } from '@/lib/firestoreService';
+import type { User, Store } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { Users, ShieldCheck, Loader2, UserCircle } from 'lucide-react';
+import { Users, ShieldCheck, Loader2, UserCircle, StoreIcon, Building } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminUsersPage() {
-  const { user: currentAdminUser } = useAppContext();
+  const { user: currentAdminUser, stores, loadingStores: appContextLoadingStores } = useAppContext();
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchUsers() {
-      setLoading(true);
+      setLoadingUsers(true);
       try {
         const fetchedUsers = await getAllUsers();
         setUsers(fetchedUsers);
@@ -31,7 +32,7 @@ export default function AdminUsersPage() {
         console.error("Failed to fetch users:", error);
         toast({ title: "Error Fetching Users", description: error.message || "Could not load user data.", variant: "destructive" });
       } finally {
-        setLoading(false);
+        setLoadingUsers(false);
       }
     }
     fetchUsers();
@@ -44,19 +45,46 @@ export default function AdminUsersPage() {
     }
     setUpdatingUserId(userId);
     try {
-      await updateUserAdminStatus(userId, isAdmin);
+      await updateUserConfiguration(userId, { isAdmin });
       setUsers(prevUsers =>
-        prevUsers.map(u => (u.id === userId ? { ...u, isAdmin } : u))
+        prevUsers.map(u => (u.id === userId ? { ...u, isAdmin, assignedStoreId: isAdmin ? null : u.assignedStoreId } : u))
       );
       toast({ title: "User Updated", description: `Admin status for the user has been ${isAdmin ? 'granted' : 'revoked'}.` });
     } catch (error: any) {
       console.error("Failed to update admin status:", error);
       toast({ title: "Update Failed", description: error.message || "Could not update user admin status.", variant: "destructive" });
-      // Revert switch optimistic update if needed - though Switch is controlled by `user.isAdmin` so it should reflect DB state on next fetch or manual refresh
     } finally {
       setUpdatingUserId(null);
     }
   };
+
+  const handleStoreAssignmentChange = async (userId: string, storeId: string | null) => {
+    if (users.find(u => u.id === userId)?.isAdmin) {
+      toast({ title: "Action Not Allowed", description: "Admins cannot be assigned to a store.", variant: "default" });
+      return;
+    }
+    setUpdatingUserId(userId);
+    try {
+      await updateUserConfiguration(userId, { assignedStoreId: storeId });
+      setUsers(prevUsers =>
+        prevUsers.map(u => (u.id === userId ? { ...u, assignedStoreId: storeId } : u))
+      );
+      const storeName = storeId ? stores.find(s => s.id === storeId)?.name : 'Unassigned';
+      toast({ title: "User Updated", description: `User has been assigned to ${storeName || 'the selected store'}.` });
+    } catch (error: any) {
+      console.error("Failed to update store assignment:", error);
+      toast({ title: "Update Failed", description: error.message || "Could not update store assignment.", variant: "destructive" });
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+  const getStoreName = (storeId?: string | null) => {
+    if (!storeId) return "N/A";
+    return stores.find(s => s.id === storeId)?.name || "Unknown Store";
+  };
+
+  const isLoading = loadingUsers || appContextLoadingStores;
 
   return (
     <div className="space-y-8">
@@ -65,17 +93,17 @@ export default function AdminUsersPage() {
           <h1 className="text-3xl font-bold font-headline text-primary flex items-center">
             <Users className="mr-3 h-8 w-8" /> Manage Users
           </h1>
-          <p className="text-muted-foreground">View registered users and manage their administrator privileges.</p>
+          <p className="text-muted-foreground">View users, manage admin privileges, and assign non-admin users to stores.</p>
         </div>
       </header>
 
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>User List</CardTitle>
-          <CardDescription>Overview of all registered users and their roles.</CardDescription>
+          <CardDescription>Overview of all registered users, their roles, and store assignments.</CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>
           ) : users.length === 0 ? (
             <div className="text-center py-10">
@@ -89,7 +117,8 @@ export default function AdminUsersPage() {
                   <TableHead className="w-[60px]">Avatar</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="text-center">Admin Status</TableHead>
+                  <TableHead className="text-center">Admin</TableHead>
+                  <TableHead>Assigned Store</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -97,7 +126,7 @@ export default function AdminUsersPage() {
                   <TableRow key={user.id}>
                     <TableCell>
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatarUrl || undefined} alt={user.name} data-ai-hint="profile avatar" />
+                        <AvatarImage src={user.avatarUrl || undefined} alt={user.name} data-ai-hint="profile avatar"/>
                         <AvatarFallback>
                           {user.name ? user.name.charAt(0).toUpperCase() : <UserCircle className="h-5 w-5" />}
                         </AvatarFallback>
@@ -123,6 +152,39 @@ export default function AdminUsersPage() {
                           {user.isAdmin ? 'Admin' : 'User'}
                         </Label>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {updatingUserId === user.id && !user.isAdmin ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : user.isAdmin ? (
+                        <span className="text-muted-foreground italic text-sm flex items-center">
+                          <ShieldCheck className="h-4 w-4 mr-1 text-muted-foreground/70" /> Admins (Global)
+                        </span>
+                      ) : (
+                        <Select
+                          value={user.assignedStoreId || "unassigned"}
+                          onValueChange={(value) => handleStoreAssignmentChange(user.id, value === "unassigned" ? null : value)}
+                          disabled={!!updatingUserId || appContextLoadingStores}
+                        >
+                          <SelectTrigger className="w-[220px] h-9 text-sm">
+                            <SelectValue placeholder={appContextLoadingStores ? "Loading stores..." : "Select store"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">
+                              <span className="flex items-center text-muted-foreground">
+                                <Building className="h-4 w-4 mr-2 opacity-70" /> Unassigned
+                              </span>
+                            </SelectItem>
+                            {stores.map((store: Store) => (
+                              <SelectItem key={store.id} value={store.id}>
+                                <span className="flex items-center">
+                                 <StoreIcon className="h-4 w-4 mr-2 text-accent" /> {store.name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
