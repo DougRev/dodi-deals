@@ -13,8 +13,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { toast } from '@/hooks/use-toast';
 import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered } from 'lucide-react';
 
-const PENDING_STATUSES: OrderStatus[] = ["Pending Confirmation", "Preparing"];
-const COMPLETED_STATUSES: OrderStatus[] = ["Ready for Pickup", "Completed", "Cancelled"];
+// Updated status groupings
+const ACTIVE_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup"];
+const ARCHIVED_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Completed", "Cancelled"];
 
 
 function formatOrderTimestamp(isoDate: string) {
@@ -28,12 +29,12 @@ export default function ManagerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [viewingArchived, setViewingArchived] = useState(false); // To toggle between pending and completed/cancelled
+  const [viewingArchived, setViewingArchived] = useState(false); 
 
   const fetchOrders = useCallback(async (storeId: string, activeView: boolean) => {
     setLoadingOrders(true);
     try {
-      const statusesToFetch = activeView ? PENDING_STATUSES : COMPLETED_STATUSES;
+      const statusesToFetch = activeView ? ACTIVE_MANAGER_VIEW_STATUSES : ARCHIVED_MANAGER_VIEW_STATUSES;
       const fetchedOrders = await getStoreOrdersByStatus(storeId, statusesToFetch);
       setOrders(fetchedOrders);
     } catch (error: any) {
@@ -47,6 +48,7 @@ export default function ManagerOrdersPage() {
 
   useEffect(() => {
     if (!loadingAuth && user?.assignedStoreId && user.storeRole === 'Manager') {
+      // Fetch active orders by default (when viewingArchived is false)
       fetchOrders(user.assignedStoreId, !viewingArchived);
     }
   }, [user, loadingAuth, fetchOrders, viewingArchived]);
@@ -57,8 +59,9 @@ export default function ManagerOrdersPage() {
     try {
       await updateOrderStatus(orderId, newStatus);
       toast({ title: "Order Status Updated", description: `Order ${orderId.substring(0,6)}... moved to ${newStatus}.` });
-      // Re-fetch orders to reflect the change
+      
       if (user?.assignedStoreId) {
+        // Re-fetch orders for the current view (active or archived)
         fetchOrders(user.assignedStoreId, !viewingArchived);
       }
     } catch (error: any) {
@@ -76,17 +79,19 @@ export default function ManagerOrdersPage() {
       case "Preparing":
         return ["Ready for Pickup", "Cancelled"];
       case "Ready for Pickup":
-        return ["Completed", "Cancelled"]; // Manager might manually cancel if customer no-shows for long
+        // Manager can mark as completed (customer picked up) or cancel (e.g., no-show)
+        return ["Completed", "Cancelled"]; 
       default:
-        return []; // Completed or Cancelled orders typically don't change status via manager UI
+        // Completed or Cancelled orders typically don't change status via manager UI in this flow
+        return []; 
     }
   };
 
   const getStatusBadgeVariant = (status: OrderStatus): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
-      case "Pending Confirmation": return "default"; // Orange/Yellow
-      case "Preparing": return "secondary"; // Blue
-      case "Ready for Pickup": return "outline"; // Green (using outline for accent-like color)
+      case "Pending Confirmation": return "default"; 
+      case "Preparing": return "secondary"; 
+      case "Ready for Pickup": return "outline"; 
       case "Completed": return "default"; 
       case "Cancelled": return "destructive";
       default: return "secondary";
@@ -106,7 +111,6 @@ export default function ManagerOrdersPage() {
 
 
   if (loadingAuth || (!user?.assignedStoreId && !loadingAuth)) {
-    // Layout handles most auth checks, this is a fallback.
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
 
@@ -219,3 +223,4 @@ export default function ManagerOrdersPage() {
     </div>
   );
 }
+
