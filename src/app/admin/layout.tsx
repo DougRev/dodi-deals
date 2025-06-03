@@ -21,7 +21,7 @@ export default function AdminLayout({
     console.log('[AdminLayout] Effect triggered. loadingAuth:', loadingAuth, 'isAuthenticated:', isAuthenticated, 'user:', user);
     if (!loadingAuth) {
       if (!isAuthenticated || !user?.isAdmin) {
-        console.error('[AdminLayout] ACCESS DENIED. User is not authenticated or not an admin. User:', user, 'IsAuthenticated:', isAuthenticated, 'User isAdmin:', user?.isAdmin);
+        console.warn('[AdminLayout] ACCESS DENIED. User is not authenticated or not an admin. User:', user, 'IsAuthenticated:', isAuthenticated, 'User isAdmin:', user?.isAdmin);
         router.replace('/'); // Redirect non-admins to homepage
       } else {
         console.log('[AdminLayout] Access GRANTED. User isAdmin:', user?.isAdmin);
