@@ -202,12 +202,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user, isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      fetchUserOrders();
-    } else {
-      setUserOrders([]); // Clear orders if user logs out or is not authenticated
+    // Temporarily disable automatic order fetching to prevent profile page error
+    if (false && isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
+        fetchUserOrders();
+    } else if (!isAuthenticated || !user) { // Still clear orders if user logs out
+        setUserOrders([]);
+        setLoadingUserOrders(false); // Ensure loading is false if no user
     }
-  }, [isAuthenticated, user, fetchUserOrders]);
+  }, [isAuthenticated, user, fetchUserOrders, userOrders.length, loadingUserOrders]);
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -339,7 +341,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
-            // fetchUserOrders(); // Moved to separate useEffect to trigger on user/auth change
           } else {
             setUser(null);
             setIsAuthenticated(false);
@@ -513,7 +514,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCart([]);
         setSelectedStoreState(null);
         setAppliedRedemption(null);
-        setUserOrders([]); // Clear orders on logout
+        setUserOrders([]); 
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -667,7 +668,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
       }
       
-      await fetchUserOrders(); // Refresh order history
+      // Re-enable order fetching if you want it immediately after placing an order
+      // For now, it's disabled to prevent the profile page error.
+      // if (user) fetchUserOrders(); 
       toast({ title: "Order Placed!", description: `Your order for pickup at ${selectedStore.name} has been submitted.`});
       clearCart(); 
       router.push('/profile'); 
