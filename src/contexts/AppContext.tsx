@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrder as createOrderInFirestore, deductUserPoints as deductUserPointsInFirestore } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, deductUserPoints as deductUserPointsNonTransactional } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -212,13 +212,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
         createdAt: existingData?.createdAt || new Date().toISOString(),
         assignedStoreId: determinedAssignedStoreId,
-        storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole, // Admins don't have store roles
+        storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole, 
       };
       
     if (determinedAvatarUrl) {
         profileDataToSet.avatarUrl = determinedAvatarUrl;
     }
-    if (profileDataToSet.isAdmin) { // Ensure admins have null storeId and storeRole
+    if (profileDataToSet.isAdmin) { 
         profileDataToSet.assignedStoreId = null;
         profileDataToSet.storeRole = null;
     }
@@ -228,7 +228,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const dataToSetForNewUser: any = { ...profileDataToSet };
         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
-        // Ensure default nulls for new users if not admin
         if (!dataToSetForNewUser.isAdmin) {
             dataToSetForNewUser.assignedStoreId = dataToSetForNewUser.assignedStoreId || null;
             dataToSetForNewUser.storeRole = dataToSetForNewUser.storeRole || null;
@@ -242,12 +241,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        // Revert isAdmin if profile creation failed for a potential admin, to be safe
         profileDataToSet.isAdmin = false; 
         profileDataToSet.assignedStoreId = null;
         profileDataToSet.storeRole = null;
       }
-    } else { // User exists, check for updates
+    } else { 
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData?.isAdmin) {
         updates.isAdmin = true;
@@ -260,12 +258,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (determinedAvatarUrl && existingData?.avatarUrl !== determinedAvatarUrl) {
          updates.avatarUrl = determinedAvatarUrl;
       } else if (!determinedAvatarUrl && existingData?.avatarUrl) {
-         updates.avatarUrl = undefined; // Or null if preferred
+         updates.avatarUrl = undefined; 
       }
       
-      // If isAdmin status changed in Firestore (e.g. by an admin tool directly)
       if (existingData?.isAdmin && !isTheAdminEmail && profileDataToSet.isAdmin !== existingData.isAdmin) {
-         // Reflect this change if it wasn't due to ADMIN_EMAIL override
       }
 
 
@@ -278,7 +274,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
              console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
         }
       }
-       // Merge existing fields if no updates were made, but ensure isAdmin rules are applied
         if (profileDataToSet.isAdmin) {
             profileDataToSet.assignedStoreId = null;
             profileDataToSet.storeRole = null;
@@ -391,7 +386,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-      // Auth state change will handle setting user and isAuthenticated
       toast({ title: "Login Successful", description: "Welcome back!" });
       return true;
     } catch (error: any) {
@@ -409,7 +403,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // onAuthStateChanged will call createUserProfile which now handles name, storeId, storeRole defaults
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -630,10 +623,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      await createOrderInFirestore(orderData);
+      const userIdForPoints = appliedRedemption ? user.id : null;
+      const pointsToDeduct = appliedRedemption ? appliedRedemption.pointsRequired : null;
+      
+      await createOrderInFirestore(orderData, userIdForPoints, pointsToDeduct);
 
       if (appliedRedemption) {
-        await deductUserPointsInFirestore(user.id, appliedRedemption.pointsRequired);
         setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
       }
 
@@ -643,8 +638,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Error finalizing order:", error);
       toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
+      // Do not clear cart or update local points if the transaction failed
     }
-  }, [user, selectedStore, cart, appliedRedemption, clearCart, router, toast]);
+  }, [user, selectedStore, cart, appliedRedemption, clearCart, router, toast, setUser]);
 
 
   const products = useMemo(() => {
@@ -798,3 +794,5 @@ export function useAppContext() {
   }
   return context;
 }
+
+    
