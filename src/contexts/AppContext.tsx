@@ -189,6 +189,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
+    // Use provided name, then Firebase Auth display name, then email part, then default
     const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
     const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
     const determinedAssignedStoreId = userSnap.exists() ? (userSnap.data() as User).assignedStoreId : null;
@@ -218,10 +219,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const dataToSetForNewUser: any = { ...profileDataToSet };
         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
-        if (dataToSetForNewUser.assignedStoreId === undefined) dataToSetForNewUser.assignedStoreId = null; // Ensure it's null if not set
+        if (dataToSetForNewUser.assignedStoreId === undefined) dataToSetForNewUser.assignedStoreId = null; 
         
         await setDoc(userRef, dataToSetForNewUser);
 
+        // Update Firebase Auth profile if it differs or if name was explicitly provided
         if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
             await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
         }
@@ -235,7 +237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData.isAdmin) {
         updates.isAdmin = true;
-        updates.assignedStoreId = null; // Admins are not assigned to a store
+        updates.assignedStoreId = null;
       }
       if (displayName && existingData.name !== displayName) {
         updates.name = displayName;
@@ -245,9 +247,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (!determinedAvatarUrl && existingData.avatarUrl) {
          updates.avatarUrl = undefined; 
       }
-      // Ensure assignedStoreId is correctly handled:
-      // If user becomes admin, assignedStoreId should be null.
-      // Otherwise, respect the determinedAssignedStoreId or existingData.assignedStoreId
+      
       if (updates.isAdmin) {
           updates.assignedStoreId = null;
       } else if (determinedAssignedStoreId !== existingData.assignedStoreId) {
@@ -323,7 +323,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setCart([]);
       }
-       // Clear applied redemption when store changes or cart loads
       setAppliedRedemption(null);
     } else if (!selectedStore) {
        setCart([]);
@@ -349,7 +348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (store) {
         if (selectedStore?.id !== store.id) {
           setCart([]);
-          setAppliedRedemption(null); // Clear redemption on store change
+          setAppliedRedemption(null); 
           toast({ title: "Store Changed", description: `Switched to ${store.name}. Cart has been cleared.` });
         }
         setSelectedStoreState(store);
@@ -369,6 +368,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
+      // Auth state change will handle setting user and isAuthenticated
       toast({ title: "Login Successful", description: "Welcome back!" });
       return true;
     } catch (error: any) {
@@ -383,9 +383,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      if (name && userCredential.user.displayName !== name) {
+      // The onAuthStateChanged listener will call createUserProfile,
+      // which now takes the provided name into account for the initial profile creation.
+      // If 'name' is provided, we also update Firebase Auth profile directly here for immediate reflection.
+      if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // Auth state change will handle setting user and isAuthenticated
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -614,8 +618,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       toast({ title: "Order Placed!", description: `Your order for pickup at ${selectedStore.name} has been submitted.`});
-      clearCart(); // This will also clear appliedRedemption
-      router.push('/profile'); // Redirect to profile or an order confirmation page
+      clearCart(); 
+      router.push('/profile'); 
     } catch (error: any) {
       console.error("Error finalizing order:", error);
       toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
@@ -774,4 +778,3 @@ export function useAppContext() {
   }
   return context;
 }
-

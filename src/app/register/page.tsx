@@ -15,6 +15,8 @@ function RegisterPageInternal() {
   const { register, isAuthenticated, loadingAuth } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,6 +38,11 @@ function RegisterPageInternal() {
     e.preventDefault();
     setError('');
 
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First and Last Name are required.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -46,7 +53,8 @@ function RegisterPageInternal() {
     }
 
     setLoading(true);
-    const success = await register(email, password);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const success = await register(email, password, fullName);
     setLoading(false);
     if (success) {
       // Redirect is handled by useEffect based on isAuthenticated state change
@@ -64,6 +72,32 @@ function RegisterPageInternal() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  type="text"
+                  placeholder="John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  className="focus:ring-accent"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  type="text"
+                  placeholder="Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="focus:ring-accent"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
