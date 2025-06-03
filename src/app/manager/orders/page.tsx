@@ -47,9 +47,13 @@ export default function ManagerOrdersPage() {
   }, []);
 
   useEffect(() => {
-    if (!loadingAuth && user?.assignedStoreId && user.storeRole === 'Manager') {
-      // Fetch active orders by default (when viewingArchived is false)
-      fetchOrders(user.assignedStoreId, !viewingArchived);
+    const canManage = user?.assignedStoreId && (user.storeRole === 'Manager' || user.storeRole === 'Employee');
+    if (!loadingAuth && canManage) {
+      fetchOrders(user.assignedStoreId!, !viewingArchived);
+    } else if (!loadingAuth && (!user?.assignedStoreId || !(user.storeRole === 'Manager' || user.storeRole === 'Employee'))) {
+      // If user is not authorized (e.g. role changed, no longer assigned), stop loading and clear orders
+      setLoadingOrders(false);
+      setOrders([]);
     }
   }, [user, loadingAuth, fetchOrders, viewingArchived]);
 
