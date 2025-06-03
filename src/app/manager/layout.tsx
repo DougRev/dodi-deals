@@ -19,16 +19,16 @@ export default function ManagerLayout({
 
   useEffect(() => {
     if (!loadingAuth) {
-      if (!isAuthenticated || !user?.assignedStoreId || user?.storeRole !== 'Manager') {
-        console.warn('[ManagerLayout] ACCESS DENIED. User is not authenticated, not assigned to a store, or not a Manager. User:', user);
-        router.replace('/'); // Redirect non-managers or unassigned users to homepage
+      const isManagerOrEmployee = user?.storeRole === 'Manager' || user?.storeRole === 'Employee';
+      if (!isAuthenticated || !user?.assignedStoreId || !isManagerOrEmployee) {
+        console.warn('[ManagerLayout] ACCESS DENIED. User is not authenticated, not assigned to a store, or not a Manager/Employee. User:', user);
+        router.replace('/'); // Redirect non-staff or unassigned users to homepage
       } else {
-        // Ensure the app's selectedStore aligns with the manager's assigned store if not already set
-        // This is a soft check, primary store selection logic is in AppContext
+        // Ensure the app's selectedStore aligns with the staff's assigned store if not already set
         if (selectedStore?.id !== user.assignedStoreId) {
-          console.log(`[ManagerLayout] Manager's assigned store (${user.assignedStoreId}) differs from app's selected store (${selectedStore?.id}). This is informational.`);
+          console.log(`[ManagerLayout] Staff's assigned store (${user.assignedStoreId}) differs from app's selected store (${selectedStore?.id}). This is informational.`);
         }
-        console.log('[ManagerLayout] Access GRANTED. User is a Manager for store:', user.assignedStoreId);
+        console.log(`[ManagerLayout] Access GRANTED. User role: ${user?.storeRole}, Store: ${user.assignedStoreId}`);
       }
     }
   }, [user, isAuthenticated, loadingAuth, router, selectedStore]);
@@ -37,12 +37,13 @@ export default function ManagerLayout({
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Verifying manager access...</p>
+        <p className="text-lg text-muted-foreground">Verifying store staff access...</p>
       </div>
     );
   }
 
-  if (!isAuthenticated || !user?.assignedStoreId || user?.storeRole !== 'Manager') {
+  const isManagerOrEmployee = user?.storeRole === 'Manager' || user?.storeRole === 'Employee';
+  if (!isAuthenticated || !user?.assignedStoreId || !isManagerOrEmployee) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
         <Card className="max-w-md p-6 shadow-xl">
@@ -52,7 +53,7 @@ export default function ManagerLayout({
           </CardHeader>
           <CardContent>
             <CardDescription className="text-md mb-6">
-              You do not have permission to view this page. Manager access required.
+              You do not have permission to view this page. Store staff (Manager or Employee) access required.
             </CardDescription>
             <Button asChild>
               <Link href="/">Go to Homepage</Link>
@@ -63,7 +64,7 @@ export default function ManagerLayout({
     );
   }
 
-  // If manager, render the children (the manager page content)
+  // If manager or employee, render the children (the manager page content)
   return (
     <div className="space-y-6">
       <header className="bg-muted/50 p-4 rounded-lg shadow-sm">
@@ -71,7 +72,7 @@ export default function ManagerLayout({
             <div>
                 <h1 className="text-2xl font-bold font-headline text-primary flex items-center">
                     <Briefcase className="mr-2 h-6 w-6"/>
-                    Manager Dashboard: {selectedStore?.name || user?.assignedStoreId}
+                    Store Operations: {selectedStore?.name || user?.assignedStoreId} 
                 </h1>
                 <p className="text-sm text-muted-foreground">Manage orders and settings for your store.</p>
             </div>

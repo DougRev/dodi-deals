@@ -25,6 +25,8 @@ export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
   const { toggleSidebar, state, isMobile } = useSidebar(); 
 
+  const canManageStoreOrders = isAuthenticated && user?.assignedStoreId && (user.storeRole === 'Manager' || user.storeRole === 'Employee');
+
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarContent className="flex flex-col">
@@ -102,7 +104,7 @@ export function AppSidebar() {
             </SidebarMenuItem>
           )}
           
-          {isAuthenticated && user?.storeRole === 'Manager' && user.assignedStoreId && (
+          {canManageStoreOrders && (
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="Manage Store Orders" className="w-full justify-start">
                 <Link href="/manager/orders">
