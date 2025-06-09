@@ -15,22 +15,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPrice } from '@/lib/types';
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPrice, PREDEFINED_BRANDS, type ProductCategory } from '@/lib/types';
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
+
+const OTHER_BRAND_VALUE = "Other"; // Constant for "Other" brand selection
 
 const getDefaultAvailability = (category: ProductFormData['category'], stores: Store[]): StoreAvailability[] => {
   const defaultStoreId = stores.length > 0 ? stores[0].id : '';
   if (category === 'Flower') {
     return [{
       storeId: defaultStoreId,
-      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), // Only price
-      totalStockInGrams: 0, // Added totalStockInGrams
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })),
+      totalStockInGrams: 0,
       storeSpecificImageUrl: '',
     }];
   }
@@ -50,13 +52,15 @@ export default function AdminProductsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [showManualBrandInput, setShowManualBrandInput] = useState(false);
+
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(ProductSchema),
     defaultValues: {
       name: '',
       description: '',
-      brand: '',
+      brand: '', // Default to empty, let select handle it or manual input
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape',
       dataAiHint: '',
@@ -66,11 +70,31 @@ export default function AdminProductsPage() {
   });
 
   const watchedCategory = useWatch({ control: form.control, name: 'category' });
+  const watchedBrandSelection = useWatch({ control: form.control, name: 'brand' });
 
   const { fields: availabilityFields, append: appendAvailability, remove: removeAvailability } = useFieldArray({
     control: form.control,
     name: "availability"
   });
+
+  // Effect to manage brand input visibility and value
+  useEffect(() => {
+    const selectedBrandIsOther = watchedBrandSelection === OTHER_BRAND_VALUE;
+    const currentCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+    const brandNotPredefined = watchedBrandSelection && !currentCategoryBrands.includes(watchedBrandSelection) && watchedBrandSelection !== OTHER_BRAND_VALUE;
+
+    if (selectedBrandIsOther) {
+      setShowManualBrandInput(true);
+      // Optionally clear the actual brand input if switching TO "Other" and it wasn't manually set before
+      // form.setValue('brand', ''); // Or keep previous manual entry if desired
+    } else if (brandNotPredefined && isFormOpen) { // If editing and current brand is not in new list, show manual
+        setShowManualBrandInput(true);
+    }
+     else {
+      setShowManualBrandInput(false);
+    }
+  }, [watchedBrandSelection, watchedCategory, isFormOpen, form]);
+
 
   useEffect(() => {
     if (form.formState.isSubmitted) return;
@@ -78,13 +102,11 @@ export default function AdminProductsPage() {
     const currentAvailability = form.getValues('availability');
     const newAvailabilityStructure = currentAvailability.map(avail => {
       if (watchedCategory === 'Flower') {
-        // Ensure all standard flowerWeights are present in weightOptions with their prices
         const completeWeightOptions = flowerWeights.map(fw => {
           const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
           return {
             weight: fw,
             price: existingOption?.price || 0,
-            // stock is removed from FlowerWeightPrice
           };
         });
         return {
@@ -119,6 +141,7 @@ export default function AdminProductsPage() {
         initialValues = {
           ...currentProduct,
           category: currentProduct.category || (productCategories[0] || 'Vape'),
+          brand: currentProduct.brand, // Keep existing brand
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
             if (currentProduct.category === 'Flower') {
@@ -126,18 +149,18 @@ export default function AdminProductsPage() {
                 const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
                 return {
                   weight: fw,
-                  price: existingOption?.price || 0, // Only price
+                  price: existingOption?.price || 0,
                 };
               });
               return {
                 ...avail,
                 weightOptions: completeWeightOptions,
                 totalStockInGrams: avail.totalStockInGrams || 0,
-                price: undefined, // No base price for flowers
-                stock: undefined, // No base stock for flowers
+                price: undefined,
+                stock: undefined,
               };
             }
-            return { // For non-flower
+            return {
               ...avail,
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
@@ -146,12 +169,19 @@ export default function AdminProductsPage() {
             };
           }) as StoreAvailability[],
         };
+        // Determine if existing brand is "Other" for initial form display
+        const currentCategoryBrands = PREDEFINED_BRANDS[initialValues.category as ProductCategory] || [];
+        if (!currentCategoryBrands.includes(initialValues.brand) && initialValues.brand !== OTHER_BRAND_VALUE) {
+            // If brand is custom, set select to "Other" and input to actual brand
+            // No, we should set the `brand` field to the actual brand, and let the useEffect handle visibility
+        }
+
       } else {
         const defaultCat = productCategories[0] || 'Vape';
         initialValues = {
           name: '',
           description: '',
-          brand: '',
+          brand: '', // Start empty or with a default if desired
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: defaultCat,
           dataAiHint: '',
@@ -160,7 +190,20 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
+      // After reset, explicitly check brand visibility
+      const resetCategory = form.getValues('category');
+      const resetBrand = form.getValues('brand');
+      const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
+      if (resetBrand && !resetCategoryBrands.includes(resetBrand) && resetBrand !== OTHER_BRAND_VALUE) {
+          setShowManualBrandInput(true);
+      } else if (resetBrand === OTHER_BRAND_VALUE) {
+          setShowManualBrandInput(true);
+      }
+      else {
+          setShowManualBrandInput(false);
+      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFormOpen, currentProduct, form.reset, stores]);
 
 
@@ -170,18 +213,20 @@ export default function AdminProductsPage() {
     form.reset({
       name: '',
       description: '',
-      brand: '',
+      brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || OTHER_BRAND_VALUE, // Default to first brand or "Other"
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: defaultCat,
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(defaultCat, stores),
     });
+    setShowManualBrandInput(form.getValues('brand') === OTHER_BRAND_VALUE);
     setIsFormOpen(true);
   };
 
   const handleEditProduct = (product: Product) => {
     setCurrentProduct(product);
+    // setShowManualBrandInput will be handled by useEffect when form opens and resets
     setIsFormOpen(true);
   };
 
@@ -210,15 +255,25 @@ export default function AdminProductsPage() {
   const handleSaveProduct = async (data: ProductFormData) => {
     setFormLoading(true);
     try {
+      // If brand was "Other" but manual input was empty, or if no brand was set.
+      let finalBrand = data.brand;
+      if (data.brand === OTHER_BRAND_VALUE && !form.getValues('brand')) { // This logic might need review
+          finalBrand = 'Unknown Brand'; // Or handle as validation error
+      } else if (showManualBrandInput) {
+         // The 'brand' field should already hold the manual input value thanks to Controller
+      }
+
+
       const productDataPayload: Omit<Product, 'id'> = {
         ...data,
+        brand: finalBrand,
         isFeatured: data.isFeatured || false,
         availability: data.availability.map(avail => {
           if (data.category === 'Flower') {
             return {
               storeId: avail.storeId,
               weightOptions: avail.weightOptions?.map(wo => ({
-                weight: wo.weight, // Ensure weight is part of the payload
+                weight: wo.weight,
                 price: Number(wo.price),
               })) || [],
               totalStockInGrams: Number(avail.totalStockInGrams) || 0,
@@ -232,7 +287,7 @@ export default function AdminProductsPage() {
               storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
             };
           }
-        }) as any, // Cast because Zod schema expects specific structures
+        }) as any,
       };
 
       if (currentProduct) {
@@ -307,6 +362,8 @@ export default function AdminProductsPage() {
     }
   };
 
+  const categoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+
   return (
     <div className="space-y-8">
       <header className="flex justify-between items-center">
@@ -326,6 +383,7 @@ export default function AdminProductsPage() {
           if (!isOpen) {
             setCurrentProduct(null);
             form.reset();
+            setShowManualBrandInput(false);
           }
         }}>
         <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -339,14 +397,83 @@ export default function AdminProductsPage() {
               {/* Basic Product Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Product Name</FormLabel><FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Brand</FormLabel><FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                
+                <FormItem>
+                  <FormLabel className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Brand</FormLabel>
+                  {categoryBrands.length > 0 ? (
+                    <FormField
+                      control={form.control}
+                      name="brand"
+                      render={({ field }) => (
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            if (value === OTHER_BRAND_VALUE) {
+                              setShowManualBrandInput(true);
+                              // Consider if you want to clear manual input here or let user type immediately
+                            } else {
+                              setShowManualBrandInput(false);
+                            }
+                          }}
+                          value={showManualBrandInput ? OTHER_BRAND_VALUE : field.value || ''}
+                          defaultValue={field.value && categoryBrands.includes(field.value) ? field.value : (field.value ? OTHER_BRAND_VALUE : '')}
+                        >
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select a brand or 'Other'" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            {categoryBrands.map(brandName => (<SelectItem key={brandName} value={brandName}>{brandName}</SelectItem>))}
+                            <SelectItem value={OTHER_BRAND_VALUE}>Other...</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  ) : (
+                     // If no predefined brands for category, always show manual input.
+                     // This useEffect handles this case by setting showManualBrandInput to true.
+                  )}
+                  {showManualBrandInput && (
+                    <FormField
+                      control={form.control}
+                      name="brand" // This input will now update the 'brand' field directly
+                      render={({ field: manualField }) => (
+                        <Input
+                          placeholder="Enter brand name"
+                          {...manualField}
+                          value={watchedBrandSelection === OTHER_BRAND_VALUE ? manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value : manualField.value} // Show actual brand if it's not 'Other'
+                          onChange={(e) => {
+                             manualField.onChange(e.target.value);
+                             // If user types here, and select was on "Other", it updates brand.
+                             // If select was on a predefined brand, this input is for a *new* custom brand.
+                             // The select value will still be "Other" if this input is shown due to "Other" being selected.
+                          }}
+                          className="mt-2"
+                        />
+                      )}
+                    />
+                  )}
+                   <FormMessage>{form.formState.errors.brand?.message}</FormMessage>
+                </FormItem>
               </div>
+
               <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)}/>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="category" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={(value) => {
+                            field.onChange(value);
+                            const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
+                            if (newCategoryBrands.length > 0) {
+                                form.setValue('brand', newCategoryBrands[0]); // Set to first brand or "Other"
+                                setShowManualBrandInput(false);
+                            } else {
+                                form.setValue('brand', ''); // Or a default like "Other"
+                                setShowManualBrandInput(true);
+                            }
+                        }} 
+                        value={field.value} 
+                        defaultValue={field.value}
+                      >
                         <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
                         <SelectContent>
                           {productCategories.map(category => (<SelectItem key={category} value={category}>{category}</SelectItem>))}
@@ -387,7 +514,7 @@ export default function AdminProductsPage() {
                     <FormField control={form.control} name={`availability.${storeAvailIndex}.storeSpecificImageUrl`} render={({ field }) => (
                         <FormItem>
                           <FormLabel>Store Specific Image URL (Optional)</FormLabel>
-                          <FormControl><Input placeholder="Overrides base image for this store" {...field} /></FormControl>
+                          <FormControl><Input placeholder="Overrides base image for this store" {...field} value={field.value || ''} /></FormControl>
                           {field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-20 h-20 relative"><Image src={field.value} alt="Store specific preview" fill style={{ objectFit: 'cover' }} sizes="80px" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/></div>)}
                           <FormMessage />
                         </FormItem>
@@ -402,7 +529,7 @@ export default function AdminProductsPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="flex items-center"><PackagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>Total Stock (grams)</FormLabel>
-                              <FormControl><Input type="number" placeholder="e.g., 28 for 1 ounce" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.1" /></FormControl>
+                              <FormControl><Input type="number" placeholder="e.g., 28 for 1 ounce" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.1" /></FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -414,19 +541,18 @@ export default function AdminProductsPage() {
                             return (
                               <Card key={`${storeAvailField.id}-${fw}`} className="p-3 bg-muted/50">
                                 <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
-                                <div className="grid grid-cols-1 gap-3 mt-1"> {/* Only price now */}
+                                <div className="grid grid-cols-1 gap-3 mt-1">
                                   <FormField
                                     control={form.control}
                                     name={`${weightOptPath}.${weightIndex}.price` as any}
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="text-xs">Price ($)</FormLabel>
-                                        <FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
+                                        <FormControl><Input type="number" placeholder="0.00" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" /></FormControl>
                                         <FormMessage />
                                       </FormItem>
                                     )}
                                   />
-                                  {/* Hidden field to store the weight itself */}
                                   <Controller name={`${weightOptPath}.${weightIndex}.weight` as any} control={form.control} defaultValue={fw} render={({ field }) => <input type="hidden" {...field} />} />
                                 </div>
                               </Card>
@@ -441,14 +567,14 @@ export default function AdminProductsPage() {
                         <FormField control={form.control} name={`availability.${storeAvailIndex}.price`} render={({ field }) => (
                             <FormItem>
                               <FormLabel>Price ($)</FormLabel>
-                              <FormControl><Input type="number" placeholder="29.99" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl><FormMessage />
+                              <FormControl><Input type="number" placeholder="29.99" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} step="0.01" /></FormControl><FormMessage />
                             </FormItem>
                           )}
                         />
                         <FormField control={form.control} name={`availability.${storeAvailIndex}.stock`} render={({ field }) => (
                             <FormItem>
                               <FormLabel>Stock</FormLabel>
-                              <FormControl><Input type="number" placeholder="50" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl><FormMessage />
+                              <FormControl><Input type="number" placeholder="50" {...field} value={field.value ?? 0} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} step="1" /></FormControl><FormMessage />
                             </FormItem>
                           )}
                         />
@@ -571,6 +697,5 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-    
 
     

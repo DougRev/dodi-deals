@@ -10,7 +10,7 @@ import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndP
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst } from '@/lib/types';
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories } from '@/lib/types'; // Added productCategories
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders } from '@/lib/firestoreService';
 
@@ -170,7 +170,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingProducts(true);
     const productsCol = collection(db, 'products');
     const unsubscribe = onSnapshot(productsCol, (snapshot) => {
-      const fetchedProducts = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Product));
+      const fetchedProducts = snapshot.docs.map(docSnap => {
+        const data = docSnap.data() as Omit<Product, 'id'>;
+        // Ensure category is one of the valid enum values, default if not
+        const validCategory = productCategories.includes(data.category as ProductCategory) ? data.category : productCategories[0];
+        return { 
+            id: docSnap.id, 
+            ...data,
+            category: validCategory 
+        } as Product;
+    });
       setAllProducts(fetchedProducts);
       setLoadingProducts(false);
     }, (error) => {
@@ -236,7 +245,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const profileDataToSet: User = {
         id: firebaseUser.uid, 
-        email: firebaseUser.email,
+        email: firebaseUser.email!,
         name: displayName,
         points: existingData?.points ?? 0,
         isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
@@ -443,6 +452,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // createUserProfile will be called by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       setLoadingAuth(false);
       return true;
@@ -702,17 +712,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!_selectedStore || loadingProducts || allProducts.length === 0) return [];
 
     const today = new Date();
-    const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; // Match daysOfWeek: Mon-Sun
+    const currentDayIndex = today.getDay(); 
+    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; 
 
     let siteWideDiscountInfo: { category?: ProductCategory; brand?: string; discountPercentage: number; title: string; } | null = null;
 
-    // Define site-wide standard deals
-    if (currentDayName === 'Tuesday') { // 25% off "Vape"
+    if (currentDayName === 'Tuesday') {
       siteWideDiscountInfo = { category: 'Vape', discountPercentage: 25, title: "Tuesday Vape Special!" };
-    } else if (currentDayName === 'Wednesday') { // 15% off "Dodi Hemp" brand
+    } else if (currentDayName === 'Wednesday') {
       siteWideDiscountInfo = { brand: 'Dodi Hemp', discountPercentage: 15, title: "Dodi Brand Wednesday!" };
-    } else if (currentDayName === 'Thursday') { // 20% off "Edible"
+    } else if (currentDayName === 'Thursday') {
       siteWideDiscountInfo = { category: 'Edible', discountPercentage: 20, title: "Thirsty Thursday Edibles!" };
     }
     
@@ -735,18 +744,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let effectivePrice = basePrice;
           let originalPriceValue = basePrice;
           let isProductOnDeal = false;
-          let appliedDealTitle = "";
+          // let appliedDealTitle = ""; // Not currently used on product card
 
           // 1. Check for site-wide deal
           if (siteWideDiscountInfo) {
             if (siteWideDiscountInfo.category && p.category === siteWideDiscountInfo.category) {
               isProductOnDeal = true;
               effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
-              appliedDealTitle = siteWideDiscountInfo.title;
+              // appliedDealTitle = siteWideDiscountInfo.title;
             } else if (siteWideDiscountInfo.brand && p.brand === siteWideDiscountInfo.brand) {
               isProductOnDeal = true;
               effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
-              appliedDealTitle = siteWideDiscountInfo.title;
+              // appliedDealTitle = siteWideDiscountInfo.title;
             }
           }
 
@@ -756,7 +765,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
                 isProductOnDeal = true;
                 effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
-                appliedDealTitle = `${rule.discountPercentage}% off ${rule.category} today!`;
+                // appliedDealTitle = `${rule.discountPercentage}% off ${rule.category} today!`;
                 break; 
               }
             }
@@ -777,10 +786,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             stock: stock, 
             imageUrl: currentImageUrl,
             selectedWeight: selectedWeight,
-            // For flower specific fields, if any, to be added if needed
             availableWeights: p.category === 'Flower' ? availabilityForStore.weightOptions : undefined,
             totalStockInGrams: p.category === 'Flower' ? availabilityForStore.totalStockInGrams : undefined,
-            // appliedDealTitle: isProductOnDeal ? appliedDealTitle : undefined // Optional: if you want to show deal title on product card
           };
         };
 
@@ -789,7 +796,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           availabilityForStore.weightOptions.forEach(wo => {
             const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
             const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
-            if (unitsAvailable > 0) { // Only add if at least one unit can be made
+            if (unitsAvailable > 0) { 
                resolved.push(processProductVariant(wo.price, unitsAvailable, wo.weight));
             }
           });
@@ -809,8 +816,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const today = new Date();
-    const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; // Match daysOfWeek: Mon-Sun
+    const currentDayIndex = today.getDay(); 
+    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
@@ -825,19 +832,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!activeSiteWideDealConfig) {
-        return []; // No site-wide deal today, so homepage deals are empty based on this logic
-                   // Or, we could fall back to custom store deals for homepage here if desired.
-                   // For now, adhering to "new standard" being these specific deals.
+        return [];
     }
     
     return products
       .filter(p => {
-          // Check if product matches the site-wide deal criteria
           if (activeSiteWideDealConfig!.category && p.category === activeSiteWideDealConfig!.category) return true;
           if (activeSiteWideDealConfig!.brand && p.brand === activeSiteWideDealConfig!.brand) return true;
           return false;
       })
-      .filter(p => p.originalPrice && p.price < p.originalPrice && p.stock > 0) // Ensure it's actually discounted and in stock
+      .filter(p => p.originalPrice && p.price < p.originalPrice && p.stock > 0) 
       .map(dealProduct => ({
         id: `${dealProduct.variantId}-deal-${currentDayName}-${activeSiteWideDealConfig!.discountPercentage}`,
         product: dealProduct, 
@@ -846,7 +850,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         title: activeSiteWideDealConfig!.title,
         description: `${activeSiteWideDealConfig!.discountPercentage}% off select items today! Includes ${dealProduct.name}${dealProduct.selectedWeight ? ` (${dealProduct.selectedWeight})` : ''}.`,
         storeId: _selectedStore.id,
-        categoryOnDeal: dealProduct.category, // The product's actual category
+        categoryOnDeal: dealProduct.category,
       }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, products, loadingProducts]);
@@ -895,7 +899,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, getCartSubtotal, getCartTotal // Added getCartSubtotal and getCartTotal
+    userOrders, loadingUserOrders, fetchUserOrders
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -909,3 +913,4 @@ export function useAppContext() {
   return context;
 }
 
+    

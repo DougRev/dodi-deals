@@ -8,7 +8,7 @@ export interface ProductImportEntry {
   category: ProductCategory;
   brand: string;
   dataAiHint: string;
-  isFeatured?: boolean; // Added isFeatured
+  isFeatured?: boolean;
 }
 
 export const productsToImport: ProductImportEntry[] = [
@@ -199,7 +199,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Zlushiez",
     description: "Live Resin Delta 8 disposable with a unique terpene blend.",
     category: "Vape",
-    brand: "Dodi Live Resin", // Differentiating Delta 8
+    brand: "Dodi Live Resin", 
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -207,7 +207,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - White Truffle",
     description: "Live Resin Delta 8 disposable offering earthy flavors.",
     category: "Vape",
-    brand: "Dodi Live Resin", // Differentiating Delta 8
+    brand: "Dodi Live Resin", 
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -223,7 +223,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Slap Cakes",
     description: "Live Resin Delta 8 disposable with a sweet profile.",
     category: "Vape",
-    brand: "Dodi Live Resin", // Differentiating Delta 8
+    brand: "Dodi Live Resin", 
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -247,7 +247,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Lemon Cherry Gelato",
     description: "Live Resin Delta 8 disposable with citrus and cherry notes.",
     category: "Vape",
-    brand: "Dodi Live Resin", // Differentiating Delta 8
+    brand: "Dodi Live Resin", 
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -255,7 +255,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - dodi Berry",
     description: "Live Resin Delta 8 disposable featuring berry flavors.",
     category: "Vape",
-    brand: "Dodi Live Resin", // Differentiating Delta 8
+    brand: "Dodi Live Resin", 
     dataAiHint: "vape berry",
     isFeatured: false,
   },
@@ -353,4 +353,40 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "concentrate diamond",
     isFeatured: false,
   },
+
+  // Hemp Accessories
+  {
+    name: "Premium Glass Bong",
+    description: "High-quality borosilicate glass bong for a smooth experience.",
+    category: "Hemp Accessory",
+    brand: "Grav Labs", // Example actual brand
+    dataAiHint: "glass bong",
+    isFeatured: true,
+  },
+  {
+    name: "Organic Rolling Papers - King Size",
+    description: "Unbleached organic hemp rolling papers, king size.",
+    category: "Hemp Accessory",
+    brand: "RAW", // Example actual brand
+    dataAiHint: "rolling papers",
+    isFeatured: false,
+  },
+  {
+    name: "4-Piece Herb Grinder - Aluminum",
+    description: "Durable aluminum herb grinder with kief catcher.",
+    category: "Hemp Accessory",
+    brand: "Dodi Accessories",
+    dataAiHint: "herb grinder",
+    isFeatured: false,
+  },
+  {
+    name: "Artistic Rolling Tray - Medium",
+    description: "Medium sized rolling tray with unique artistic design.",
+    category: "Hemp Accessory",
+    brand: "Generic Brand",
+    dataAiHint: "rolling tray",
+    isFeatured: false,
+  },
 ];
+
+    

@@ -8,16 +8,27 @@ export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
 export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Updated Product Categories
-export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Accessory']);
+export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory']);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
-export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Accessory'];
+export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory'];
+
+// Predefined brands for product categories
+export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
+  'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Juice Head", "Twist", "Squeeze", "Dodi Hemp"],
+  'Flower': ["Dodi Hemp", "Cookies", "Kush Farms", "Alegreya Strains", "Indy Concentrates"],
+  'Pre-roll': ["Dodi Hemp"],
+  'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp"],
+  'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
+  'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
+};
+
 
 // Business rules for fixed daily categories (used as fallback or informational)
 export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
   Monday: 'Flower',
   Tuesday: 'Edible',
   Wednesday: 'Pre-roll',
-  Thursday: 'Accessory',
+  Thursday: 'Hemp Accessory', // Updated from 'Accessory'
   Friday: 'Vape',
 };
 
@@ -105,7 +116,7 @@ export type StoreAvailability = z.infer<typeof StoreAvailabilitySchema>;
 export const ProductSchema = z.object({
   name: z.string().min(3, { message: "Product name must be at least 3 characters." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
-  brand: z.string().min(2, { message: "Brand must be at least 2 characters." }),
+  brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
@@ -251,6 +262,7 @@ export interface User {
   storeRole?: StoreRole | null;
   noShowStrikes: number; // Added for 3-strike rule
   isBanned: boolean;     // Added for 3-strike rule
+  createdAt: string;     // Ensure createdAt is part of the User type
 }
 
 export interface CartItem {
@@ -307,3 +319,5 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
+
+    

@@ -7,30 +7,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Keep Label for general use if needed elsewhere
+// import { Label } from "@/components/ui/label"; // No longer used here
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { 
   StoreSchema, 
   type StoreFormData, 
   type Store, 
   daysOfWeek, 
-  type DayOfWeek, 
   type ProductCategory, 
-  productCategories,
-  type CustomDealRule, // Import CustomDealRule
-  // fixedDailyCategories, // No longer directly used for form generation
-  // type StoreDailyDealSetting // Removed
+  productCategories, // productCategories now includes "Hemp Accessory"
+  type CustomDealRule,
 } from '@/lib/types';
 import { addStore, updateStore, deleteStore } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle, Info } from 'lucide-react'; // Added Info
+import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 
@@ -50,14 +47,14 @@ export default function AdminStoresPage() {
       address: '',
       city: '',
       hours: '',
-      dailyDeals: [], // Default to an empty array of rules
+      dailyDeals: [], 
     },
   });
 
   const { fields: dealFields, append: appendDeal, remove: removeDeal } = useFieldArray({
     control: form.control,
     name: "dailyDeals",
-    keyName: "ruleId" // Use a different key name to avoid conflict if `id` is part of your rule data
+    keyName: "ruleId" 
   });
   
   useEffect(() => {
@@ -96,7 +93,6 @@ export default function AdminStoresPage() {
     setCurrentStore(store);
     form.reset({ 
       ...store, 
-      // Ensure each deal has a unique id for useFieldArray key prop if not already present
       dailyDeals: store.dailyDeals?.map(deal => ({ ...deal, id: deal.id || crypto.randomUUID() })) || []
     });
     setIsFormOpen(true);
@@ -125,7 +121,6 @@ export default function AdminStoresPage() {
 
   const handleSaveStore = async (data: StoreFormData) => {
     setLoading(true);
-    // Remove temporary 'id' used for UI keys before saving to Firestore
     const dailyDealsToSave = data.dailyDeals?.map(({ id, ...rest }) => rest) || [];
     const finalData = { ...data, dailyDeals: dailyDealsToSave };
 
@@ -412,3 +407,4 @@ export default function AdminStoresPage() {
   );
 }
 
+    
