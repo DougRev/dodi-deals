@@ -66,13 +66,24 @@ export const FlowerWeightEnum = z.enum(["3.5g", "7g", "14g", "1oz"]);
 export type FlowerWeight = z.infer<typeof FlowerWeightEnum>;
 export const flowerWeights: FlowerWeight[] = ["3.5g", "7g", "14g", "1oz"];
 
-// Schema for a single weight option for flowers, including its price and stock
-export const FlowerWeightPriceStockSchema = z.object({
+// Helper function to convert FlowerWeight string to grams
+export function flowerWeightToGrams(weight: FlowerWeight): number {
+  switch (weight) {
+    case "3.5g": return 3.5;
+    case "7g": return 7;
+    case "14g": return 14;
+    case "1oz": return 28; // Using common approximation
+    default: throw new Error(`Unknown flower weight: ${weight}`);
+  }
+}
+
+// Schema for a single weight option for flowers, including its price
+export const FlowerWeightPriceSchema = z.object({
   weight: FlowerWeightEnum,
   price: z.coerce.number().positive({ message: "Price for this weight must be a positive number." }),
-  stock: z.coerce.number().int().nonnegative({ message: "Stock for this weight must be a non-negative integer." })
+  // Stock is removed from here, will be managed by totalStockInGrams at StoreAvailability level for flowers
 });
-export type FlowerWeightPriceStock = z.infer<typeof FlowerWeightPriceStockSchema>;
+export type FlowerWeightPrice = z.infer<typeof FlowerWeightPriceSchema>;
 
 // Schema for store-specific availability of a product
 export const StoreAvailabilitySchema = z.object({
@@ -81,7 +92,8 @@ export const StoreAvailabilitySchema = z.object({
   price: z.coerce.number().positive({ message: "Price must be a positive number." }).optional(),
   stock: z.coerce.number().int().nonnegative({ message: "Stock must be a non-negative integer." }).optional(),
   // For Flower products
-  weightOptions: z.array(FlowerWeightPriceStockSchema)
+  totalStockInGrams: z.coerce.number().nonnegative({ message: "Total stock in grams must be a non-negative number." }).optional(),
+  weightOptions: z.array(FlowerWeightPriceSchema) // Note: stock is removed from FlowerWeightPriceSchema
     .optional()
     .refine(options => !options || new Set(options.map(opt => opt.weight)).size === options.length, {
       message: "Each weight can only be defined once per store for flower products.",
@@ -107,27 +119,31 @@ export const ProductSchema = z.object({
 }).superRefine((data, ctx) => {
   data.availability.forEach((avail, index) => {
     if (data.category === 'Flower') {
-      if (!avail.weightOptions || avail.weightOptions.length === 0) {
+      if (!avail.weightOptions || avail.weightOptions.length !== flowerWeights.length) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Flower products require at least one weight option (e.g., 3.5g) with price and stock for each store.",
+          message: `Flower products require price definition for all standard weights (${flowerWeights.join(', ')}).`,
           path: [`availability`, index, `weightOptions`],
         });
-      } else if (avail.weightOptions.length > 0 && flowerWeights.some(fw => !avail.weightOptions?.find(wo => wo.weight === fw))) {
-        // Optional: could warn if not all standard weights are defined, but not strictly an error if at least one is.
-        // For now, just ensure at least one is present.
       }
-      if (avail.price !== undefined && avail.price !== null) {
+      if (avail.totalStockInGrams === undefined || avail.totalStockInGrams === null || avail.totalStockInGrams < 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Total stock in grams is required and must be non-negative for Flower products.",
+          path: [`availability`, index, `totalStockInGrams`],
+        });
+      }
+      if (avail.price !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Base price should not be set for Flower products; define prices within weight options.",
           path: [`availability`, index, `price`],
         });
       }
-      if (avail.stock !== undefined && avail.stock !== null) {
+      if (avail.stock !== undefined) {
          ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Base stock should not be set for Flower products; define stock within weight options.",
+          message: "Base stock should not be set for Flower products; use Total Stock (grams).",
           path: [`availability`, index, `stock`],
         });
       }
@@ -137,6 +153,13 @@ export const ProductSchema = z.object({
           code: z.ZodIssueCode.custom,
           message: "Weight options should only be defined for Flower products.",
           path: [`availability`, index, `weightOptions`],
+        });
+      }
+      if (avail.totalStockInGrams !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Total stock in grams should only be defined for Flower products.",
+          path: [`availability`, index, `totalStockInGrams`],
         });
       }
       if (avail.price === undefined || avail.price === null || avail.price <= 0) {
@@ -165,7 +188,7 @@ export interface Product extends Omit<ProductFormData, 'availability' | 'categor
   id: string;
   category: ProductCategory; // Ensure category is part of the base Product
   isFeatured?: boolean;
-  availability: StoreAvailability[]; // This type now supports optional weightOptions
+  availability: StoreAvailability[];
 }
 
 // This "resolved" type is used by AppContext to provide product info to UI components
@@ -180,19 +203,21 @@ export interface ResolvedProduct {
   isFeatured?: boolean;
   storeId: string;
   // For non-flower products:
-  price: number; // Base price or price of default/selected weight for flowers
-  stock: number; // Base stock or stock of default/selected weight for flowers
+  price: number;
+  stock: number; // For non-flowers, this is direct stock. For flowers, this will be calculated units of the selected weight.
   // For flower products:
-  availableWeights?: FlowerWeightPriceStock[]; // Populated if category is Flower
+  totalStockInGrams?: number; // Only for flowers
+  availableWeights?: FlowerWeightPrice[]; // Only for flowers, price per weight
   originalPrice?: number; // The base price if currently on deal, otherwise same as price or undefined
   imageUrl: string;
+  selectedWeight?: FlowerWeight; // If it's a flower product and a weight has been selected by the user
 }
 
 
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
 export interface Deal {
   id: string;
-  product: ResolvedProduct; // Deal will be on a specific variant/weight of a flower if applicable
+  product: ResolvedProduct;
   discountPercentage: number;
   expiresAt: string;
   title: string;
@@ -218,10 +243,10 @@ export interface User {
 }
 
 export interface CartItem {
-  product: ResolvedProduct; // This will need to contain the base product info
+  product: ResolvedProduct;
   quantity: number;
   selectedWeight?: FlowerWeight; // For flower products
-  priceAtPurchase: number; // The actual price for the selected weight/deal
+  // priceAtPurchase is removed, ResolvedProduct.price should hold the current price for the selected weight/deal
 }
 
 // Order related types
@@ -272,3 +297,6 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
+
+
+    

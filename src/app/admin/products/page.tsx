@@ -15,11 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPriceStock } from '@/lib/types';
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPrice } from '@/lib/types';
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
@@ -29,9 +29,9 @@ const getDefaultAvailability = (category: ProductFormData['category'], stores: S
   if (category === 'Flower') {
     return [{
       storeId: defaultStoreId,
-      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), // Only price, stock removed
+      totalStockInGrams: 0, // Added totalStockInGrams
       storeSpecificImageUrl: '',
-      // price and stock are not set for flower
     }];
   }
   return [{
@@ -39,7 +39,6 @@ const getDefaultAvailability = (category: ProductFormData['category'], stores: S
     price: 0,
     stock: 0,
     storeSpecificImageUrl: '',
-    // weightOptions is not set for non-flower
   }];
 };
 
@@ -68,26 +67,33 @@ export default function AdminProductsPage() {
 
   const watchedCategory = useWatch({ control: form.control, name: 'category' });
 
-  const { fields: availabilityFields, append: appendAvailability, remove: removeAvailability, replace: replaceAvailability } = useFieldArray({
+  const { fields: availabilityFields, append: appendAvailability, remove: removeAvailability } = useFieldArray({
     control: form.control,
     name: "availability"
   });
 
-  // Reset availability structure when category changes
   useEffect(() => {
-    if (form.formState.isSubmitted) return; // Don't reset if form was submitted
+    if (form.formState.isSubmitted) return;
 
     const currentAvailability = form.getValues('availability');
     const newAvailabilityStructure = currentAvailability.map(avail => {
       if (watchedCategory === 'Flower') {
+        // Ensure all standard flowerWeights are present in weightOptions with their prices
+        const completeWeightOptions = flowerWeights.map(fw => {
+          const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
+          return {
+            weight: fw,
+            price: existingOption?.price || 0,
+            // stock: undefined // stock is removed from FlowerWeightPrice
+          };
+        });
         return {
           storeId: avail.storeId,
           storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
-          weightOptions: avail.weightOptions && avail.weightOptions.length > 0 && avail.weightOptions.length === flowerWeights.length
-            ? avail.weightOptions
-            : flowerWeights.map(fw => ({ weight: fw, price: (avail.weightOptions?.find(wo => wo.weight === fw)?.price || 0), stock: (avail.weightOptions?.find(wo => wo.weight === fw)?.stock || 0) })),
-          price: undefined, // Ensure base price is not set
-          stock: undefined, // Ensure base stock is not set
+          weightOptions: completeWeightOptions,
+          totalStockInGrams: avail.totalStockInGrams || 0,
+          price: undefined,
+          stock: undefined,
         };
       } else {
         return {
@@ -95,18 +101,17 @@ export default function AdminProductsPage() {
           storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
           price: avail.price || 0,
           stock: avail.stock || 0,
-          weightOptions: undefined, // Ensure weightOptions are not set
+          weightOptions: undefined,
+          totalStockInGrams: undefined,
         };
       }
     });
-    // Check if actual structural change is needed to avoid infinite loops
     if (JSON.stringify(currentAvailability) !== JSON.stringify(newAvailabilityStructure)) {
         form.setValue('availability', newAvailabilityStructure as any, { shouldValidate: true, shouldDirty: true });
     }
   }, [watchedCategory, form, stores]);
 
 
-  // Effect for initializing form (new or edit)
   useEffect(() => {
     if (isFormOpen) {
       let initialValues: ProductFormData;
@@ -117,19 +122,17 @@ export default function AdminProductsPage() {
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
             if (currentProduct.category === 'Flower') {
-              // Ensure all flowerWeights are present in weightOptions when editing
-              const currentWeightOptions = avail.weightOptions || [];
               const completeWeightOptions = flowerWeights.map(fw => {
-                const existingOption = currentWeightOptions.find(wo => wo.weight === fw);
+                const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
                 return {
                   weight: fw,
                   price: existingOption?.price || 0,
-                  stock: existingOption?.stock || 0,
                 };
               });
               return {
                 ...avail,
                 weightOptions: completeWeightOptions,
+                totalStockInGrams: avail.totalStockInGrams || 0,
                 price: undefined,
                 stock: undefined,
               };
@@ -139,6 +142,7 @@ export default function AdminProductsPage() {
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
               weightOptions: undefined,
+              totalStockInGrams: undefined,
             };
           }) as StoreAvailability[],
         };
@@ -157,8 +161,7 @@ export default function AdminProductsPage() {
       }
       form.reset(initialValues);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFormOpen, currentProduct, form.reset, stores]); // Added stores to ensure default availability has store IDs
+  }, [isFormOpen, currentProduct, form.reset, stores]);
 
 
   const handleAddNewProduct = () => {
@@ -179,7 +182,6 @@ export default function AdminProductsPage() {
 
   const handleEditProduct = (product: Product) => {
     setCurrentProduct(product);
-    // Form reset is handled by the useEffect for isFormOpen and currentProduct
     setIsFormOpen(true);
   };
 
@@ -218,10 +220,9 @@ export default function AdminProductsPage() {
               weightOptions: avail.weightOptions?.map(wo => ({
                 ...wo,
                 price: Number(wo.price),
-                stock: Number(wo.stock),
               })) || [],
+              totalStockInGrams: Number(avail.totalStockInGrams) || 0,
               storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
-              // price and stock deliberately undefined for flowers
             };
           } else {
             return {
@@ -229,10 +230,9 @@ export default function AdminProductsPage() {
               price: Number(avail.price),
               stock: Number(avail.stock),
               storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
-              // weightOptions deliberately undefined for non-flowers
             };
           }
-        }) as any, // Cast because TS struggles with discriminated union within array map
+        }) as any,
       };
 
       if (currentProduct) {
@@ -267,12 +267,12 @@ export default function AdminProductsPage() {
 
     if (currentFormAvailabilities.length === 1 && (!currentFormAvailabilities[0].storeId || currentFormAvailabilities[0].storeId.trim() === '')) {
         const placeholder = currentFormAvailabilities[0];
-        removeAvailability(0); // Remove the placeholder.
+        removeAvailability(0);
 
         stores.forEach(store => {
             appendAvailability(
                 currentCategory === 'Flower' ?
-                { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: placeholder.weightOptions?.find(wo => wo.weight === fw)?.price || 0, stock: placeholder.weightOptions?.find(wo => wo.weight === fw)?.stock || 0 })), storeSpecificImageUrl: '' } :
+                { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: placeholder.weightOptions?.find(wo => wo.weight === fw)?.price || 0 })), totalStockInGrams: placeholder.totalStockInGrams || 0, storeSpecificImageUrl: '' } :
                 { storeId: store.id, price: placeholder.price || 0, stock: placeholder.stock || 0, storeSpecificImageUrl: '' }
             );
             operationsPerformed++;
@@ -290,7 +290,7 @@ export default function AdminProductsPage() {
             if (!existingStoreIdsInForm.has(store.id)) {
                 appendAvailability(
                     currentCategory === 'Flower' ?
-                    { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: firstEntry?.weightOptions?.find(wo => wo.weight === fw)?.price || 0, stock: firstEntry?.weightOptions?.find(wo => wo.weight === fw)?.stock || 0 })), storeSpecificImageUrl: '' } :
+                    { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: firstEntry?.weightOptions?.find(wo => wo.weight === fw)?.price || 0 })), totalStockInGrams: firstEntry?.totalStockInGrams || 0, storeSpecificImageUrl: '' } :
                     { storeId: store.id, price: firstEntry?.price || 0, stock: firstEntry?.stock || 0, storeSpecificImageUrl: '' }
                 );
                 operationsPerformed++;
@@ -361,7 +361,6 @@ export default function AdminProductsPage() {
               <FormField control={form.control} name="baseImageUrl" render={({ field }) => ( <FormItem><FormLabel>Base Image URL</FormLabel><FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>{field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative"><Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/></div>)}<FormMessage /></FormItem>)}/>
               <FormField control={form.control} name="isFeatured" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
 
-              {/* Store Availability Section */}
               <div className="space-y-4 rounded-md border p-4">
                 <div className="flex justify-between items-center">
                     <FormLabel className="text-md font-semibold text-primary">Store Availability</FormLabel>
@@ -396,48 +395,47 @@ export default function AdminProductsPage() {
                     />
 
                     {watchedCategory === 'Flower' ? (
-                      <div className="space-y-3 pt-2 border-t mt-3">
-                        <FormLabel className="text-sm font-medium text-primary flex items-center"><Weight className="mr-2 h-4 w-4"/>Weight Options for Flower</FormLabel>
-                        {flowerWeights && flowerWeights.length > 0 ? flowerWeights.map((fw, weightIndex) => {
-                           const weightOptPath = `availability.${storeAvailIndex}.weightOptions`;
-                           // Ensure the default value structure from `form.reset` or `getDefaultAvailability`
-                           // provides an entry for each `fw` in `flowerWeights`.
-                           // The form value at `weightOptPath` should be an array of `FlowerWeightPriceStock`.
-
-                          return (
-                            <Card key={`${storeAvailField.id}-${fw}`} className="p-3 bg-muted/50">
-                              <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
-                              <div className="grid grid-cols-2 gap-3 mt-1">
-                                <FormField
-                                  control={form.control}
-                                  name={`${weightOptPath}.${weightIndex}.price` as any}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Price ($)</FormLabel>
-                                      <FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name={`${weightOptPath}.${weightIndex}.stock` as any}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs">Stock</FormLabel>
-                                      <FormControl><Input type="number" placeholder="0" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                                {/* Hidden field to store the weight itself, react-hook-form needs it */}
-                                <Controller name={`${weightOptPath}.${weightIndex}.weight` as any} control={form.control} defaultValue={fw} render={({ field }) => <input type="hidden" {...field} />} />
-                              </div>
-                            </Card>
-                          );
-                        }) : <p className="text-xs text-muted-foreground">Weight options not available.</p>}
-                         {form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message && <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message}</FormMessage>}
-                      </div>
+                      <>
+                        <FormField
+                          control={form.control}
+                          name={`availability.${storeAvailIndex}.totalStockInGrams`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center"><PackagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>Total Stock (grams)</FormLabel>
+                              <FormControl><Input type="number" placeholder="e.g., 28 for 1 ounce" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.1" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="space-y-3 pt-2 border-t mt-3">
+                          <FormLabel className="text-sm font-medium text-primary flex items-center"><Weight className="mr-2 h-4 w-4"/>Weight Option Prices</FormLabel>
+                          {flowerWeights && flowerWeights.length > 0 ? flowerWeights.map((fw, weightIndex) => {
+                            const weightOptPath = `availability.${storeAvailIndex}.weightOptions`;
+                            return (
+                              <Card key={`${storeAvailField.id}-${fw}`} className="p-3 bg-muted/50">
+                                <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
+                                <div className="grid grid-cols-1 gap-3 mt-1"> {/* Only price now */}
+                                  <FormField
+                                    control={form.control}
+                                    name={`${weightOptPath}.${weightIndex}.price` as any}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-xs">Price ($)</FormLabel>
+                                        <FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  {/* Hidden field to store the weight itself */}
+                                  <Controller name={`${weightOptPath}.${weightIndex}.weight` as any} control={form.control} defaultValue={fw} render={({ field }) => <input type="hidden" {...field} />} />
+                                </div>
+                              </Card>
+                            );
+                          }) : <p className="text-xs text-muted-foreground">Weight options not available.</p>}
+                          {form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message && <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message}</FormMessage>}
+                           {form.formState.errors.availability?.[storeAvailIndex]?.totalStockInGrams?.message && <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.totalStockInGrams?.message}</FormMessage>}
+                        </div>
+                      </>
                     ) : (
                       <div className="grid grid-cols-2 gap-4">
                         <FormField control={form.control} name={`availability.${storeAvailIndex}.price`} render={({ field }) => (
@@ -462,7 +460,7 @@ export default function AdminProductsPage() {
                 <Button type="button" variant="outline" size="sm" onClick={() => {
                     const currentCategory = form.getValues('category');
                     const newAvailEntry = currentCategory === 'Flower' ?
-                        { storeId: stores.length > 0 ? stores[0].id : '', weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })), storeSpecificImageUrl: '' } :
+                        { storeId: stores.length > 0 ? stores[0].id : '', weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), totalStockInGrams: 0, storeSpecificImageUrl: '' } :
                         { storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' };
                     appendAvailability(newAvailEntry as any);
                 }} disabled={loadingStores}>
@@ -523,7 +521,7 @@ export default function AdminProductsPage() {
                   <TableHead>Featured</TableHead>
                   <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Availability / Pricing</TableHead>
+                  <TableHead>Availability / Pricing / Stock</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -544,10 +542,10 @@ export default function AdminProductsPage() {
                     <TableCell>
                         {product.availability?.length > 0
                             ? product.category === 'Flower' && product.availability[0].weightOptions && product.availability[0].weightOptions.length > 0
-                                ? `${product.availability.length} store(s) - e.g., ${product.availability[0].weightOptions[0].weight} @ $${(product.availability[0].weightOptions[0].price || 0).toFixed(2)}`
-                                : product.availability[0].price !== undefined // Check if price is defined for non-flower
-                                    ? `${product.availability.length} store(s) - e.g., $${(product.availability[0].price as number).toFixed(2)}`
-                                    : "Pricing not set"
+                                ? `${product.availability.length} store(s) - e.g., ${product.availability[0].weightOptions[0].weight} @ $${(product.availability[0].weightOptions[0].price || 0).toFixed(2)} (Total: ${product.availability[0].totalStockInGrams || 0}g)`
+                                : product.availability[0].price !== undefined
+                                    ? `${product.availability.length} store(s) - e.g., $${(product.availability[0].price as number).toFixed(2)} (Stock: ${product.availability[0].stock || 0})`
+                                    : "Details not set"
                             : "Not available"}
                     </TableCell>
                     <TableCell className="text-right space-x-2">
@@ -573,6 +571,5 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
 
     
