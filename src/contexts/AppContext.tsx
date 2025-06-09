@@ -601,7 +601,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getPotentialPointsForCart = useCallback(() => {
     const finalTotalAfterPotentialRedemption = getCartTotal();
-    return Math.floor(finalTotalAfterPotentialRedemption * 1); // Updated to 1 point per dollar
+    return Math.floor(finalTotalAfterPotentialRedemption * 1);
   }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
@@ -676,7 +676,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
     const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
     
-    const pointsCalculated = Math.floor(finalTotal * 1); // Updated to 1 point per dollar
+    const pointsCalculated = Math.floor(finalTotal * 1);
 
     const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
@@ -739,7 +739,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
           currentImageUrl = p.baseImageUrl;
         } else {
-          const categoryPath = p.category && typeof p.category === 'string' ? p.category.toLowerCase().replace(/\s+/g, '-') : 'default';
+          const categoryString = (typeof p.category === 'string' && p.category) ? p.category : 'default';
+          const categoryPath = categoryString.toLowerCase().replace(/\s+/g, '-');
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 

@@ -18,14 +18,14 @@ export default function ProductsPage() {
   const [selectedBrand, setSelectedBrand] = useState<'All' | string>('All');
 
   const categories = useMemo(() => {
-    if (loadingProducts) return ['All'];
+    if (loadingProducts || !allProducts) return ['All'];
     // Get unique categories from *all* product definitions
     const uniqueCategoriesFromAllProducts = new Set(allProducts.map(p => p.category));
     return ['All', ...Array.from(uniqueCategoriesFromAllProducts).sort()] as ('All' | ProductCategory)[];
   }, [allProducts, loadingProducts]);
 
   const brands = useMemo(() => {
-    if (loadingProducts) return ['All'];
+    if (loadingProducts || !allProducts) return ['All'];
     let productsToConsiderForBrands = allProducts;
     if (selectedCategory !== 'All') {
         productsToConsiderForBrands = allProducts.filter(p => p.category === selectedCategory);
@@ -41,8 +41,9 @@ export default function ProductsPage() {
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
       const matchesBrand = selectedBrand === 'All' || product.brand === selectedBrand;
-      const matchesSearchTerm = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                product.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearchTerm =
+        (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesBrand && matchesSearchTerm;
     });
   }, [products, searchTerm, selectedCategory, selectedBrand, selectedStore]);
@@ -135,7 +136,7 @@ export default function ProductsPage() {
       ) : filteredProductsForDisplay.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredProductsForDisplay.map((product) => (
-            <ProductCard key={product.variantId} product={product} /> // Use variantId for key as product.id might not be unique if Flower product has multiple weights
+            <ProductCard key={product.variantId} product={product} />
           ))}
         </div>
       ) : (
@@ -150,4 +151,3 @@ export default function ProductsPage() {
     </div>
   );
 }
-
