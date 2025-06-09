@@ -292,7 +292,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Artistic Design Rolling Tray - Galaxy Medium",
     description: "Medium sized rolling tray with a unique galaxy artistic design. Metal construction.",
     category: "Hemp Accessory",
-    brand: "Generic Brand", 
+    brand: "Dodi Accessories", 
     dataAiHint: "rolling tray",
     isFeatured: false,
   },
