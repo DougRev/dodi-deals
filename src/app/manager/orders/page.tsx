@@ -4,14 +4,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getStoreOrdersByStatus, updateOrderStatus } from '@/lib/firestoreService';
-import type { Order, OrderStatus } from '@/lib/types';
+import type { Order, OrderStatus, CancellationReason } from '@/lib/types';
+import { cancellationReasons } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX } from 'lucide-react'; // Added UserX
+import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX, FileText, Edit2 } from 'lucide-react';
 
 // Updated status groupings
 const ACTIVE_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup"];
@@ -29,7 +33,13 @@ export default function ManagerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [viewingArchived, setViewingArchived] = useState(false); 
+  const [viewingArchived, setViewingArchived] = useState(false);
+
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [orderToCancelDetails, setOrderToCancelDetails] = useState<{ orderId: string; currentStatus: OrderStatus; userName: string } | null>(null);
+  const [selectedCancelReason, setSelectedCancelReason] = useState<CancellationReason | ''>('');
+  const [cancelDescription, setCancelDescription] = useState('');
+
 
   const fetchOrders = useCallback(async (storeId: string, activeView: boolean) => {
     setLoadingOrders(true);
@@ -57,10 +67,10 @@ export default function ManagerOrdersPage() {
   }, [user, loadingAuth, fetchOrders, viewingArchived]);
 
 
-  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus, reason?: CancellationReason, description?: string) => {
     setUpdatingOrderId(orderId);
     try {
-      await updateOrderStatus(orderId, newStatus);
+      await updateOrderStatus(orderId, newStatus, reason, description);
       toast({ title: "Order Status Updated", description: `Order ${orderId.substring(0,6)}... moved to ${newStatus}.` });
       
       if (user?.assignedStoreId) {
@@ -74,25 +84,43 @@ export default function ManagerOrdersPage() {
     }
   };
 
+  const openCancelDialog = (order: Order) => {
+    setOrderToCancelDetails({ orderId: order.id, currentStatus: order.status, userName: order.userName });
+    setSelectedCancelReason('');
+    setCancelDescription('');
+    setIsCancelDialogOpen(true);
+  };
+
+  const handleConfirmCancellation = async () => {
+    if (!orderToCancelDetails || !selectedCancelReason) {
+      toast({ title: "Invalid Input", description: "Please select a reason for cancellation.", variant: "destructive"});
+      return;
+    }
+    setIsCancelDialogOpen(false);
+    await handleStatusChange(orderToCancelDetails.orderId, "Cancelled", selectedCancelReason, cancelDescription);
+    setOrderToCancelDetails(null);
+  };
+
+
   const getNextStatusOptions = (currentStatus: OrderStatus): OrderStatus[] => {
     switch (currentStatus) {
       case "Pending Confirmation":
-        return ["Preparing", "Cancelled"];
+        return ["Preparing"]; // "Cancelled" handled by dedicated dialog
       case "Preparing":
-        return ["Ready for Pickup", "Cancelled"];
+        return ["Ready for Pickup"]; // "Cancelled" handled by dedicated dialog
       case "Ready for Pickup":
-        return ["Completed", "Cancelled"]; 
+        return ["Completed"]; // "Cancelled" handled by dedicated dialog
       default:
-        return []; 
+        return [];
     }
   };
 
   const getStatusBadgeVariant = (status: OrderStatus): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
-      case "Pending Confirmation": return "default"; 
-      case "Preparing": return "secondary"; 
-      case "Ready for Pickup": return "outline"; 
-      case "Completed": return "default"; 
+      case "Pending Confirmation": return "default";
+      case "Preparing": return "secondary";
+      case "Ready for Pickup": return "outline";
+      case "Completed": return "default";
       case "Cancelled": return "destructive";
       default: return "secondary";
     }
@@ -120,8 +148,8 @@ export default function ManagerOrdersPage() {
             <h2 className="text-2xl font-semibold font-headline text-primary">
                 {viewingArchived ? "Archived Orders" : "Active Orders"} for {selectedStore?.name || "Your Store"}
             </h2>
-            <Button 
-                variant="outline" 
+            <Button
+                variant="outline"
                 onClick={() => setViewingArchived(!viewingArchived)}
                 disabled={loadingOrders}
             >
@@ -192,30 +220,51 @@ export default function ManagerOrdersPage() {
                       <div className="flex items-center justify-center h-10">
                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
                       </div>
-                    ) : getNextStatusOptions(order.status).length > 0 ? (
-                        <div className="flex flex-col sm:flex-row gap-2">
+                    ) : (
+                      <div className="flex flex-col sm:flex-row gap-2">
                         {getNextStatusOptions(order.status).map(nextStatus => (
                             <Button
                             key={nextStatus}
                             size="sm"
-                            variant={nextStatus === "Cancelled" ? "destructive" : "default"}
+                            variant="default"
                             onClick={() => handleStatusChange(order.id, nextStatus)}
                             className="flex-1"
                             >
-                            {nextStatus === "Preparing" ? "Accept & Prepare" : 
-                             nextStatus === "Ready for Pickup" ? "Mark Ready" : 
-                             nextStatus === "Completed" ? "Mark Completed" : 
-                             nextStatus === "Cancelled" ? "Cancel Order" : 
+                            {nextStatus === "Preparing" ? "Accept & Prepare" :
+                             nextStatus === "Ready for Pickup" ? "Mark Ready" :
+                             nextStatus === "Completed" ? "Mark Completed" :
                              `Set to ${nextStatus}`}
                             </Button>
                         ))}
-                        </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No further actions available for this order status.</p>
+                        {/* Add a dedicated Cancel button if the order is not already completed or cancelled */}
+                        {(order.status !== "Completed" && order.status !== "Cancelled") && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => openCancelDialog(order)}
+                            className="flex-1"
+                          >
+                            Cancel Order
+                          </Button>
+                        )}
+                      </div>
                     )}
+                     {(order.status === "Completed" || order.status === "Cancelled") && (
+                         <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>
+                     )}
                     <p className="text-xs text-muted-foreground mt-3">
                         Pickup Instructions: {order.pickupInstructions}
                     </p>
+                    {order.status === "Cancelled" && order.cancellationReason && (
+                      <div className="mt-3 p-2 bg-destructive/10 rounded-md">
+                        <p className="text-xs font-semibold text-destructive flex items-center">
+                            <FileText className="mr-1 h-3 w-3"/> Cancellation Reason: {order.cancellationReason}
+                        </p>
+                        {order.cancellationDescription && (
+                            <p className="text-xs text-destructive/80 mt-0.5">Note: {order.cancellationDescription}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </AccordionContent>
@@ -229,7 +278,59 @@ export default function ManagerOrdersPage() {
                 Refresh Orders
             </Button>
         </div>
+
+        <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel Order: {orderToCancelDetails?.orderId.substring(0,8)}... for {orderToCancelDetails?.userName}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Select a reason for cancelling this order. If "Customer No-Show" is selected, a strike will be applied to the user's account.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-4 py-2">
+                    <div>
+                        <Label htmlFor="cancel-reason">Cancellation Reason</Label>
+                        <Select
+                            value={selectedCancelReason}
+                            onValueChange={(value) => setSelectedCancelReason(value as CancellationReason)}
+                        >
+                            <SelectTrigger id="cancel-reason">
+                                <SelectValue placeholder="Select a reason" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {cancellationReasons.map(reason => (
+                                    <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div>
+                        <Label htmlFor="cancel-description">Description (Optional)</Label>
+                        <Textarea
+                            id="cancel-description"
+                            placeholder="Provide additional details about the cancellation..."
+                            value={cancelDescription}
+                            onChange={(e) => setCancelDescription(e.target.value)}
+                            rows={3}
+                        />
+                    </div>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setOrderToCancelDetails(null)}>Back</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleConfirmCancellation}
+                        disabled={!selectedCancelReason || updatingOrderId === orderToCancelDetails?.orderId}
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                    >
+                        {updatingOrderId === orderToCancelDetails?.orderId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Confirm Cancellation
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
     </div>
   );
 }
 
+    

@@ -14,20 +14,20 @@ export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll
 
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
-  'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Dodi Hemp"], // Juice Head, Twist, Squeeze removed
+  'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Dodi Hemp"],
   'Flower': ["Dodi Hemp"],
   'Pre-roll': ["Dodi Hemp"],
   'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp"],
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
   'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
-  'E-Liquid': ["Juice Head", "Twist", "Squeeze"], // New E-Liquid category
+  'E-Liquid': ["Juice Head", "Twist", "Squeeze"],
 };
 
 
 // Business rules for fixed daily categories (used as fallback or informational)
 export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
   Monday: 'Flower',
-  Tuesday: 'Vape', 
+  Tuesday: 'Vape',
   Wednesday: 'Pre-roll',
   Thursday: 'Hemp Accessory',
   Friday: 'Vape',
@@ -283,6 +283,10 @@ export const OrderStatusEnum = z.enum(["Pending Confirmation", "Preparing", "Rea
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
 export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"];
 
+export const CancellationReasonEnum = z.enum(["Inventory Issue", "Customer No-Show", "Customer Request", "Other"]);
+export type CancellationReason = z.infer<typeof CancellationReasonEnum>;
+export const cancellationReasons: CancellationReason[] = ["Inventory Issue", "Customer No-Show", "Customer Request", "Other"];
+
 
 export interface OrderItem {
   productId: string;
@@ -310,6 +314,8 @@ export interface Order {
   status: OrderStatus;
   pickupInstructions?: string;
   userStrikesAtOrderTime?: number; // Store user's strike count at the time of order
+  cancellationReason?: CancellationReason;
+  cancellationDescription?: string;
 }
 
 // For Points Redemption

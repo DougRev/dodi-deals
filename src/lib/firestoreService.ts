@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight } from '@/lib/types'; // Added FlowerWeight
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason } from '@/lib/types'; // Added FlowerWeight, CancellationReason
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { flowerWeightToGrams } from '@/lib/types';
@@ -118,7 +118,7 @@ export async function deleteStore(storeId: string): Promise<void> {
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called for ID: ${storeId}`);
-  
+
   const storeRef = adminDb!.collection('stores').doc(storeId);
   try {
     await storeRef.delete();
@@ -185,11 +185,11 @@ export async function getAllUsers(): Promise<User[]> {
     const snapshot = await usersColRef.get();
     return snapshot.docs.map(docSnap => {
       const data = docSnap.data();
-      return { 
-        id: docSnap.id, 
+      return {
+        id: docSnap.id,
         ...data,
         assignedStoreId: data.assignedStoreId || null,
-        storeRole: data.storeRole || null, 
+        storeRole: data.storeRole || null,
         noShowStrikes: data.noShowStrikes || 0, // Default if missing
         isBanned: data.isBanned || false,       // Default if missing
       } as User;
@@ -231,20 +231,20 @@ export async function updateUserConfiguration(
       updatePayload.assignedStoreId = updates.assignedStoreId;
     }
 
-    if (updatePayload.assignedStoreId === null) { 
+    if (updatePayload.assignedStoreId === null) {
       updatePayload.storeRole = null;
-    } else if (updates.storeRole !== undefined) { 
+    } else if (updates.storeRole !== undefined) {
         if (updatePayload.assignedStoreId !== undefined && updatePayload.assignedStoreId !== null) {
              updatePayload.storeRole = updates.storeRole;
-        } else if (updatePayload.assignedStoreId === undefined) { 
+        } else if (updatePayload.assignedStoreId === undefined) {
             const currentDoc = await userRef.get();
             if (currentDoc.exists && (currentDoc.data() as User).assignedStoreId) {
                 updatePayload.storeRole = updates.storeRole;
-            } else if (updates.storeRole !== null) { 
+            } else if (updates.storeRole !== null) {
                  console.warn(`[firestoreService][AdminSDK][${functionName}] User ${userId} has no assigned store. Cannot set storeRole to '${updates.storeRole}'. Role will be set to null.`);
                  updatePayload.storeRole = null;
             } else {
-                 updatePayload.storeRole = null; 
+                 updatePayload.storeRole = null;
             }
         }
     } else if (updatePayload.assignedStoreId && updatePayload.storeRole === undefined) {
@@ -254,7 +254,7 @@ export async function updateUserConfiguration(
         }
     }
   }
-  
+
   if (Object.keys(updatePayload).length === 0) {
     console.log(`[firestoreService][AdminSDK][${functionName}] No valid updates to perform for user ${userId}.`);
     return;
@@ -304,12 +304,12 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
 
 export async function createOrderInFirestore(
   orderData: Omit<Order, 'id' | 'orderDate' | 'status'> & { pointsEarned: number } // Expect pointsEarned from AppContext now
-): Promise<{orderId: string }> { 
+): Promise<{orderId: string }> {
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
 
   const fullOrderData: Omit<Order, 'id'> = {
-    ...orderData, 
+    ...orderData,
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
     // pointsEarned is now passed in directly from orderData (calculated in AppContext)
@@ -337,7 +337,7 @@ export async function createOrderInFirestore(
         if (!storeAvailability) {
           throw new Error(`Product ${item.productName} is not configured for store ${fullOrderData.storeName}.`);
         }
-        
+
         if (product.category === 'Flower') {
           if (!item.selectedWeight) {
             throw new Error(`Flower product ${item.productName} in order is missing selected weight.`);
@@ -358,13 +358,13 @@ export async function createOrderInFirestore(
 
         const newAvailabilityArray = product.availability.map(avail =>
           avail.storeId === fullOrderData.storeId
-            ? storeAvailability 
+            ? storeAvailability
             : avail
         );
         productUpdates.push({ ref: productRef, newAvailability: newAvailabilityArray });
       }
 
-      const newOrderRef = ordersColRef.doc(); 
+      const newOrderRef = ordersColRef.doc();
       transaction.set(newOrderRef, fullOrderData);
 
       for (const update of productUpdates) {
@@ -423,7 +423,7 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
     const snapshot = await ordersColRef
       .where('storeId', '==', storeId)
       .where('status', 'in', statuses)
-      .orderBy('orderDate', 'asc') 
+      .orderBy('orderDate', 'asc')
       .get();
 
     if (snapshot.empty) {
@@ -444,17 +444,21 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
   }
 }
 
-export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
+export async function updateOrderStatus(
+    orderId: string,
+    newStatus: OrderStatus,
+    cancellationReason?: CancellationReason,
+    cancellationDescription?: string
+): Promise<void> {
   const functionName = 'updateOrderStatus (Transactional)';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}. Reason: ${cancellationReason}, Desc: ${cancellationDescription}`);
 
   const orderRef = adminDb!.collection('orders').doc(orderId);
   const usersColRef = adminDb!.collection('users');
   const productsColRef = adminDb!.collection('products');
 
-  // Hold product read promises and their corresponding item/ref data outside the loop
   const productReadOperations: Array<{
     ref: FirebaseFirestore.DocumentReference;
     item: OrderItem;
@@ -467,10 +471,11 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
       if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
       const orderData = orderDoc.data() as Order;
 
+      const orderUpdates: Partial<Order> = { status: newStatus };
+
       if (newStatus === "Completed") {
         if (orderData.userId) {
           const userRef = usersColRef.doc(orderData.userId);
-          // Read user doc first
           const userDoc = await transaction.get(userRef);
           if (userDoc.exists) {
             const userData = userDoc.data() as User;
@@ -478,33 +483,26 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
             const pointsEarnedOnOrder = orderData.pointsEarned || 0;
             const pointsRedeemedOnOrder = orderData.pointsRedeemed || 0;
             const finalUserPoints = currentPoints + pointsEarnedOnOrder - pointsRedeemedOnOrder;
-            
+
             transaction.update(userRef, { points: Math.max(0, finalUserPoints) });
             console.log(`[firestoreService][AdminSDK][${functionName}] Points finalized for user ${orderData.userId}. Earned: ${pointsEarnedOnOrder}, Redeemed: ${pointsRedeemedOnOrder}, New Balance: ${Math.max(0, finalUserPoints)}.`);
           } else {
             console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found for points update on order ${orderId} completion.`);
           }
         }
-        transaction.update(orderRef, { status: newStatus });
       } else if (newStatus === "Cancelled") {
-        // Phase 1: Collect all product read promises
+        orderUpdates.cancellationReason = cancellationReason;
+        orderUpdates.cancellationDescription = cancellationDescription || ""; // Ensure description is not undefined
+
+        // Stock Reversal Logic
         orderData.items.forEach(item => {
           const productRef = productsColRef.doc(item.productId);
-          productReadOperations.push({
-            ref: productRef,
-            item: item,
-            promise: transaction.get(productRef) // Schedule the read
-          });
+          productReadOperations.push({ ref: productRef, item: item, promise: transaction.get(productRef) });
         });
-
-        // Phase 2: Execute all product reads
         const productDocSnapshots = await Promise.all(productReadOperations.map(op => op.promise));
-
-        // Phase 3: Process reads and schedule writes for stock reversal
         for (let i = 0; i < productDocSnapshots.length; i++) {
           const productDocSnapshot = productDocSnapshots[i];
           const { ref: productRefToUpdate, item } = productReadOperations[i];
-
           if (productDocSnapshot.exists) {
             const product = productDocSnapshot.data() as Product;
             let storeAvailabilityToUpdate = product.availability.find(avail => avail.storeId === orderData.storeId);
@@ -526,37 +524,39 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
             console.warn(`[firestoreService][AdminSDK][${functionName}] Product ${item.productId} not found during stock revert for cancelled order ${orderId}.`);
           }
         }
-        
-        // Strike Logic: Apply strike if order was 'Ready for Pickup' and is now 'Cancelled'
-        if (orderData.status === "Ready for Pickup" && orderData.userId) {
+
+        // Strike Logic: Apply strike ONLY if reason is "Customer No-Show"
+        if (cancellationReason === "Customer No-Show" && orderData.userId) {
           const userRef = usersColRef.doc(orderData.userId);
-          const userDoc = await transaction.get(userRef); // Read user doc for current strikes
+          const userDoc = await transaction.get(userRef);
           if (userDoc.exists) {
             const userData = userDoc.data() as User;
             const currentStrikes = userData.noShowStrikes || 0;
             const newStrikes = currentStrikes + 1;
-            const userUpdates: Partial<User> = { noShowStrikes: newStrikes };
+            const userUpdatesForStrike: Partial<User> = { noShowStrikes: newStrikes };
             if (newStrikes >= 3) {
-              userUpdates.isBanned = true;
+              userUpdatesForStrike.isBanned = true;
             }
-            transaction.update(userRef, userUpdates); // Schedule user update
-            
-            // If banned, revoke tokens. This should ideally happen after transaction commits.
-            // For simplicity, we do it here. If transaction fails, revocation is less critical.
+            transaction.update(userRef, userUpdatesForStrike);
+
             if (newStrikes >= 3 && firebaseAdminAuthModule) {
               console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} BANNED due to ${newStrikes} no-show strikes. Attempting to revoke refresh tokens.`);
-              await firebaseAdminAuthModule.revokeRefreshTokens(orderData.userId)
+              // This is an async operation outside the transaction. Best effort.
+              // It's generally recommended to handle such side effects after the transaction successfully commits,
+              // e.g., by using a Cloud Function triggered by the Firestore write, or by returning a flag
+              // from the transaction to perform the action outside.
+              // For simplicity in this context, we call it here. If the transaction fails, this won't run.
+              // If it succeeds, we attempt token revocation.
+              firebaseAdminAuthModule.revokeRefreshTokens(orderData.userId)
                 .then(() => console.log(`[firestoreService][AdminSDK][${functionName}] Successfully revoked refresh tokens for banned user ${orderData.userId}.`))
                 .catch(err => console.error(`[firestoreService][AdminSDK][${functionName}] Failed to revoke refresh tokens for banned user ${orderData.userId}:`, err));
             }
-            console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}. Banned status: ${userUpdates.isBanned || false}`);
+            console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}. Banned status: ${userUpdatesForStrike.isBanned || false}. Reason: ${cancellationReason}`);
           }
         }
-        transaction.update(orderRef, { status: newStatus }); // Schedule order status update
-      } else {
-        // For other status changes (e.g., Pending Confirmation -> Preparing)
-        transaction.update(orderRef, { status: newStatus });
       }
+      // Apply all order updates
+      transaction.update(orderRef, orderUpdates);
     });
     console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus} and related actions (if any) processed.`);
   } catch (error: any) {
@@ -565,3 +565,4 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
   }
 }
 
+    
