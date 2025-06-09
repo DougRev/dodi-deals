@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPriceStock } from '@/lib/types'; 
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPriceStock } from '@/lib/types';
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
@@ -27,17 +27,17 @@ import { Separator } from '@/components/ui/separator';
 const getDefaultAvailability = (category: ProductFormData['category'], stores: Store[]): StoreAvailability[] => {
   const defaultStoreId = stores.length > 0 ? stores[0].id : '';
   if (category === 'Flower') {
-    return [{ 
-      storeId: defaultStoreId, 
+    return [{
+      storeId: defaultStoreId,
       weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
       storeSpecificImageUrl: '',
       // price and stock are not set for flower
     }];
   }
-  return [{ 
-    storeId: defaultStoreId, 
-    price: 0, 
-    stock: 0, 
+  return [{
+    storeId: defaultStoreId,
+    price: 0,
+    stock: 0,
     storeSpecificImageUrl: '',
     // weightOptions is not set for non-flower
   }];
@@ -59,7 +59,7 @@ export default function AdminProductsPage() {
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: productCategories[0] || 'Vape', 
+      category: productCategories[0] || 'Vape',
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(productCategories[0] || 'Vape', stores),
@@ -83,9 +83,9 @@ export default function AdminProductsPage() {
         return {
           storeId: avail.storeId,
           storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
-          weightOptions: avail.weightOptions && avail.weightOptions.length > 0 
-            ? avail.weightOptions 
-            : flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+          weightOptions: avail.weightOptions && avail.weightOptions.length > 0 && avail.weightOptions.length === flowerWeights.length
+            ? avail.weightOptions
+            : flowerWeights.map(fw => ({ weight: fw, price: (avail.weightOptions?.find(wo => wo.weight === fw)?.price || 0), stock: (avail.weightOptions?.find(wo => wo.weight === fw)?.stock || 0) })),
           price: undefined, // Ensure base price is not set
           stock: undefined, // Ensure base stock is not set
         };
@@ -117,9 +117,19 @@ export default function AdminProductsPage() {
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
             if (currentProduct.category === 'Flower') {
+              // Ensure all flowerWeights are present in weightOptions when editing
+              const currentWeightOptions = avail.weightOptions || [];
+              const completeWeightOptions = flowerWeights.map(fw => {
+                const existingOption = currentWeightOptions.find(wo => wo.weight === fw);
+                return {
+                  weight: fw,
+                  price: existingOption?.price || 0,
+                  stock: existingOption?.stock || 0,
+                };
+              });
               return {
                 ...avail,
-                weightOptions: avail.weightOptions || flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+                weightOptions: completeWeightOptions,
                 price: undefined,
                 stock: undefined,
               };
@@ -242,7 +252,7 @@ export default function AdminProductsPage() {
       setFormLoading(false);
     }
   };
-  
+
   const getStoreName = (storeId: string) => stores.find(s => s.id === storeId)?.name || 'Unknown';
 
   const handlePopulateAllStores = () => {
@@ -258,10 +268,10 @@ export default function AdminProductsPage() {
     if (currentFormAvailabilities.length === 1 && (!currentFormAvailabilities[0].storeId || currentFormAvailabilities[0].storeId.trim() === '')) {
         const placeholder = currentFormAvailabilities[0];
         removeAvailability(0); // Remove the placeholder.
-        
+
         stores.forEach(store => {
             appendAvailability(
-                currentCategory === 'Flower' ? 
+                currentCategory === 'Flower' ?
                 { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: placeholder.weightOptions?.find(wo => wo.weight === fw)?.price || 0, stock: placeholder.weightOptions?.find(wo => wo.weight === fw)?.stock || 0 })), storeSpecificImageUrl: '' } :
                 { storeId: store.id, price: placeholder.price || 0, stock: placeholder.stock || 0, storeSpecificImageUrl: '' }
             );
@@ -348,8 +358,8 @@ export default function AdminProductsPage() {
                 />
                 <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
               </div>
-              <FormField control={form.control} name="baseImageUrl" render={({ field }) => ( /* ... existing baseImageUrl field ... */ <FormItem><FormLabel>Base Image URL</FormLabel><FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>{field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative"><Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/></div>)}<FormMessage /></FormItem>)}/>
-              <FormField control={form.control} name="isFeatured" render={({ field }) => ( /* ... existing isFeatured field ... */ <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
+              <FormField control={form.control} name="baseImageUrl" render={({ field }) => ( <FormItem><FormLabel>Base Image URL</FormLabel><FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>{field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative"><Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/></div>)}<FormMessage /></FormItem>)}/>
+              <FormField control={form.control} name="isFeatured" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
 
               {/* Store Availability Section */}
               <div className="space-y-4 rounded-md border p-4">
@@ -358,7 +368,7 @@ export default function AdminProductsPage() {
                     <Button type="button" variant="outline" size="sm" onClick={handlePopulateAllStores} disabled={loadingStores || stores.length === 0}><StoreIcon className="mr-2 h-4 w-4" /> Populate All Stores</Button>
                 </div>
                 {form.formState.errors.availability?.root && <FormMessage>{form.formState.errors.availability.root.message}</FormMessage>}
-                
+
                 {availabilityFields.map((storeAvailField, storeAvailIndex) => (
                   <Card key={storeAvailField.id} className="p-4 space-y-3 relative shadow-sm">
                     <div className="flex justify-between items-center">
@@ -388,18 +398,12 @@ export default function AdminProductsPage() {
                     {watchedCategory === 'Flower' ? (
                       <div className="space-y-3 pt-2 border-t mt-3">
                         <FormLabel className="text-sm font-medium text-primary flex items-center"><Weight className="mr-2 h-4 w-4"/>Weight Options for Flower</FormLabel>
-                        {flowerWeights.map((fw, weightIndex) => {
-                           // Ensure weightOptions exists and has an entry for each flowerWeight
+                        {flowerWeights && flowerWeights.length > 0 ? flowerWeights.map((fw, weightIndex) => {
                            const weightOptPath = `availability.${storeAvailIndex}.weightOptions`;
-                           const currentWeightOptions = form.getValues(weightOptPath as any) || [];
-                           const existingOptionIndex = currentWeightOptions.findIndex((opt: FlowerWeightPriceStock) => opt.weight === fw);
+                           // Ensure the default value structure from `form.reset` or `getDefaultAvailability`
+                           // provides an entry for each `fw` in `flowerWeights`.
+                           // The form value at `weightOptPath` should be an array of `FlowerWeightPriceStock`.
 
-                           if (existingOptionIndex === -1 && form.control._options.shouldUnregister) {
-                                // This logic might be tricky with useFieldArray. 
-                                // It's generally better to ensure default values are set correctly.
-                                // For now, we rely on the initial form.reset/setValue to populate all flowerWeights.
-                           }
-                          
                           return (
                             <Card key={`${storeAvailField.id}-${fw}`} className="p-3 bg-muted/50">
                               <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
@@ -431,7 +435,7 @@ export default function AdminProductsPage() {
                               </div>
                             </Card>
                           );
-                        })}
+                        }) : <p className="text-xs text-muted-foreground">Weight options not available.</p>}
                          {form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message && <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message}</FormMessage>}
                       </div>
                     ) : (
@@ -465,7 +469,7 @@ export default function AdminProductsPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Store Availability
                 </Button>
               </div>
-              
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={formLoading}>Cancel</Button>
                 <Button type="submit" disabled={formLoading || loadingStores} className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -538,9 +542,9 @@ export default function AdminProductsPage() {
                     <TableCell>{product.brand}</TableCell>
                     <TableCell>{product.category}</TableCell>
                     <TableCell>
-                        {product.availability?.length > 0 
+                        {product.availability?.length > 0
                             ? product.category === 'Flower' && product.availability[0].weightOptions && product.availability[0].weightOptions.length > 0
-                                ? `${product.availability.length} store(s) - e.g., ${product.availability[0].weightOptions[0].weight} @ $${product.availability[0].weightOptions[0].price.toFixed(2)}`
+                                ? `${product.availability.length} store(s) - e.g., ${product.availability[0].weightOptions[0].weight} @ $${(product.availability[0].weightOptions[0].price || 0).toFixed(2)}`
                                 : product.availability[0].price !== undefined // Check if price is defined for non-flower
                                     ? `${product.availability.length} store(s) - e.g., $${(product.availability[0].price as number).toFixed(2)}`
                                     : "Pricing not set"
@@ -570,3 +574,5 @@ export default function AdminProductsPage() {
   );
 }
 
+
+    
