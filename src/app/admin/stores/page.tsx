@@ -30,8 +30,9 @@ import {
 import { addStore, updateStore, deleteStore } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle, Info } from 'lucide-react'; // Added Info
 import Link from 'next/link';
+import { Separator } from '@/components/ui/separator';
 
 
 export default function AdminStoresPage() {
@@ -187,6 +188,25 @@ export default function AdminStoresPage() {
                       <div className="flex items-center"><Gift className="mr-2 h-5 w-5 text-accent"/> Manage Custom Deal Rules</div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-4 space-y-4">
+                    <Card className="p-4 bg-blue-50 border border-blue-200 shadow-sm">
+                      <CardHeader className="p-0 pb-2">
+                        <CardTitle className="text-md font-semibold text-blue-700 flex items-center">
+                          <Info className="mr-2 h-5 w-5" /> Site-Wide Standard Deals
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0 text-sm text-blue-600 space-y-1">
+                        <p><span className="font-semibold">Tuesday:</span> 25% off all Vape products.</p>
+                        <p><span className="font-semibold">Wednesday:</span> 15% off all Dodi Hemp brand products.</p>
+                        <p><span className="font-semibold">Thursday:</span> 20% off all Edible products.</p>
+                        <p className="text-xs text-blue-500 mt-2">
+                          Note: These site-wide deals take precedence over custom rules for the same category/brand on the specified days.
+                          Custom rules will apply to other categories or on other days.
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Separator className="my-4" />
+                    
                     {dealFields.map((ruleField, index) => (
                       <Card key={ruleField.ruleId} className="p-4 bg-muted/30 shadow-sm relative">
                          <Button
@@ -198,7 +218,7 @@ export default function AdminStoresPage() {
                           >
                             <XCircle className="h-5 w-5" />
                           </Button>
-                        <FormLabel className="text-md font-semibold text-primary mb-2 block">Deal Rule #{index + 1}</FormLabel>
+                        <FormLabel className="text-md font-semibold text-primary mb-2 block">Custom Deal Rule #{index + 1}</FormLabel>
                         
                         <FormField
                           control={form.control}
@@ -289,12 +309,11 @@ export default function AdminStoresPage() {
                       size="sm"
                       onClick={() => appendDeal({ selectedDays: [], category: productCategories[0], discountPercentage: 0, id: crypto.randomUUID() })}
                     >
-                      <PlusCircle className="mr-2 h-4 w-4" /> Add Deal Rule
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add Custom Deal Rule
                     </Button>
                      <FormMessage>{form.formState.errors.dailyDeals?.root?.message || form.formState.errors.dailyDeals?.message}</FormMessage>
                     <p className="text-xs text-muted-foreground mt-4 p-2">
-                      Create rules for category-wide discounts. Each rule specifies the category, discount percentage, and the days of the week it applies.
-                      If multiple rules apply to the same day, the first one listed will take precedence.
+                      Create custom rules for category-wide discounts. Each rule specifies the category, discount percentage, and the days of the week it applies.
                     </p>
                   </AccordionContent>
                 </AccordionItem>
@@ -357,7 +376,7 @@ export default function AdminStoresPage() {
                   <TableHead>Address</TableHead>
                   <TableHead>City</TableHead>
                   <TableHead>Hours</TableHead>
-                  <TableHead>Deal Rules</TableHead>
+                  <TableHead>Custom Deal Rules</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -392,3 +411,4 @@ export default function AdminStoresPage() {
     </div>
   );
 }
+
