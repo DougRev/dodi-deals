@@ -15,7 +15,7 @@ export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Juice Head", "Twist", "Squeeze", "Dodi Hemp"],
-  'Flower': ["Dodi Hemp", "Cookies", "Kush Farms", "Alegreya Strains", "Indy Concentrates"],
+  'Flower': ["Dodi Hemp"], // Only Dodi Hemp for Flower
   'Pre-roll': ["Dodi Hemp"],
   'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp"],
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
@@ -26,9 +26,9 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
 // Business rules for fixed daily categories (used as fallback or informational)
 export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
   Monday: 'Flower',
-  Tuesday: 'Edible',
+  Tuesday: 'Edible', // Note: AppContext uses 'Vape' for Tuesday site-wide deal
   Wednesday: 'Pre-roll',
-  Thursday: 'Hemp Accessory', // Updated from 'Accessory'
+  Thursday: 'Hemp Accessory',
   Friday: 'Vape',
 };
 
@@ -127,17 +127,23 @@ export const ProductSchema = z.object({
       message: "Each store can only have one availability entry for this product.",
     }),
 }).superRefine((data, ctx) => {
+  if (data.category === 'Flower' && data.brand !== 'Dodi Hemp') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Flower products must have "Dodi Hemp" as the brand.',
+      path: ['brand'],
+    });
+  }
   data.availability.forEach((avail, index) => {
     if (data.category === 'Flower') {
-      if (!avail.weightOptions || avail.weightOptions.length === 0) { // Check if empty too
+      if (!avail.weightOptions || avail.weightOptions.length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Flower products require price definition for available weights. Ensure all standard weights (${flowerWeights.join(', ')}) are considered if applicable.`,
           path: [`availability`, index, `weightOptions`],
         });
       } else {
-         // Ensure all standard flowerWeights are present if any weightOptions are defined
-        const definedWeights = avail.weightOptions.map(wo => wo.weight);
+         const definedWeights = avail.weightOptions.map(wo => wo.weight);
         const missingWeights = flowerWeights.filter(fw => !definedWeights.includes(fw));
         if (missingWeights.length > 0) {
             ctx.addIssue({
@@ -225,7 +231,7 @@ export interface ResolvedProduct {
   isFeatured?: boolean;
   storeId: string;
   price: number;
-  stock: number; 
+  stock: number;
   totalStockInGrams?: number;
   availableWeights?: FlowerWeightPrice[];
   originalPrice?: number;
@@ -319,5 +325,3 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
-
-    

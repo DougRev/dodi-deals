@@ -24,14 +24,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 
-const OTHER_BRAND_VALUE = "Other"; 
+const OTHER_BRAND_VALUE = "Other";
 
 const getDefaultAvailability = (category: ProductFormData['category'], storesArg: Store[]): StoreAvailability[] => {
   const defaultStoreId = storesArg.length > 0 ? storesArg[0].id : '';
   if (category === 'Flower') {
     return [{
       storeId: defaultStoreId,
-      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), 
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })),
       totalStockInGrams: 0,
       storeSpecificImageUrl: '',
     }];
@@ -60,7 +60,7 @@ export default function AdminProductsPage() {
     defaultValues: {
       name: '',
       description: '',
-      brand: '', 
+      brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape',
       dataAiHint: '',
@@ -77,18 +77,22 @@ export default function AdminProductsPage() {
     name: "availability"
   });
 
-  // Effect to manage brand input visibility and value
   useEffect(() => {
-    const selectedBrandIsOther = watchedBrandSelection === OTHER_BRAND_VALUE;
-    const currentCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
-    const brandNotPredefined = watchedBrandSelection && !currentCategoryBrands.includes(watchedBrandSelection) && watchedBrandSelection !== OTHER_BRAND_VALUE;
-
-    if (selectedBrandIsOther) {
-      setShowManualBrandInput(true);
-    } else if (brandNotPredefined && isFormOpen) {
-      setShowManualBrandInput(true);
-    } else {
+    if (watchedCategory === 'Flower') {
+      form.setValue('brand', 'Dodi Hemp');
       setShowManualBrandInput(false);
+    } else {
+      const selectedBrandIsOther = watchedBrandSelection === OTHER_BRAND_VALUE;
+      const currentCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+      const brandNotPredefined = watchedBrandSelection && !currentCategoryBrands.includes(watchedBrandSelection) && watchedBrandSelection !== OTHER_BRAND_VALUE;
+
+      if (selectedBrandIsOther) {
+        setShowManualBrandInput(true);
+      } else if (brandNotPredefined && isFormOpen) {
+        setShowManualBrandInput(true);
+      } else {
+        setShowManualBrandInput(false);
+      }
     }
   }, [watchedBrandSelection, watchedCategory, isFormOpen, form]);
 
@@ -141,7 +145,7 @@ export default function AdminProductsPage() {
         initialValues = {
           ...currentProduct,
           category: currentProduct.category || (productCategories[0] || 'Vape'),
-          brand: currentProduct.brand, 
+          brand: currentProduct.brand,
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
             if (currentProduct.category === 'Flower') {
@@ -174,7 +178,7 @@ export default function AdminProductsPage() {
         initialValues = {
           name: '',
           description: '',
-          brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || '',
+          brand: defaultCat === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || ''),
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: defaultCat,
           dataAiHint: '',
@@ -183,17 +187,21 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
-      // After reset, explicitly check brand visibility for the reset state
-      const resetCategory = form.getValues('category');
-      const resetBrand = form.getValues('brand');
-      const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
 
-      if (resetBrand === OTHER_BRAND_VALUE) {
-          setShowManualBrandInput(true);
-      } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) {
-          setShowManualBrandInput(true);
+      const resetCategory = form.getValues('category');
+      if (resetCategory === 'Flower') {
+        form.setValue('brand', 'Dodi Hemp');
+        setShowManualBrandInput(false);
       } else {
-          setShowManualBrandInput(false);
+        const resetBrand = form.getValues('brand');
+        const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
+        if (resetBrand === OTHER_BRAND_VALUE) {
+            setShowManualBrandInput(true);
+        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) {
+            setShowManualBrandInput(true);
+        } else {
+            setShowManualBrandInput(false);
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,14 +214,18 @@ export default function AdminProductsPage() {
     form.reset({
       name: '',
       description: '',
-      brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || '', 
+      brand: defaultCat === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || ''),
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: defaultCat,
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(defaultCat, stores),
     });
-    setShowManualBrandInput(form.getValues('brand') === OTHER_BRAND_VALUE || !(PREDEFINED_BRANDS[defaultCat as ProductCategory] || []).includes(form.getValues('brand')));
+    if (defaultCat === 'Flower') {
+      setShowManualBrandInput(false);
+    } else {
+      setShowManualBrandInput(form.getValues('brand') === OTHER_BRAND_VALUE || !(PREDEFINED_BRANDS[defaultCat as ProductCategory] || []).includes(form.getValues('brand')));
+    }
     setIsFormOpen(true);
   };
 
@@ -248,8 +260,10 @@ export default function AdminProductsPage() {
     setFormLoading(true);
     try {
       let finalBrand = data.brand;
-      if (finalBrand === OTHER_BRAND_VALUE) {
-         finalBrand = ''; 
+      if (data.category === 'Flower') {
+        finalBrand = 'Dodi Hemp';
+      } else if (finalBrand === OTHER_BRAND_VALUE) {
+         finalBrand = '';
       }
 
       const productDataPayload: Omit<Product, 'id'> = {
@@ -392,7 +406,9 @@ export default function AdminProductsPage() {
                 
                 <FormItem>
                   <FormLabel className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Brand</FormLabel>
-                  {(categoryBrands.length > 0 || showManualBrandInput) ? ( // Show select if there are brands OR if manual input is already shown
+                  {watchedCategory === 'Flower' ? (
+                     <Input value="Dodi Hemp" disabled className="mt-1 bg-muted/50" />
+                  ) : (categoryBrands.length > 0 || showManualBrandInput) ? (
                     <FormField
                       control={form.control}
                       name="brand"
@@ -400,10 +416,7 @@ export default function AdminProductsPage() {
                         <Select
                           onValueChange={(value) => {
                             field.onChange(value);
-                            // setShowManualBrandInput is handled by useEffect based on 'value' (watchedBrandSelection)
                           }}
-                          // Value for Select: If manual input is shown, and current field.value IS a custom brand (not "Other"),
-                          // then Select should show "Other". Otherwise, show actual field.value.
                           value={showManualBrandInput && field.value !== OTHER_BRAND_VALUE && !categoryBrands.includes(field.value) ? OTHER_BRAND_VALUE : field.value || ''}
                         >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a brand or 'Other'" /></SelectTrigger></FormControl>
@@ -418,21 +431,18 @@ export default function AdminProductsPage() {
                      <FormField
                       control={form.control}
                       name="brand"
-                      render={({ field }) => (<Input placeholder="Enter brand name" {...field} className="mt-1" />)} // Fallback if no category brands and not showing manual
+                      render={({ field }) => (<Input placeholder="Enter brand name" {...field} className="mt-1" />)}
                     />
                   )}
-                  {showManualBrandInput && (
+                  {watchedCategory !== 'Flower' && showManualBrandInput && (
                     <FormField
                       control={form.control}
-                      name="brand" 
+                      name="brand"
                       render={({ field: manualField }) => (
                         <Input
                           placeholder="Enter brand name"
                           {...manualField}
-                          // If brand select shows "Other", this input value IS the actual brand.
-                          // If brand select shows a predefined brand, this input is hidden.
-                          // If brand select shows a custom brand (because it was loaded), this input shows it.
-                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} // Prevent "Other" from showing in input
+                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value}
                           onChange={(e) => {
                              manualField.onChange(e.target.value);
                           }}
@@ -450,15 +460,18 @@ export default function AdminProductsPage() {
                 <FormField control={form.control} name="category" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
-                      <Select 
+                      <Select
                         onValueChange={(value) => {
                             field.onChange(value);
-                            const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
-                            // Set brand to first predefined or empty if "Other" will be default
-                            form.setValue('brand', newCategoryBrands[0] || ''); 
-                            // setShowManualBrandInput will be handled by useEffect
-                        }} 
-                        value={field.value} 
+                            if (value === 'Flower') {
+                                form.setValue('brand', 'Dodi Hemp');
+                                setShowManualBrandInput(false);
+                            } else {
+                                const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
+                                form.setValue('brand', newCategoryBrands[0] || '');
+                            }
+                        }}
+                        value={field.value}
                         defaultValue={field.value}
                       >
                         <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
@@ -684,5 +697,3 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
-    

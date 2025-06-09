@@ -12,12 +12,12 @@ export interface ProductImportEntry {
 }
 
 export const productsToImport: ProductImportEntry[] = [
-  // THCa Flower
+  // THCa Flower - All should be Dodi Hemp
   {
     name: "(LIMITED RELEASE) THCa Nugs - Purp Snow Balls",
     description: "Indica strain with potent THCa content.",
     category: "Flower",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Enforced
     dataAiHint: "flower indica",
     isFeatured: true,
   },
@@ -25,7 +25,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Exotic Indoor THCa Flower – RS11",
     description: "Hybrid strain known as \"Rainbow Sherbert #11.\"",
     category: "Flower",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Enforced
     dataAiHint: "flower hybrid",
     isFeatured: true,
   },
@@ -33,7 +33,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Exotic Indoor THCa Flower – Peanut Butter Breath",
     description: "Hybrid strain with a nutty and earthy terpene profile.",
     category: "Flower",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Enforced
     dataAiHint: "flower hybrid",
     isFeatured: false,
   },
@@ -41,23 +41,23 @@ export const productsToImport: ProductImportEntry[] = [
     name: "AAA Indoor THCa Flower - Jelly Runtz",
     description: "Hybrid strain offering a unique experience.",
     category: "Flower",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Enforced
     dataAiHint: "flower hybrid",
     isFeatured: true,
   },
   {
     name: "AAA Indoor THCa Flower - Lemon Cherry Sherbert",
-    description: "Hybrid strain bred by Cookies, combining Lemon Cherry Gelato and Sunset Sherbet.",
+    description: "Hybrid strain bred by Cookies, combining Lemon Cherry Gelato and Sunset Sherbet. Marketed by Dodi Hemp.",
     category: "Flower",
-    brand: "Cookies",
-    dataAiHint: "flower cookies",
+    brand: "Dodi Hemp", // Enforced (Assuming Dodi Hemp is the retailer/brand for this app context)
+    dataAiHint: "flower cookies", // Keep hint for image search if needed
     isFeatured: false,
   },
   {
     name: "$99 1 OZ THCa Flower",
-    description: "Bulk option featuring strains like Cherry Runtz, Fuelato, and Garfield.",
+    description: "Bulk option featuring strains like Cherry Runtz, Fuelato, and Garfield under the Dodi Hemp brand.",
     category: "Flower",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Enforced
     dataAiHint: "flower bulk",
     isFeatured: false,
   },
@@ -125,7 +125,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "1 Gram Cartridge - Green Crack",
     description: "Sativa strain known for its energizing effects.",
     category: "Vape",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Using Dodi Hemp, can be changed if it's a 3rd party brand
     dataAiHint: "vape sativa",
     isFeatured: true,
   },
@@ -175,7 +175,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Grand Daddy Purp",
     description: "Indica strain offering relaxation.",
     category: "Vape",
-    brand: "Dodi Hemp",
+    brand: "Dodi Hemp", // Assuming Dodi Hemp brand for these
     dataAiHint: "vape indica",
     isFeatured: false,
   },
@@ -199,7 +199,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Zlushiez",
     description: "Live Resin Delta 8 disposable with a unique terpene blend.",
     category: "Vape",
-    brand: "Dodi Live Resin", 
+    brand: "Dodi Hemp", // Changed from Dodi Live Resin to Dodi Hemp for consistency or can be its own if needed
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -207,7 +207,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - White Truffle",
     description: "Live Resin Delta 8 disposable offering earthy flavors.",
     category: "Vape",
-    brand: "Dodi Live Resin", 
+    brand: "Dodi Hemp",
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -223,7 +223,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Slap Cakes",
     description: "Live Resin Delta 8 disposable with a sweet profile.",
     category: "Vape",
-    brand: "Dodi Live Resin", 
+    brand: "Dodi Hemp",
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -247,7 +247,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - Lemon Cherry Gelato",
     description: "Live Resin Delta 8 disposable with citrus and cherry notes.",
     category: "Vape",
-    brand: "Dodi Live Resin", 
+    brand: "Dodi Hemp",
     dataAiHint: "vape live_resin",
     isFeatured: false,
   },
@@ -255,7 +255,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "2 Gram Disposable - dodi Berry",
     description: "Live Resin Delta 8 disposable featuring berry flavors.",
     category: "Vape",
-    brand: "Dodi Live Resin", 
+    brand: "Dodi Hemp",
     dataAiHint: "vape berry",
     isFeatured: false,
   },
@@ -383,10 +383,8 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Artistic Rolling Tray - Medium",
     description: "Medium sized rolling tray with unique artistic design.",
     category: "Hemp Accessory",
-    brand: "Generic Brand",
+    brand: "Generic Brand", // Example for less specific brand
     dataAiHint: "rolling tray",
     isFeatured: false,
   },
 ];
-
-    
