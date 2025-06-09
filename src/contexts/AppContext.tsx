@@ -78,7 +78,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [appliedRedemption, setAppliedRedemption] = useState<RedemptionOption | null>(null);
 
   const [userOrders, setUserOrders] = useState<Order[]>([]);
-  const [loadingUserOrders, setLoadingUserOrders] = useState<boolean>(true); // Initialize to true
+  const [loadingUserOrders, setLoadingUserOrders] = useState<boolean>(true); 
 
   const router = useRouter();
 
@@ -114,29 +114,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setStores(currentStoresListFromSnapshot);
 
-      if (!_selectedStore) { 
-        const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
-        let storeToSelectInitially: Store | null = null;
+      // Logic to handle initial store selection or prompt
+      const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
+      let storeToSelectInitially: Store | null = null;
 
-        if (savedStoreId) {
-          storeToSelectInitially = currentStoresListFromSnapshot.find(s => s.id === savedStoreId) || null;
-        }
-
-        if (storeToSelectInitially) {
-          _setSelectedStoreState(storeToSelectInitially);
-          setStoreSelectorOpen(false);
-        } else {
-          if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-          if (currentStoresListFromSnapshot.length > 0) {
-            setStoreSelectorOpen(true); 
-          }
-        }
-      } else {
+      if (savedStoreId) {
+        storeToSelectInitially = currentStoresListFromSnapshot.find(s => s.id === savedStoreId) || null;
+      }
+      
+      if (_selectedStore) {
+        // If a store is already selected, ensure it's still valid in the new list
         const currentSelectedStoreStillValid = currentStoresListFromSnapshot.some(s => s.id === _selectedStore.id);
         if (!currentSelectedStoreStillValid) {
           _setSelectedStoreState(null); 
           if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-          if (currentStoresListFromSnapshot.length > 0) setStoreSelectorOpen(true);
+           if (currentStoresListFromSnapshot.length > 0) setStoreSelectorOpen(true);
+        }
+      } else if (storeToSelectInitially) {
+         _setSelectedStoreState(storeToSelectInitially);
+         setStoreSelectorOpen(false);
+      } else {
+        if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+        if (currentStoresListFromSnapshot.length > 0) {
+          setStoreSelectorOpen(true); 
         }
       }
 
@@ -145,7 +145,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
 
-      setStores(initialStoresSeedData);
+      setStores(initialStoresSeedData); // Fallback to seed data on error
       const savedStoreIdOnError = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectOnError: Store | null = null;
       if (savedStoreIdOnError) {
@@ -162,7 +162,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Removed _selectedStore from dependencies to prevent potential loops. Selection is handled internally.
 
 
   useEffect(() => {
@@ -202,13 +203,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-        fetchUserOrders();
+    const currentUserId = user?.id; // Capture stable id
+    if (isAuthenticated && currentUserId) {
+      fetchUserOrders();
     } else {
-        setUserOrders([]); 
-        setLoadingUserOrders(false); 
+      setUserOrders([]);
+      setLoadingUserOrders(false); 
     }
-  }, [isAuthenticated, user, fetchUserOrders]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.id]); // Depend on user.id for stability
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -355,6 +358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -431,6 +435,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // Profile creation in Firestore is handled by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -500,7 +505,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         _setSelectedStoreState(null);
         setAppliedRedemption(null);
         setUserOrders([]);
-        setLoadingUserOrders(false); 
+        setLoadingUserOrders(true); // Reset to true on logout
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -633,9 +638,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
     const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
-    const pointsEarnedForThisOrder = Math.floor(finalTotal * 2); // Points earned from this specific order
-
-    const orderData: Omit<Order, 'id' | 'orderDate' | 'status'> = { // pointsEarned is now calculated inside createOrderInFirestore
+    
+    const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
       userEmail: user.email,
       userName: user.name,
@@ -646,22 +650,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       discountApplied: appliedRedemption?.discountAmount,
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
-      // pointsEarned: pointsEarnedForThisOrder, // This will be set by firestoreService
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
     };
 
     try {
-      // createOrderInFirestore now only stores pointsEarned and pointsRedeemed on the order.
-      // User's actual points are updated by the manager when marking the order "Completed".
       const { orderId, pointsCalculatedForOrder } = await createOrderInFirestore(orderData);
-      
-      // User's points are NOT updated locally here anymore.
-      // They will be updated in Firestore by the manager, and then the user's local profile will update on next fetch.
-      
-      if (user) fetchUserOrders(); // Refresh orders list
+            
+      if (user) fetchUserOrders(); // Refresh orders list for the current user
       toast({ 
         title: "Order Submitted!", 
-        description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Approximately ${pointsCalculatedForOrder} points will be applied by the store upon completion.`
+        description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Points will be applied by the store upon order completion.`
       });
       clearCart();
       router.push('/profile');
@@ -828,4 +826,3 @@ export function useAppContext() {
   }
   return context;
 }
-

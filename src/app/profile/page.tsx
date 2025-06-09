@@ -71,11 +71,8 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
 
-  useEffect(() => {
-    if (isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
-        fetchUserOrders();
-    }
-  }, [isAuthenticated, user, fetchUserOrders, userOrders.length, loadingUserOrders]);
+  // AppContext now handles initial and subsequent fetching of orders based on auth state
+  // This useEffect for initial fetch is removed to avoid conflicts.
 
   if (loadingAuth || !isAuthenticated || !user) { 
     return (
@@ -248,6 +245,9 @@ function ProfilePageInternal() {
                          {order.pointsRedeemed && order.pointsRedeemed > 0 && (
                              <p className="text-xs text-muted-foreground text-right mt-1">({order.pointsRedeemed} points redeemed)</p>
                          )}
+                         {order.pointsEarned && order.pointsEarned > 0 && (
+                            <p className="text-xs text-green-600 text-right mt-1">({order.pointsEarned} points earned on completion)</p>
+                         )}
 
                       </AccordionContent>
                     </AccordionItem>
@@ -348,4 +348,3 @@ export default function ProfilePage() {
     </Suspense>
   );
 }
-
