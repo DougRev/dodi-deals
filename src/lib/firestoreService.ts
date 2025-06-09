@@ -1,10 +1,12 @@
 
 'use server';
 
-import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus } from '@/lib/types'; // Added OrderItem, OrderStatus
+import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight } from '@/lib/types'; // Added FlowerWeight
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
+import { flowerWeightToGrams } from '@/lib/types';
+
 
 // Type for Firestore Transaction, assuming firebase-admin
 import type { FirebaseFirestore } from 'firebase-admin/firestore';
@@ -188,6 +190,8 @@ export async function getAllUsers(): Promise<User[]> {
         ...data,
         assignedStoreId: data.assignedStoreId || null,
         storeRole: data.storeRole || null, 
+        noShowStrikes: data.noShowStrikes || 0, // Default if missing
+        isBanned: data.isBanned || false,       // Default if missing
       } as User;
     });
   } catch (error) {
@@ -202,6 +206,7 @@ export async function updateUserConfiguration(
     isAdmin?: boolean;
     assignedStoreId?: string | null;
     storeRole?: StoreRole | null;
+    // noShowStrikes and isBanned typically updated by system, not direct admin action here yet
   }
 ): Promise<void> {
   const functionName = 'updateUserConfiguration';
@@ -299,17 +304,17 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
 
 export async function createOrderInFirestore(
   orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>
-): Promise<{orderId: string, pointsCalculatedForOrder: number }> {
+): Promise<{orderId: string }> { // Removed pointsCalculatedForOrder from return
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
 
-  const pointsCalculated = Math.floor(orderData.finalTotal * 2); // 2 points per $1 on finalTotal
+  const pointsCalculated = Math.floor(orderData.finalTotal * 2);
 
   const fullOrderData: Omit<Order, 'id'> = {
-    ...orderData,
+    ...orderData, // Includes userStrikesAtOrderTime from AppContext
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
-    pointsEarned: pointsCalculated, // Store calculated points on the order
+    pointsEarned: pointsCalculated,
   };
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to create order:`, JSON.stringify(fullOrderData));
 
@@ -318,7 +323,6 @@ export async function createOrderInFirestore(
 
   try {
     const orderId = await adminDb!.runTransaction(async (transaction) => {
-      // 1. Validate stock and prepare product updates
       const productUpdates: { ref: FirebaseFirestore.DocumentReference; newAvailability: StoreAvailability[] }[] = [];
 
       for (const item of fullOrderData.items) {
@@ -330,29 +334,41 @@ export async function createOrderInFirestore(
         }
 
         const product = productDoc.data() as Product;
-        const storeAvailability = product.availability.find(avail => avail.storeId === fullOrderData.storeId);
+        let storeAvailability = product.availability.find(avail => avail.storeId === fullOrderData.storeId);
 
         if (!storeAvailability) {
           throw new Error(`Product ${item.productName} is not configured for store ${fullOrderData.storeName}.`);
         }
+        
+        if (product.category === 'Flower') {
+          if (!item.selectedWeight) {
+            throw new Error(`Flower product ${item.productName} in order is missing selected weight.`);
+          }
+          const orderedGrams = flowerWeightToGrams(item.selectedWeight) * item.quantity;
+          if (storeAvailability.totalStockInGrams === undefined || storeAvailability.totalStockInGrams < orderedGrams) {
+            throw new Error(`Insufficient stock for ${item.productName} (${item.selectedWeight}). Available grams: ${storeAvailability.totalStockInGrams || 0}, Requested grams: ${orderedGrams}.`);
+          }
+          const newTotalStockInGrams = (storeAvailability.totalStockInGrams || 0) - orderedGrams;
+          storeAvailability = { ...storeAvailability, totalStockInGrams: newTotalStockInGrams };
 
-        if (storeAvailability.stock < item.quantity) {
-          throw new Error(`Insufficient stock for ${item.productName} at ${fullOrderData.storeName}. Available: ${storeAvailability.stock}, Requested: ${item.quantity}.`);
+        } else { // Non-flower product
+          if (storeAvailability.stock === undefined || storeAvailability.stock < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.productName}. Available: ${storeAvailability.stock || 0}, Requested: ${item.quantity}.`);
+          }
+          storeAvailability = { ...storeAvailability, stock: (storeAvailability.stock || 0) - item.quantity };
         }
 
         const newAvailabilityArray = product.availability.map(avail =>
           avail.storeId === fullOrderData.storeId
-            ? { ...avail, stock: avail.stock - item.quantity }
+            ? storeAvailability // Use the modified storeAvailability object
             : avail
         );
         productUpdates.push({ ref: productRef, newAvailability: newAvailabilityArray });
       }
 
-      // 2. Create the order document
-      const newOrderRef = ordersColRef.doc(); // Auto-generate ID
+      const newOrderRef = ordersColRef.doc(); 
       transaction.set(newOrderRef, fullOrderData);
 
-      // 3. Apply product stock updates
       for (const update of productUpdates) {
         transaction.update(update.ref, { availability: update.newAvailability });
       }
@@ -360,8 +376,8 @@ export async function createOrderInFirestore(
       return newOrderRef.id;
     });
 
-    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created and stock updated successfully. Points transaction deferred to order completion.`);
-    return { orderId, pointsCalculatedForOrder: pointsCalculated };
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created and stock updated successfully. Points will be processed upon completion.`);
+    return { orderId };
   } catch (error: any) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed:`, error.message, error.stack);
     throw new Error(error.message || `Failed to create order due to an unexpected issue.`);
@@ -409,7 +425,7 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
     const snapshot = await ordersColRef
       .where('storeId', '==', storeId)
       .where('status', 'in', statuses)
-      .orderBy('orderDate', 'asc')
+      .orderBy('orderDate', 'asc') // Keep asc for manager view typically
       .get();
 
     if (snapshot.empty) {
@@ -424,7 +440,7 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
     console.error(`[firestoreService][AdminSDK][${functionName}] Error fetching store orders by status:`, error);
     if (error.message && error.message.includes("query requires an index")) {
         console.error(`[firestoreService][AdminSDK][${functionName}] Firestore index missing. Please create the following composite index:`);
-        console.error(`Collection: orders, Fields: storeId (ASC), status (ASC), orderDate (ASC)`);
+        console.error(`Collection: orders, Fields: storeId (ASC), status (IN), orderDate (ASC)`);
     }
     throw error;
   }
@@ -437,23 +453,27 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
   console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}`);
 
   const orderRef = adminDb!.collection('orders').doc(orderId);
+  const usersColRef = adminDb!.collection('users');
+  const productsColRef = adminDb!.collection('products');
 
   try {
-    if (newStatus === "Completed") {
-      await adminDb!.runTransaction(async (transaction) => {
-        const orderDoc = await transaction.get(orderRef);
-        if (!orderDoc.exists) throw new Error(`Order ${orderId} not found for completion.`);
-        const orderData = orderDoc.data() as Order;
+    await adminDb!.runTransaction(async (transaction) => {
+      const orderDoc = await transaction.get(orderRef);
+      if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
+      const orderData = orderDoc.data() as Order;
 
+      // Prevent status regression or invalid transitions if needed (e.g. from Completed to Preparing)
+      // For now, we assume manager makes valid choices or UI prevents invalid ones.
+
+      if (newStatus === "Completed") {
         if (orderData.userId) {
-          const userRef = adminDb!.collection('users').doc(orderData.userId);
+          const userRef = usersColRef.doc(orderData.userId);
           const userDoc = await transaction.get(userRef);
           if (userDoc.exists) {
             const userData = userDoc.data() as User;
             const currentPoints = userData.points || 0;
             const pointsEarnedOnOrder = orderData.pointsEarned || 0;
             const pointsRedeemedOnOrder = orderData.pointsRedeemed || 0;
-
             const finalUserPoints = currentPoints + pointsEarnedOnOrder - pointsRedeemedOnOrder;
             
             transaction.update(userRef, { points: Math.max(0, finalUserPoints) });
@@ -463,58 +483,73 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
           }
         }
         transaction.update(orderRef, { status: newStatus });
-        console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to Completed and points processed.`);
-      });
-    } else if (newStatus === "Cancelled") {
-      await adminDb!.runTransaction(async (transaction) => {
-        // --- Phase 1: All Reads ---
-        const orderDoc = await transaction.get(orderRef);
-        if (!orderDoc.exists) throw new Error(`Order ${orderId} not found for cancellation.`);
-        const orderData = orderDoc.data() as Order;
-
-        // Collect all product refs and their corresponding items for stock reversal
+      } else if (newStatus === "Cancelled") {
+        // Stock Reversal Logic
         const productReadPromises: Promise<FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>>[] = [];
         const productRefsAndItems: { ref: FirebaseFirestore.DocumentReference, item: OrderItem }[] = [];
 
         for (const item of orderData.items) {
-          const productRef = adminDb!.collection('products').doc(item.productId);
+          const productRef = productsColRef.doc(item.productId);
           productRefsAndItems.push({ ref: productRef, item });
           productReadPromises.push(transaction.get(productRef));
         }
-        
         const productDocSnapshots = await Promise.all(productReadPromises);
 
-        // --- Phase 2: All Writes ---
         for (let i = 0; i < productDocSnapshots.length; i++) {
           const productDocSnapshot = productDocSnapshots[i];
-          const { ref: productRef, item } = productRefsAndItems[i];
+          const { ref: productRefToUpdate, item } = productRefsAndItems[i];
 
           if (productDocSnapshot.exists) {
             const product = productDocSnapshot.data() as Product;
-            const newAvailabilityArray = product.availability.map(avail =>
-              avail.storeId === orderData.storeId
-                ? { ...avail, stock: avail.stock + item.quantity } // Add back stock
-                : avail
-            );
-            transaction.update(productRef, { availability: newAvailabilityArray });
-            console.log(`[firestoreService][AdminSDK][${functionName}] Stock for product ${item.productId} will be reverted by ${item.quantity} for cancelled order ${orderId}.`);
+            let storeAvailabilityToUpdate = product.availability.find(avail => avail.storeId === orderData.storeId);
+            if (storeAvailabilityToUpdate) {
+              if (product.category === 'Flower') {
+                if (item.selectedWeight) {
+                  const revertedGrams = flowerWeightToGrams(item.selectedWeight) * item.quantity;
+                  storeAvailabilityToUpdate = { ...storeAvailabilityToUpdate, totalStockInGrams: (storeAvailabilityToUpdate.totalStockInGrams || 0) + revertedGrams };
+                }
+              } else {
+                storeAvailabilityToUpdate = { ...storeAvailabilityToUpdate, stock: (storeAvailabilityToUpdate.stock || 0) + item.quantity };
+              }
+              const newAvailabilityArray = product.availability.map(avail =>
+                avail.storeId === orderData.storeId ? storeAvailabilityToUpdate : avail
+              );
+              transaction.update(productRefToUpdate, { availability: newAvailabilityArray });
+            }
           } else {
-            console.warn(`[firestoreService][AdminSDK][${functionName}] Product ${item.productId} not found during stock revert for cancelled order ${orderId}. Stock not reverted for this item.`);
+            console.warn(`[firestoreService][AdminSDK][${functionName}] Product ${item.productId} not found during stock revert for cancelled order ${orderId}.`);
           }
         }
         
+        // Strike Logic: Apply strike if order was 'Ready for Pickup' and is now 'Cancelled'
+        if (orderData.status === "Ready for Pickup" && orderData.userId) {
+          const userRef = usersColRef.doc(orderData.userId);
+          const userDoc = await transaction.get(userRef); // Read user doc for current strikes
+          if (userDoc.exists) {
+            const userData = userDoc.data() as User;
+            const currentStrikes = userData.noShowStrikes || 0;
+            const newStrikes = currentStrikes + 1;
+            const userUpdates: Partial<User> = { noShowStrikes: newStrikes };
+            if (newStrikes >= 3) {
+              userUpdates.isBanned = true;
+              console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} BANNED due to ${newStrikes} no-show strikes.`);
+              if (firebaseAdminAuthModule) { // Check if adminAuth is available
+                await firebaseAdminAuthModule.revokeRefreshTokens(orderData.userId).catch(err => console.error(`Failed to revoke refresh tokens for banned user ${orderData.userId}:`, err));
+              }
+            }
+            transaction.update(userRef, userUpdates);
+            console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}.`);
+          }
+        }
         transaction.update(orderRef, { status: newStatus });
-        console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status will be updated to Cancelled and stock reverted.`);
-      });
-      console.log(`[firestoreService][AdminSDK][${functionName}] Transaction for cancelling order ${orderId} committed successfully.`);
-    } else {
-      // For other status changes (e.g., Pending Confirmation -> Preparing)
-      await orderRef.update({ status: newStatus });
-      console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus}.`);
-    }
+      } else {
+        // For other status changes (e.g., Pending Confirmation -> Preparing)
+        transaction.update(orderRef, { status: newStatus });
+      }
+    });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus} and related actions (if any) processed.`);
   } catch (error: any) {
      console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}:`, error.message, error.stack);
      throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
   }
 }
-    

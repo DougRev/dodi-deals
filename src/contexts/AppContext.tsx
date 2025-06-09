@@ -34,8 +34,8 @@ interface AppContextType {
   products: ResolvedProduct[];
   allProducts: Product[];
   deals: Deal[];
-  getCartSubtotal: () => number; // Renamed from getCartTotal to avoid confusion with final total
-  getCartTotal: () => number; // This will be the final total after discounts
+  getCartSubtotal: () => number;
+  getCartTotal: () => number; 
   getCartTotalSavings: () => number;
   getPotentialPointsForCart: () => number;
   stores: Store[];
@@ -75,7 +75,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  const [_selectedStore, _setSelectedStoreState] = useState<Store | null>(null); // Internal state for selectedStore
+  const [_selectedStore, _setSelectedStoreState] = useState<Store | null>(null); 
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
   const [appliedRedemption, setAppliedRedemption] = useState<RedemptionOption | null>(null);
@@ -209,9 +209,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetchUserOrders();
     } else {
       setUserOrders([]);
-      setLoadingUserOrders(false); 
+      if (!loadingAuth) { // Only set to false if auth check is also done
+        setLoadingUserOrders(false);
+      }
     }
-  }, [isAuthenticated, user?.id, fetchUserOrders]);
+  }, [isAuthenticated, user?.id, fetchUserOrders, loadingAuth]);
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -233,46 +235,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const determinedAssignedStoreId = existingData?.assignedStoreId || null;
     const determinedStoreRole = existingData?.storeRole || null;
 
-    const profileDataToSet: {
-        email: string | null;
-        name: string;
-        points: number;
-        isAdmin: boolean;
-        createdAt: string;
-        avatarUrl?: string;
-        assignedStoreId?: string | null;
-        storeRole?: StoreRole | null;
-        noShowStrikes: number;
-        isBanned: boolean;
-      } = {
+    const profileDataToSet: User = {
+        id: firebaseUser.uid, // id is always from firebaseUser
         email: firebaseUser.email,
         name: displayName,
         points: existingData?.points ?? 0,
         isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
         createdAt: existingData?.createdAt || new Date().toISOString(),
-        assignedStoreId: determinedAssignedStoreId,
+        avatarUrl: determinedAvatarUrl,
+        assignedStoreId: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedAssignedStoreId,
         storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole,
         noShowStrikes: existingData?.noShowStrikes ?? 0,
         isBanned: existingData?.isBanned ?? false,
       };
 
-    if (determinedAvatarUrl) {
-        profileDataToSet.avatarUrl = determinedAvatarUrl;
-    }
-    if (profileDataToSet.isAdmin) {
-        profileDataToSet.assignedStoreId = null;
-        profileDataToSet.storeRole = null;
-    }
-
-
     if (!userSnap.exists()) {
       try {
-        const dataToSetForNewUser: any = { ...profileDataToSet };
-        if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
-        if (!dataToSetForNewUser.isAdmin) {
-            dataToSetForNewUser.assignedStoreId = dataToSetForNewUser.assignedStoreId || null;
-            dataToSetForNewUser.storeRole = dataToSetForNewUser.storeRole || null;
-        }
+        // Ensure all fields for a new User are present, even if defaulting
+        const dataToSetForNewUser: any = { 
+            email: profileDataToSet.email,
+            name: profileDataToSet.name,
+            points: profileDataToSet.points,
+            isAdmin: profileDataToSet.isAdmin,
+            createdAt: profileDataToSet.createdAt,
+            avatarUrl: profileDataToSet.avatarUrl, // May be undefined, Firestore handles this
+            assignedStoreId: profileDataToSet.assignedStoreId,
+            storeRole: profileDataToSet.storeRole,
+            noShowStrikes: profileDataToSet.noShowStrikes,
+            isBanned: profileDataToSet.isBanned,
+        };
+         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
 
         await setDoc(userRef, dataToSetForNewUser);
 
@@ -282,60 +274,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        profileDataToSet.isAdmin = false;
-        profileDataToSet.assignedStoreId = null;
-        profileDataToSet.storeRole = null;
+        // Return a minimal profile or null if creation truly failed to reflect in UI
+        return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false };
       }
-    } else {
+    } else { // User document exists
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData?.isAdmin) {
         updates.isAdmin = true;
         updates.assignedStoreId = null;
         updates.storeRole = null;
+        profileDataToSet.isAdmin = true; // Reflect this change in the returned object
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
       }
       if (displayName && existingData?.name !== displayName) {
         updates.name = displayName;
+        profileDataToSet.name = displayName;
       }
-      if (determinedAvatarUrl && existingData?.avatarUrl !== determinedAvatarUrl) {
-         updates.avatarUrl = determinedAvatarUrl;
-      } else if (!determinedAvatarUrl && existingData?.avatarUrl) {
-         updates.avatarUrl = undefined;
+      if (determinedAvatarUrl !== existingData?.avatarUrl) { // Handles setting and unsetting
+         updates.avatarUrl = determinedAvatarUrl; // Can be undefined to remove
+         profileDataToSet.avatarUrl = determinedAvatarUrl;
       }
-      if (existingData.noShowStrikes === undefined) updates.noShowStrikes = 0;
-      if (existingData.isBanned === undefined) updates.isBanned = false;
+      if (existingData.noShowStrikes === undefined) {
+        updates.noShowStrikes = 0;
+        profileDataToSet.noShowStrikes = 0;
+      }
+      if (existingData.isBanned === undefined) {
+        updates.isBanned = false;
+        profileDataToSet.isBanned = false;
+      }
+      // Ensure admin status correctly nullifies store assignments if changed
+      if (updates.isAdmin) {
+        updates.assignedStoreId = null;
+        updates.storeRole = null;
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
+      }
 
 
       if (Object.keys(updates).length > 0) {
         try {
             await updateDoc(userRef, updates);
             if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
-            if (updates.avatarUrl && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
+            if (updates.avatarUrl !== undefined && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
         } catch (error: any) {
              console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
         }
       }
-        if (profileDataToSet.isAdmin) {
-            profileDataToSet.assignedStoreId = null;
-            profileDataToSet.storeRole = null;
-        } else {
-            profileDataToSet.assignedStoreId = existingData?.assignedStoreId || null;
-            profileDataToSet.storeRole = existingData?.storeRole || null;
-        }
     }
-
-    const profileToReturn: User = {
-      id: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: profileDataToSet.name,
-      points: profileDataToSet.points,
-      avatarUrl: profileDataToSet.avatarUrl,
-      isAdmin: profileDataToSet.isAdmin,
-      assignedStoreId: profileDataToSet.assignedStoreId,
-      storeRole: profileDataToSet.storeRole,
-      noShowStrikes: profileDataToSet.noShowStrikes,
-      isBanned: profileDataToSet.isBanned,
-    };
-    return profileToReturn;
+    return profileDataToSet;
   };
 
 
@@ -349,13 +336,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setUser(userProfile);
             setIsAuthenticated(true);
             if (userProfile.isBanned) {
-              toast({ title: "Account Suspended", description: "This account has been suspended due to repeated no-shows.", variant: "destructive", duration: Infinity });
-              await firebaseSignOut(auth); // Log them out immediately if banned
+              toast({ title: "Account Suspended", description: "This account has been suspended.", variant: "destructive", duration: 10000 });
+              // Do not auto-logout here, let App logic handle UI restrictions.
+              // Logout should occur if they try to make purchases or if explicitly done in login check.
             }
           } else {
             setUser(null);
             setIsAuthenticated(false);
-            if (typeof window !== 'undefined') await firebaseSignOut(auth);
+            if (typeof window !== 'undefined') await firebaseSignOut(auth); // If profile creation failed badly
           }
         } else {
           setUser(null);
@@ -433,21 +421,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoadingAuth(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // Profile check (including isBanned) is now handled by onAuthStateChanged
-      // No need to explicitly call createUserProfile here after signIn.
-      // If createUserProfile inside onAuthStateChanged detects banned, it will toast and sign out.
-      if (userCredential.user) {
-        // onAuthStateChanged will update the user state and isAuthenticated.
-        // We can check the temporarily fetched profile here if needed for immediate feedback,
-        // but the main check is in onAuthStateChanged.
-        const tempProfile = await createUserProfile(userCredential.user);
-        if (tempProfile?.isBanned) {
-           // This is a fallback, onAuthStateChanged should handle the primary logout.
-           toast({ title: "Account Suspended", description: "This account has been suspended.", variant: "destructive", duration: Infinity });
-           await firebaseSignOut(auth);
-           setLoadingAuth(false);
-           return false;
-        }
+      // onAuthStateChanged will handle profile creation and banned check.
+      // If the user is banned, onAuthStateChanged will set user state, and then this function can check.
+      const userRef = doc(db, "users", userCredential.user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists() && (userSnap.data() as User).isBanned) {
+        toast({ title: "Account Suspended", description: "This account has been suspended and cannot log in.", variant: "destructive", duration: 10000 });
+        await firebaseSignOut(auth); // This will trigger onAuthStateChanged again to clear user state
+        setLoadingAuth(false);
+        return false;
       }
       toast({ title: "Login Successful", description: "Welcome back!" });
       setLoadingAuth(false);
@@ -466,8 +448,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
+        // createUserProfile in onAuthStateChanged will pick this up
       }
-      // Profile creation and banned check is handled by onAuthStateChanged
+      // Profile creation including noShowStrikes: 0, isBanned: false is handled by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       setLoadingAuth(false);
       return true;
@@ -533,19 +516,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       if (typeof window !== 'undefined') {
         await firebaseSignOut(auth);
-        setUser(null);
-        setIsAuthenticated(false);
-        setCart([]);
-        _setSelectedStoreState(null);
-        setAppliedRedemption(null);
-        setUserOrders([]);
-        setLoadingUserOrders(true); 
-        localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith(DODI_CART_KEY_PREFIX)) {
-            localStorage.removeItem(key);
-          }
-        });
+        // onAuthStateChanged will clear user, isAuthenticated, cart, selectedStore, etc.
         router.push('/');
         toast({ title: "Logged Out", description: "You have been successfully logged out." });
       }
@@ -569,8 +540,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setCart((prevCart) => {
-      const itemIdentifier = product.id + (selectedWeight || '');
-      const existingItemIndex = prevCart.findIndex(item => (item.product.id + (item.selectedWeight || '')) === itemIdentifier && item.product.storeId === product.storeId);
+      const itemIdentifier = product.variantId; // Use variantId for uniqueness
+      const existingItemIndex = prevCart.findIndex(item => item.product.variantId === itemIdentifier && item.product.storeId === product.storeId);
 
       if (existingItemIndex > -1) {
         const updatedCart = [...prevCart];
@@ -578,22 +549,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity };
         return updatedCart;
       }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock), selectedWeight }];
+      return [...prevCart, { product, quantity: Math.min(quantity, product.stock), selectedWeight: product.selectedWeight }]; // Store selectedWeight from product
     });
-    toast({ title: "Item Added", description: `${product.name}${selectedWeight ? ` (${selectedWeight})` : ''} added to cart.` });
+    toast({ title: "Item Added", description: `${product.name}${product.selectedWeight ? ` (${product.selectedWeight})` : ''} added to cart.` });
   }, [_selectedStore, setStoreSelectorOpen, user?.isBanned]);
 
   const removeFromCart = useCallback((productId: string, selectedWeight?: FlowerWeight) => {
-    const itemIdentifier = productId + (selectedWeight || '');
-    setCart((prevCart) => prevCart.filter(item => (item.product.id + (item.selectedWeight || '')) !== itemIdentifier));
+    // For flowers, variantId combines product.id and selectedWeight. For others, variantId is product.id
+    const variantIdToRemove = selectedWeight ? `${productId}-${selectedWeight}` : productId;
+    setCart((prevCart) => prevCart.filter(item => item.product.variantId !== variantIdToRemove));
     toast({ title: "Item Removed", description: "Item removed from cart." });
   }, []);
 
   const updateCartQuantity = useCallback((productId: string, quantity: number, selectedWeight?: FlowerWeight) => {
-    const itemIdentifier = productId + (selectedWeight || '');
+    const variantIdToUpdate = selectedWeight ? `${productId}-${selectedWeight}` : productId;
     setCart((prevCart) =>
       prevCart.map(item =>
-        (item.product.id + (item.selectedWeight || '')) === itemIdentifier
+        item.product.variantId === variantIdToUpdate
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
       ).filter(item => item.quantity > 0)
@@ -602,8 +574,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   const getCartItemQuantity = useCallback((productId: string, selectedWeight?: FlowerWeight): number => {
     if (!_selectedStore) return 0;
-    const itemIdentifier = productId + (selectedWeight || '');
-    const item = cart.find(i => (i.product.id + (i.selectedWeight || '')) === itemIdentifier && i.product.storeId === _selectedStore.id);
+    const variantIdToFind = selectedWeight ? `${productId}-${selectedWeight}` : productId;
+    const item = cart.find(i => i.product.variantId === variantIdToFind && i.product.storeId === _selectedStore.id);
     return item ? item.quantity : 0;
   }, [cart, _selectedStore]);
 
@@ -693,9 +665,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const orderItems: OrderItem[] = cart.map(item => ({
-      productId: item.product.id,
+      productId: item.product.id, // Base product ID
       productName: item.product.name,
-      selectedWeight: item.selectedWeight,
+      selectedWeight: item.product.selectedWeight,
       quantity: item.quantity,
       pricePerItem: item.product.price,
       originalPricePerItem: item.product.originalPrice,
@@ -716,12 +688,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
-      userStrikesAtOrderTime: user.noShowStrikes, // Store strikes at order time
+      userStrikesAtOrderTime: user.noShowStrikes, 
     };
 
     try {
+      // createOrderInFirestore now handles stock updates transactionally
       const { orderId } = await createOrderInFirestore(orderData);
             
+      // User's points are NOT updated here. They are updated when store marks order as "Completed".
       if (user) fetchUserOrders(); 
       toast({ 
         title: "Order Submitted!", 
@@ -771,6 +745,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
           availabilityForStore.weightOptions?.forEach(wo => {
             const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
+            // Calculate available units for this specific weight from total grams
             const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
             
             let effectivePrice = wo.price;
@@ -782,8 +757,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
 
             resolved.push({
-              id: p.id, // Base product ID
-              variantId: `${p.id}-${wo.weight}`, // Unique ID for this weight variant
+              id: p.id,
+              variantId: `${p.id}-${wo.weight}`, 
               name: p.name,
               description: p.description,
               brand: p.brand,
@@ -793,16 +768,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               storeId: _selectedStore.id,
               price: effectivePrice,
               originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-              stock: unitsAvailable, // Stock is units of this weight
+              stock: unitsAvailable, 
               imageUrl: currentImageUrl,
-              selectedWeight: wo.weight, // The specific weight for this resolved product variant
-              availableWeights: availabilityForStore.weightOptions, // All options for selection UI
+              selectedWeight: wo.weight, 
+              availableWeights: availabilityForStore.weightOptions, 
               totalStockInGrams: totalGramsInStock,
             });
           });
         } else {
-          let effectivePrice = availabilityForStore.price || 0; // Added fallback for price
-          let originalPriceValue = availabilityForStore.price || 0; // Added fallback for price
+          let effectivePrice = availabilityForStore.price || 0; 
+          let originalPriceValue = availabilityForStore.price || 0; 
           let isProductOnDeal = false;
 
           if (activeRule && p.category === activeRule.category) {
@@ -812,7 +787,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           resolved.push({
             id: p.id,
-            variantId: p.id, // For non-flower, variantId is same as id
+            variantId: p.id, 
             name: p.name,
             description: p.description,
             brand: p.brand,
@@ -822,7 +797,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             storeId: _selectedStore.id,
             price: effectivePrice,
             originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-            stock: availabilityForStore.stock || 0, // Added fallback for stock
+            stock: availabilityForStore.stock || 0, 
             imageUrl: currentImageUrl,
           });
         }
@@ -863,7 +838,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .filter(p => p.category === categoryOnDealToday && p.originalPrice && p.price < p.originalPrice && p.stock > 0)
       .map(dealProduct => ({
         id: `${dealProduct.variantId}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
-        product: dealProduct, // dealProduct is already a ResolvedProduct (variant)
+        product: dealProduct, 
         discountPercentage: discountPercentageToday,
         expiresAt: endOfToday.toISOString(),
         title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
@@ -930,4 +905,3 @@ export function useAppContext() {
   }
   return context;
 }
-

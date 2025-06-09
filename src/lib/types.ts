@@ -81,7 +81,6 @@ export function flowerWeightToGrams(weight: FlowerWeight): number {
 export const FlowerWeightPriceSchema = z.object({
   weight: FlowerWeightEnum,
   price: z.coerce.number().positive({ message: "Price for this weight must be a positive number." }),
-  // Stock is removed from here, will be managed by totalStockInGrams at StoreAvailability level for flowers
 });
 export type FlowerWeightPrice = z.infer<typeof FlowerWeightPriceSchema>;
 
@@ -93,7 +92,7 @@ export const StoreAvailabilitySchema = z.object({
   stock: z.coerce.number().int().nonnegative({ message: "Stock must be a non-negative integer." }).optional(),
   // For Flower products
   totalStockInGrams: z.coerce.number().nonnegative({ message: "Total stock in grams must be a non-negative number." }).optional(),
-  weightOptions: z.array(FlowerWeightPriceSchema) // Note: stock is removed from FlowerWeightPriceSchema
+  weightOptions: z.array(FlowerWeightPriceSchema)
     .optional()
     .refine(options => !options || new Set(options.map(opt => opt.weight)).size === options.length, {
       message: "Each weight can only be defined once per store for flower products.",
@@ -119,12 +118,23 @@ export const ProductSchema = z.object({
 }).superRefine((data, ctx) => {
   data.availability.forEach((avail, index) => {
     if (data.category === 'Flower') {
-      if (!avail.weightOptions || avail.weightOptions.length !== flowerWeights.length) {
+      if (!avail.weightOptions || avail.weightOptions.length === 0) { // Check if empty too
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Flower products require price definition for all standard weights (${flowerWeights.join(', ')}).`,
+          message: `Flower products require price definition for available weights. Ensure all standard weights (${flowerWeights.join(', ')}) are considered if applicable.`,
           path: [`availability`, index, `weightOptions`],
         });
+      } else {
+         // Ensure all standard flowerWeights are present if any weightOptions are defined
+        const definedWeights = avail.weightOptions.map(wo => wo.weight);
+        const missingWeights = flowerWeights.filter(fw => !definedWeights.includes(fw));
+        if (missingWeights.length > 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Flower products are missing price definitions for the following standard weights: ${missingWeights.join(', ')}. Please add them.`,
+                path: [`availability`, index, `weightOptions`],
+            });
+        }
       }
       if (avail.totalStockInGrams === undefined || avail.totalStockInGrams === null || avail.totalStockInGrams < 0) {
         ctx.addIssue({
@@ -195,6 +205,7 @@ export interface Product extends Omit<ProductFormData, 'availability' | 'categor
 // based on the selected store.
 export interface ResolvedProduct {
   id: string;
+  variantId: string; // Unique identifier for product + weight combination
   name: string;
   description: string;
   brand: string;
@@ -202,15 +213,13 @@ export interface ResolvedProduct {
   dataAiHint?: string;
   isFeatured?: boolean;
   storeId: string;
-  // For non-flower products:
   price: number;
-  stock: number; // For non-flowers, this is direct stock. For flowers, this will be calculated units of the selected weight.
-  // For flower products:
-  totalStockInGrams?: number; // Only for flowers
-  availableWeights?: FlowerWeightPrice[]; // Only for flowers, price per weight
-  originalPrice?: number; // The base price if currently on deal, otherwise same as price or undefined
+  stock: number; 
+  totalStockInGrams?: number;
+  availableWeights?: FlowerWeightPrice[];
+  originalPrice?: number;
   imageUrl: string;
-  selectedWeight?: FlowerWeight; // If it's a flower product and a weight has been selected by the user
+  selectedWeight?: FlowerWeight;
 }
 
 
@@ -239,14 +248,15 @@ export interface User {
   avatarUrl?: string;
   isAdmin: boolean;
   assignedStoreId?: string | null;
-  storeRole?: StoreRole | null; // Role within the assigned store
+  storeRole?: StoreRole | null;
+  noShowStrikes: number; // Added for 3-strike rule
+  isBanned: boolean;     // Added for 3-strike rule
 }
 
 export interface CartItem {
   product: ResolvedProduct;
   quantity: number;
-  selectedWeight?: FlowerWeight; // For flower products
-  // priceAtPurchase is removed, ResolvedProduct.price should hold the current price for the selected weight/deal
+  selectedWeight?: FlowerWeight;
 }
 
 // Order related types
@@ -258,45 +268,42 @@ export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing"
 export interface OrderItem {
   productId: string;
   productName: string;
-  selectedWeight?: FlowerWeight; // For flower products
+  selectedWeight?: FlowerWeight;
   quantity: number;
-  pricePerItem: number; // Price at the time of order for the specific weight/deal
-  originalPricePerItem?: number; // Original price if it was a deal item
+  pricePerItem: number;
+  originalPricePerItem?: number;
 }
 
 export interface Order {
-  id: string; // Firestore document ID
+  id: string;
   userId: string;
   userEmail: string;
   userName:string;
   storeId: string;
   storeName: string;
   items: OrderItem[];
-  subtotal: number; // Sum of item.pricePerItem * item.quantity
-  discountApplied?: number; // Discount from points redemption
+  subtotal: number;
+  discountApplied?: number;
   pointsRedeemed?: number;
-  finalTotal: number; // subtotal - discountApplied
-  pointsEarned?: number; // Points earned from this order (calculated at completion)
-  orderDate: string; // ISO string
+  finalTotal: number;
+  pointsEarned?: number;
+  orderDate: string;
   status: OrderStatus;
   pickupInstructions?: string;
+  userStrikesAtOrderTime?: number; // Store user's strike count at the time of order
 }
 
 // For Points Redemption
 export interface RedemptionOption {
   id: string;
   pointsRequired: number;
-  discountAmount: number; // in dollars
+  discountAmount: number;
   description: string;
 }
 
-// Updated redemption options: 100 points = $5
 export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_5_100', pointsRequired: 100, discountAmount: 5, description: '$5 Off (100 Points)' },
   { id: 'redeem_10_200', pointsRequired: 200, discountAmount: 10, description: '$10 Off (200 Points)' },
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
-
-
-    
