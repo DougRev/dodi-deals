@@ -10,10 +10,9 @@ import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndP
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst } from '@/lib/types'; // Renamed import for clarity
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-// Removed unused import: import { initialProducts as initialProductsSeedData } from '@/data/products';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateOrderStatus as updateOrderStatusInFirestore } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -203,7 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user, isAuthenticated]);
 
 
-  useEffect(() => {
+ useEffect(() => {
     if (isAuthenticated && user?.id) {
       fetchUserOrders();
     } else {
@@ -212,7 +211,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLoadingUserOrders(false);
       }
     }
-  }, [isAuthenticated, user?.id, fetchUserOrders, loadingAuth]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user?.id]);
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -678,7 +678,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
-      userStrikesAtOrderTime: user.noShowStrikes, 
+      userStrikesAtOrderTime: user.noShowStrikes || 0, 
     };
 
     try {
@@ -702,18 +702,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!_selectedStore || loadingProducts || allProducts.length === 0) return [];
 
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
-    let activeRule: CustomDealRule | undefined = undefined;
-    if (_selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
-        for (const rule of _selectedStore.dailyDeals) {
-            if (rule && Array.isArray(rule.selectedDays) && rule.selectedDays.includes(currentDayOfWeek) &&
-                typeof rule.category === 'string' && typeof rule.discountPercentage === 'number' && rule.discountPercentage > 0) {
-                activeRule = rule;
-                break; 
-            }
-        }
-    }
+    const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; // Match daysOfWeek: Mon-Sun
 
+    let siteWideDiscountInfo: { category?: ProductCategory; brand?: string; discountPercentage: number; title: string; } | null = null;
+
+    // Define site-wide standard deals
+    if (currentDayName === 'Tuesday') { // 25% off "Vape"
+      siteWideDiscountInfo = { category: 'Vape', discountPercentage: 25, title: "Tuesday Vape Special!" };
+    } else if (currentDayName === 'Wednesday') { // 15% off "Dodi Hemp" brand
+      siteWideDiscountInfo = { brand: 'Dodi Hemp', discountPercentage: 15, title: "Dodi Brand Wednesday!" };
+    } else if (currentDayName === 'Thursday') { // 20% off "Edible"
+      siteWideDiscountInfo = { category: 'Edible', discountPercentage: 20, title: "Thirsty Thursday Edibles!" };
+    }
+    
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
       if (!p.availability) return;
@@ -729,52 +731,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
-        if (p.category === 'Flower') {
-          const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
-          availabilityForStore.weightOptions?.forEach(wo => {
-            const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
-            const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
-            
-            let effectivePrice = wo.price;
-            let originalPriceValue = wo.price;
-            let isProductOnDeal = false;
-            if (activeRule && p.category === activeRule.category) {
-              isProductOnDeal = true;
-              effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
-            }
-
-            resolved.push({
-              id: p.id,
-              variantId: `${p.id}-${wo.weight}`, 
-              name: p.name,
-              description: p.description,
-              brand: p.brand,
-              category: p.category,
-              dataAiHint: p.dataAiHint,
-              isFeatured: p.isFeatured || false,
-              storeId: _selectedStore.id,
-              price: effectivePrice,
-              originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-              stock: unitsAvailable, 
-              imageUrl: currentImageUrl,
-              selectedWeight: wo.weight, 
-              availableWeights: availabilityForStore.weightOptions, 
-              totalStockInGrams: totalGramsInStock,
-            });
-          });
-        } else {
-          let effectivePrice = availabilityForStore.price || 0; 
-          let originalPriceValue = availabilityForStore.price || 0; 
+        const processProductVariant = (basePrice: number, stock: number, selectedWeight?: FlowerWeight) => {
+          let effectivePrice = basePrice;
+          let originalPriceValue = basePrice;
           let isProductOnDeal = false;
+          let appliedDealTitle = "";
 
-          if (activeRule && p.category === activeRule.category) {
-            isProductOnDeal = true;
-            effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
+          // 1. Check for site-wide deal
+          if (siteWideDiscountInfo) {
+            if (siteWideDiscountInfo.category && p.category === siteWideDiscountInfo.category) {
+              isProductOnDeal = true;
+              effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
+              appliedDealTitle = siteWideDiscountInfo.title;
+            } else if (siteWideDiscountInfo.brand && p.brand === siteWideDiscountInfo.brand) {
+              isProductOnDeal = true;
+              effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
+              appliedDealTitle = siteWideDiscountInfo.title;
+            }
           }
 
-          resolved.push({
+          // 2. If no site-wide deal applied, check for custom store deal
+          if (!isProductOnDeal && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+            for (const rule of _selectedStore.dailyDeals) {
+              if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
+                isProductOnDeal = true;
+                effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
+                appliedDealTitle = `${rule.discountPercentage}% off ${rule.category} today!`;
+                break; 
+              }
+            }
+          }
+          
+          return {
             id: p.id,
-            variantId: p.id, 
+            variantId: selectedWeight ? `${p.id}-${selectedWeight}` : p.id,
             name: p.name,
             description: p.description,
             brand: p.brand,
@@ -784,9 +774,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             storeId: _selectedStore.id,
             price: effectivePrice,
             originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-            stock: availabilityForStore.stock || 0, 
+            stock: stock, 
             imageUrl: currentImageUrl,
+            selectedWeight: selectedWeight,
+            // For flower specific fields, if any, to be added if needed
+            availableWeights: p.category === 'Flower' ? availabilityForStore.weightOptions : undefined,
+            totalStockInGrams: p.category === 'Flower' ? availabilityForStore.totalStockInGrams : undefined,
+            // appliedDealTitle: isProductOnDeal ? appliedDealTitle : undefined // Optional: if you want to show deal title on product card
+          };
+        };
+
+        if (p.category === 'Flower' && availabilityForStore.weightOptions) {
+          const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
+          availabilityForStore.weightOptions.forEach(wo => {
+            const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
+            const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
+            if (unitsAvailable > 0) { // Only add if at least one unit can be made
+               resolved.push(processProductVariant(wo.price, unitsAvailable, wo.weight));
+            }
           });
+        } else if (availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
+          resolved.push(processProductVariant(availabilityForStore.price, availabilityForStore.stock));
         }
       }
     });
@@ -796,43 +804,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   const deals: Deal[] = useMemo(() => {
-    if (!_selectedStore || loadingProducts || products.length === 0 || !_selectedStore.dailyDeals || _selectedStore.dailyDeals.length === 0) {
+    if (!_selectedStore || loadingProducts || products.length === 0 ) {
       return [];
     }
 
     const today = new Date();
-    const currentDayOfWeek = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
-    let activeRule: CustomDealRule | undefined = undefined;
-
-    for (const rule of _selectedStore.dailyDeals) {
-      if (rule && Array.isArray(rule.selectedDays) && rule.selectedDays.includes(currentDayOfWeek) &&
-          typeof rule.category === 'string' && typeof rule.discountPercentage === 'number' && rule.discountPercentage > 0) {
-        activeRule = rule;
-        break;
-      }
-    }
-
-    if (!activeRule) {
-      return [];
-    }
-
-    const categoryOnDealToday = activeRule.category as ProductCategory;
-    const discountPercentageToday = activeRule.discountPercentage;
+    const currentDayIndex = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; // Match daysOfWeek: Mon-Sun
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
+    let activeSiteWideDealConfig: { category?: ProductCategory; brand?: string; discountPercentage: number; title: string; } | null = null;
+
+    if (currentDayName === 'Tuesday') {
+        activeSiteWideDealConfig = { category: 'Vape', discountPercentage: 25, title: "Terrific Tuesday Vapes: 25% Off!" };
+    } else if (currentDayName === 'Wednesday') {
+        activeSiteWideDealConfig = { brand: 'Dodi Hemp', discountPercentage: 15, title: "Wonderful Wednesday: 15% Off Dodi Hemp!" };
+    } else if (currentDayName === 'Thursday') {
+        activeSiteWideDealConfig = { category: 'Edible', discountPercentage: 20, title: "Tasty Thursday Edibles: 20% Off!" };
+    }
+
+    if (!activeSiteWideDealConfig) {
+        return []; // No site-wide deal today, so homepage deals are empty based on this logic
+                   // Or, we could fall back to custom store deals for homepage here if desired.
+                   // For now, adhering to "new standard" being these specific deals.
+    }
+    
     return products
-      .filter(p => p.category === categoryOnDealToday && p.originalPrice && p.price < p.originalPrice && p.stock > 0)
+      .filter(p => {
+          // Check if product matches the site-wide deal criteria
+          if (activeSiteWideDealConfig!.category && p.category === activeSiteWideDealConfig!.category) return true;
+          if (activeSiteWideDealConfig!.brand && p.brand === activeSiteWideDealConfig!.brand) return true;
+          return false;
+      })
+      .filter(p => p.originalPrice && p.price < p.originalPrice && p.stock > 0) // Ensure it's actually discounted and in stock
       .map(dealProduct => ({
-        id: `${dealProduct.variantId}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
+        id: `${dealProduct.variantId}-deal-${currentDayName}-${activeSiteWideDealConfig!.discountPercentage}`,
         product: dealProduct, 
-        discountPercentage: discountPercentageToday,
+        discountPercentage: activeSiteWideDealConfig!.discountPercentage,
         expiresAt: endOfToday.toISOString(),
-        title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
-        description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${dealProduct.name}${dealProduct.selectedWeight ? ` (${dealProduct.selectedWeight})` : ''}.`,
+        title: activeSiteWideDealConfig!.title,
+        description: `${activeSiteWideDealConfig!.discountPercentage}% off select items today! Includes ${dealProduct.name}${dealProduct.selectedWeight ? ` (${dealProduct.selectedWeight})` : ''}.`,
         storeId: _selectedStore.id,
-        categoryOnDeal: categoryOnDealToday,
+        categoryOnDeal: dealProduct.category, // The product's actual category
       }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, products, loadingProducts]);
 
 
@@ -879,7 +895,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders
+    userOrders, loadingUserOrders, fetchUserOrders, getCartSubtotal, getCartTotal // Added getCartSubtotal and getCartTotal
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
