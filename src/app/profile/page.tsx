@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays } from 'lucide-react'; 
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle } from 'lucide-react'; 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -71,9 +71,6 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
 
-  // AppContext now handles initial and subsequent fetching of orders based on auth state
-  // This useEffect for initial fetch is removed to avoid conflicts.
-
   if (loadingAuth || !isAuthenticated || !user) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
@@ -86,7 +83,7 @@ function ProfilePageInternal() {
   const handleAvatarSelect = async (avatarPath: string) => {
     if (isUpdatingAvatar || user.avatarUrl === avatarPath || isUpdatingProfile) return;
     setIsUpdatingAvatar(true);
-    const success = await updateUserAvatar(avatarPath);
+    await updateUserAvatar(avatarPath);
     setIsUpdatingAvatar(false);
   };
 
@@ -218,6 +215,7 @@ function ProfilePageInternal() {
                               <div>
                                 <span className="font-medium text-foreground">{item.productName}</span>
                                 <span className="text-muted-foreground"> (x{item.quantity})</span>
+                                {item.selectedWeight && <span className="text-xs text-muted-foreground"> - {item.selectedWeight}</span>}
                               </div>
                               <span className="font-semibold text-foreground">${(item.pricePerItem * item.quantity).toFixed(2)}</span>
                             </li>
@@ -245,10 +243,26 @@ function ProfilePageInternal() {
                          {order.pointsRedeemed && order.pointsRedeemed > 0 && (
                              <p className="text-xs text-muted-foreground text-right mt-1">({order.pointsRedeemed} points redeemed)</p>
                          )}
-                         {order.pointsEarned && order.pointsEarned > 0 && (
-                            <p className="text-xs text-green-600 text-right mt-1">({order.pointsEarned} points earned on completion)</p>
+                         {order.pointsEarned && order.pointsEarned > 0 && order.status === "Completed" && (
+                            <p className="text-xs text-green-600 text-right mt-1">({order.pointsEarned} points earned)</p>
                          )}
-
+                         {order.status === "Cancelled" && (
+                            <div className="mt-4 p-3 bg-destructive/10 rounded-md border border-destructive/20">
+                                <h5 className="text-sm font-semibold text-destructive flex items-center">
+                                    <AlertCircle className="mr-2 h-4 w-4" /> Order Cancelled
+                                </h5>
+                                {order.cancellationReason && (
+                                    <p className="text-xs text-destructive/90 mt-1">
+                                        Reason: <span className="font-medium">{order.cancellationReason}</span>
+                                    </p>
+                                )}
+                                {order.cancellationDescription && (
+                                    <p className="text-xs text-destructive/80 mt-0.5">
+                                        Note: {order.cancellationDescription}
+                                    </p>
+                                )}
+                            </div>
+                         )}
                       </AccordionContent>
                     </AccordionItem>
                   ))}
