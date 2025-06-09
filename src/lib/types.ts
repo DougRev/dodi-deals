@@ -172,6 +172,7 @@ export interface Order {
   discountApplied?: number; // Discount from points redemption
   pointsRedeemed?: number;
   finalTotal: number; // subtotal - discountApplied
+  pointsEarned?: number; // Points earned from this order
   orderDate: string; // ISO string
   status: OrderStatus;
   pickupInstructions?: string;
@@ -185,8 +186,10 @@ export interface RedemptionOption {
   description: string;
 }
 
+// Updated redemption options: 100 points = $5
 export const REDEMPTION_OPTIONS: RedemptionOption[] = [
-  { id: 'redeem_5', pointsRequired: 500, discountAmount: 5, description: '$5 Off (500 Points)' },
-  { id: 'redeem_10', pointsRequired: 950, discountAmount: 10, description: '$10 Off (950 Points)' },
-  { id: 'redeem_20', pointsRequired: 1800, discountAmount: 20, description: '$20 Off (1800 Points)' },
+  { id: 'redeem_5_100', pointsRequired: 100, discountAmount: 5, description: '$5 Off (100 Points)' },
+  { id: 'redeem_10_200', pointsRequired: 200, discountAmount: 10, description: '$10 Off (200 Points)' },
+  { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
+  { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];

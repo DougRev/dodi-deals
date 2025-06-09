@@ -298,50 +298,56 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
   }
 }
 
-// Transactional function to deduct user points
-async function deductUserPointsTransactional(
+// Transactional function to update user points (can be positive for earning, negative for spending)
+async function updateUserPointsTransactional(
   transaction: FirebaseFirestore.Transaction,
   userId: string,
-  pointsToDeduct: number
+  pointsDelta: number
 ): Promise<void> {
-  const functionName = 'deductUserPointsTransactional';
-  // ensureAdminDbInitialized is called by the outer transactional function (createOrder)
+  const functionName = 'updateUserPointsTransactional';
+  // ensureAdminDbInitialized is called by the outer transactional function
 
   const userRef = adminDb!.collection('users').doc(userId);
   const userDoc = await transaction.get(userRef);
 
   if (!userDoc.exists) {
-    throw new Error(`[${functionName}] User ${userId} not found.`);
+    throw new Error(`[${functionName}] User ${userId} not found for points update.`);
   }
   const userData = userDoc.data() as User;
   const currentPoints = userData.points || 0;
+  const newPoints = currentPoints + pointsDelta;
 
-  if (currentPoints < pointsToDeduct) {
-    throw new Error(`[${functionName}] User ${userId} does not have enough points. Has ${currentPoints}, needs ${pointsToDeduct}.`);
+  if (newPoints < 0) {
+    // This should be prevented if pointsDelta is negative (spending) and exceeds currentPoints
+    throw new Error(`[${functionName}] User ${userId} would have negative points (${newPoints}) after update. Current: ${currentPoints}, Change: ${pointsDelta}.`);
   }
-  const newPoints = currentPoints - pointsToDeduct;
   transaction.update(userRef, { points: newPoints });
-  console.log(`[firestoreService][AdminSDK][${functionName}] Points deduction for ${pointsToDeduct} points prepared for user ${userId}. New balance will be ${newPoints}.`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Points update for user ${userId} prepared. Change: ${pointsDelta}, New Balance will be ${newPoints}.`);
 }
 
 
 export async function createOrderInFirestore(
-  orderData: Omit<Order, 'id' | 'orderDate' | 'status'>,
-  userIdForPointsDeduction: string | null,
+  orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>,
+  userIdForPoints: string | null, // User ID for both spending and earning
   pointsToDeductIfApplicable: number | null
-): Promise<string> {
+): Promise<{orderId: string, pointsEarned: number, newTotalPoints: number | null }> {
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
+
+  const pointsEarnedFromOrder = Math.floor(orderData.finalTotal * 2); // 2 points per $1 on finalTotal
 
   const fullOrderData: Omit<Order, 'id'> = {
     ...orderData,
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
+    pointsEarned: pointsEarnedFromOrder,
   };
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to create order:`, JSON.stringify(fullOrderData));
 
   const ordersColRef = adminDb!.collection('orders');
   const productsColRef = adminDb!.collection('products');
+
+  let finalUserPointsAfterTransaction: number | null = null;
 
   try {
     const orderId = await adminDb!.runTransaction(async (transaction) => {
@@ -373,63 +379,50 @@ export async function createOrderInFirestore(
             : avail
         );
         productUpdates.push({ ref: productRef, newAvailability: newAvailabilityArray });
-        console.log(`[firestoreService][AdminSDK][${functionName}] Stock update for ${item.productName} prepared. New stock: ${storeAvailability.stock - item.quantity}`);
       }
 
-      // 2. Deduct points if applicable (transactionally)
-      if (userIdForPointsDeduction && pointsToDeductIfApplicable && pointsToDeductIfApplicable > 0) {
-        await deductUserPointsTransactional(transaction, userIdForPointsDeduction, pointsToDeductIfApplicable);
+      // 2. Update user points (earning and spending)
+      if (userIdForPoints) {
+        let netPointsChange = pointsEarnedFromOrder;
+        if (pointsToDeductIfApplicable && pointsToDeductIfApplicable > 0) {
+          netPointsChange -= pointsToDeductIfApplicable;
+        }
+        
+        const userRef = adminDb!.collection('users').doc(userIdForPoints);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists) throw new Error(`User ${userIdForPoints} not found for points update.`);
+        
+        const userData = userDoc.data() as User;
+        const currentPoints = userData.points || 0;
+        finalUserPointsAfterTransaction = currentPoints + netPointsChange;
+
+        if (finalUserPointsAfterTransaction < 0) {
+          throw new Error(`User ${userIdForPoints} would have negative points (${finalUserPointsAfterTransaction}). Current: ${currentPoints}, Deducting: ${pointsToDeductIfApplicable}, Earning: ${pointsEarnedFromOrder}.`);
+        }
+        transaction.update(userRef, { points: finalUserPointsAfterTransaction });
+        console.log(`[firestoreService][AdminSDK][${functionName}] Points update for user ${userIdForPoints} prepared. Net change: ${netPointsChange}, New Balance will be ${finalUserPointsAfterTransaction}.`);
       }
 
       // 3. Create the order document
       const newOrderRef = ordersColRef.doc(); // Auto-generate ID
       transaction.set(newOrderRef, fullOrderData);
-      console.log(`[firestoreService][AdminSDK][${functionName}] Order document creation prepared.`);
 
       // 4. Apply product stock updates
       for (const update of productUpdates) {
         transaction.update(update.ref, { availability: update.newAvailability });
       }
-      console.log(`[firestoreService][AdminSDK][${functionName}] All product stock updates prepared.`);
 
-      return newOrderRef.id; // Return the new order ID
+      return newOrderRef.id;
     });
 
-    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created, stock updated, and points (if any) deducted successfully.`);
-    return orderId;
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created, stock updated, and points updated successfully.`);
+    return { orderId, pointsEarned: pointsEarnedFromOrder, newTotalPoints: finalUserPointsAfterTransaction };
   } catch (error: any) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed:`, error.message, error.stack);
-    // Re-throw a user-friendly or specific error message to be caught by AppContext
     throw new Error(error.message || `Failed to create order due to an unexpected issue.`);
   }
 }
 
-// Non-transactional points deduction - kept for other potential uses, but not for orders.
-export async function deductUserPoints(userId: string, pointsToDeduct: number): Promise<void> {
-  const functionName = 'deductUserPoints (Non-Transactional)';
-  ensureAdminDbInitialized(functionName);
-  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Deducting ${pointsToDeduct} points from user ${userId}`);
-
-  const userRef = adminDb!.collection('users').doc(userId);
-  try {
-    const userDoc = await userRef.get();
-    if (!userDoc.exists) {
-      throw new Error(`User ${userId} not found.`);
-    }
-    const currentPoints = (userDoc.data() as User).points || 0;
-    if (currentPoints < pointsToDeduct) {
-      throw new Error(`User ${userId} does not have enough points. Has ${currentPoints}, needs ${pointsToDeduct}.`);
-    }
-    const newPoints = currentPoints - pointsToDeduct;
-    await userRef.update({ points: newPoints });
-    
-    console.log(`[firestoreService][AdminSDK][${functionName}] Points deducted successfully for user ${userId}. New balance: ${newPoints}.`);
-  } catch (error) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error deducting points for user ${userId}:`, error);
-    throw error;
-  }
-}
 
 export async function getUserOrders(userId: string): Promise<Order[]> {
   const functionName = 'getUserOrders';

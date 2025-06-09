@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent } from 'lucide-react'; // Added Percent
+import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent, Award } from 'lucide-react'; // Added Award
 import type { ResolvedProduct } from '@/lib/types';
 
 // Internal component containing the original CartPage logic
@@ -21,17 +21,18 @@ function CartPageInternal() {
     removeFromCart, 
     updateCartQuantity, 
     getCartTotal, 
-    getCartTotalSavings, 
+    getCartTotalSavings,
+    getPotentialPointsForCart, 
     clearCart, 
     selectedStore, 
     setStoreSelectorOpen, 
     loadingAuth,
-    user, // For displaying points
+    user, 
     redemptionOptions,
     appliedRedemption,
     applyRedemption,
     removeRedemption,
-    finalizeOrder // Ensure this is destructured
+    finalizeOrder
   } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,6 +75,7 @@ function CartPageInternal() {
 
   const cartTotal = getCartTotal();
   const totalSavings = getCartTotalSavings();
+  const potentialPoints = getPotentialPointsForCart();
   const subtotalBeforeRedemption = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
 
 
@@ -212,6 +214,12 @@ function CartPageInternal() {
                   <span>Estimated Total</span>
                   <span className="text-primary">${(cartTotal).toFixed(2)}</span>
                 </div>
+                 {potentialPoints > 0 && (
+                  <div className="flex justify-center items-center text-sm text-green-600 mt-2 p-2 bg-green-500/10 rounded-md">
+                    <Award className="h-4 w-4 mr-2" />
+                    You'll earn approximately <span className="font-bold mx-1">{potentialPoints}</span> points with this order!
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   Final payment and applicable taxes will be handled at {selectedStore.name} upon pickup.
                 </p>
@@ -220,7 +228,7 @@ function CartPageInternal() {
                 <Button 
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                   size="lg" 
-                  onClick={finalizeOrder} // Updated onClick handler
+                  onClick={finalizeOrder} 
                 >
                   Confirm for In-Store Pickup
                 </Button>

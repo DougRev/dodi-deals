@@ -36,6 +36,7 @@ interface AppContextType {
   deals: Deal[];
   getCartTotal: () => number;
   getCartTotalSavings: () => number;
+  getPotentialPointsForCart: () => number;
   stores: Store[];
   selectedStore: Store | null;
   selectStore: (storeId: string | null) => void;
@@ -199,7 +200,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoadingUserOrders(false);
     }
-  }, [user, isAuthenticated, toast, setUserOrders, setLoadingUserOrders]);
+  }, [user, isAuthenticated]);
 
 
   useEffect(() => {
@@ -432,6 +433,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // createUserProfile will be called by onAuthStateChanged listener
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -492,7 +494,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   const logout = useCallback(async () => {
-    setLoadingAuth(true); 
     try {
       if (typeof window !== 'undefined') {
         await firebaseSignOut(auth);
@@ -502,7 +503,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         _setSelectedStoreState(null);
         setAppliedRedemption(null);
         setUserOrders([]);
-        setLoadingUserOrders(false); // Ensure loading state is reset
+        setLoadingUserOrders(false); 
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -517,10 +518,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== 'undefined') {
         toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
       }
-    } finally {
-        setLoadingAuth(false);
     }
-  }, [router, toast, setCart, _setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption, setUserOrders, setLoadingUserOrders]);
+  }, [router, toast, setCart, _setSelectedStoreState, setUser, setIsAuthenticated, setAppliedRedemption, setUserOrders, setLoadingUserOrders]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -579,6 +578,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
   }, [cart, appliedRedemption]);
 
+  const getPotentialPointsForCart = useCallback(() => {
+    const currentCartTotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    // No points earned if redemption makes total <= 0, though finalTotal is capped at 0 already.
+    // Points are earned on the final amount paid.
+    const finalTotalAfterPotentialRedemption = appliedRedemption ? Math.max(0, currentCartTotal - appliedRedemption.discountAmount) : currentCartTotal;
+    return Math.floor(finalTotalAfterPotentialRedemption * 2); // 2 points per $1
+  }, [cart, appliedRedemption]);
+
   const getCartTotalSavings = useCallback(() => {
     let savings = cart.reduce((totalSavings, item) => {
       if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
@@ -632,7 +639,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
     const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
 
-    const orderData: Omit<Order, 'id' | 'orderDate' | 'status'> = {
+    const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
       userEmail: user.email,
       userName: user.name,
@@ -647,17 +654,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      const userIdForPoints = appliedRedemption ? user.id : null;
-      const pointsToDeduct = appliedRedemption ? appliedRedemption.pointsRequired : null;
+      const { orderId, pointsEarned, newTotalPoints } = await createOrderInFirestore(
+        orderData,
+        user.id, // Pass user.id for points update logic
+        appliedRedemption ? appliedRedemption.pointsRequired : null
+      );
 
-      await createOrderInFirestore(orderData, userIdForPoints, pointsToDeduct);
-
-      if (appliedRedemption) {
-        setUser(prevUser => prevUser ? { ...prevUser, points: prevUser.points - appliedRedemption.pointsRequired } : null);
+      if (newTotalPoints !== null) {
+        setUser(prevUser => prevUser ? { ...prevUser, points: newTotalPoints } : null);
       }
-
-      if (user) fetchUserOrders();
-      toast({ title: "Order Placed!", description: `Your order for pickup at ${_selectedStore.name} has been submitted.`});
+      
+      if (user) fetchUserOrders(); // Refresh orders list
+      toast({ title: "Order Placed!", description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. You earned ${pointsEarned} points.`});
       clearCart();
       router.push('/profile');
     } catch (error: any) {
@@ -788,8 +796,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deals,
     getCartTotal,
     getCartTotalSavings,
+    getPotentialPointsForCart,
     stores,
-    selectedStore: _selectedStore, // Use the internal state variable
+    selectedStore: _selectedStore, 
     selectStore,
     isStoreSelectorOpen,
     setStoreSelectorOpen,
@@ -806,8 +815,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetchUserOrders,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
-    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, stores,
-    _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, // Use internal _selectedStore here
+    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
+    _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
     userOrders, loadingUserOrders, fetchUserOrders
   ]);
