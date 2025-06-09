@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered } from 'lucide-react';
+import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX } from 'lucide-react'; // Added UserX
 
 // Updated status groupings
 const ACTIVE_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup"];
@@ -51,7 +51,6 @@ export default function ManagerOrdersPage() {
     if (!loadingAuth && canManage) {
       fetchOrders(user.assignedStoreId!, !viewingArchived);
     } else if (!loadingAuth && (!user?.assignedStoreId || !(user.storeRole === 'Manager' || user.storeRole === 'Employee'))) {
-      // If user is not authorized (e.g. role changed, no longer assigned), stop loading and clear orders
       setLoadingOrders(false);
       setOrders([]);
     }
@@ -65,7 +64,6 @@ export default function ManagerOrdersPage() {
       toast({ title: "Order Status Updated", description: `Order ${orderId.substring(0,6)}... moved to ${newStatus}.` });
       
       if (user?.assignedStoreId) {
-        // Re-fetch orders for the current view (active or archived)
         fetchOrders(user.assignedStoreId, !viewingArchived);
       }
     } catch (error: any) {
@@ -83,10 +81,8 @@ export default function ManagerOrdersPage() {
       case "Preparing":
         return ["Ready for Pickup", "Cancelled"];
       case "Ready for Pickup":
-        // Manager can mark as completed (customer picked up) or cancel (e.g., no-show)
         return ["Completed", "Cancelled"]; 
       default:
-        // Completed or Cancelled orders typically don't change status via manager UI in this flow
         return []; 
     }
   };
@@ -153,6 +149,12 @@ export default function ManagerOrdersPage() {
                     <p className="text-xs text-muted-foreground">Order ID: {order.id.substring(0, 8)}...</p>
                     <p className="text-sm font-medium text-foreground">Customer: {order.userName} ({order.userEmail})</p>
                     <p className="text-xs text-muted-foreground">Placed: {formatOrderTimestamp(order.orderDate)}</p>
+                     {order.userStrikesAtOrderTime !== undefined && order.userStrikesAtOrderTime > 0 && (
+                      <Badge variant="destructive" className="mt-1 text-xs">
+                        <UserX className="mr-1 h-3 w-3" />
+                        {order.userStrikesAtOrderTime} Prior Strike(s)
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex flex-col items-start sm:items-end gap-1">
                      <Badge variant={getStatusBadgeVariant(order.status)} className="text-xs flex items-center gap-1">
@@ -169,7 +171,7 @@ export default function ManagerOrdersPage() {
                     <ul className="space-y-1 text-sm max-h-40 overflow-y-auto">
                       {order.items.map((item, index) => (
                         <li key={`${order.id}-item-${index}`} className="flex justify-between p-1.5 bg-muted/50 rounded">
-                          <span>{item.productName} (x{item.quantity})</span>
+                          <span>{item.productName}{item.selectedWeight ? ` (${item.selectedWeight})` : ''} (x{item.quantity})</span>
                           <span>${(item.pricePerItem * item.quantity).toFixed(2)}</span>
                         </li>
                       ))}
@@ -180,6 +182,9 @@ export default function ManagerOrdersPage() {
                             <span> | Discount: -${order.discountApplied.toFixed(2)} ({order.pointsRedeemed} pts)</span>
                         )}
                     </div>
+                     {order.pointsEarned && order.pointsEarned > 0 && order.status === "Completed" && (
+                        <p className="text-xs text-green-600">Points Earned: {order.pointsEarned}</p>
+                    )}
                   </div>
                   <div>
                     <h4 className="text-md font-semibold mb-2 text-primary">Actions</h4>

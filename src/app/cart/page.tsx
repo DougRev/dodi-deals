@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent, Award, AlertCircle } from 'lucide-react'; // Added Award, AlertCircle
+import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent, Award, AlertCircle, Ban } from 'lucide-react'; // Added Ban
 import type { ResolvedProduct } from '@/lib/types';
 
 const MINIMUM_PURCHASE_AMOUNT = 15;
@@ -19,18 +19,18 @@ const MINIMUM_PURCHASE_AMOUNT = 15;
 function CartPageInternal() {
   const { 
     isAuthenticated, 
+    user, 
     cart, 
     removeFromCart, 
     updateCartQuantity, 
     getCartTotal,
-    getCartSubtotal, // Use subtotal for minimum purchase check
+    getCartSubtotal, 
     getCartTotalSavings,
     getPotentialPointsForCart, 
     clearCart, 
     selectedStore, 
     setStoreSelectorOpen, 
     loadingAuth,
-    user, 
     redemptionOptions,
     appliedRedemption,
     applyRedemption,
@@ -150,15 +150,16 @@ function CartPageInternal() {
                       onChange={(e) => handleQuantityChange(item.product.id, parseInt(e.target.value), item.product.selectedWeight)}
                       className="w-20 h-10 text-center"
                       aria-label={`Quantity for ${item.product.name}`}
+                      disabled={user?.isBanned}
                     />
-                    <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.product.id, item.product.selectedWeight)} aria-label={`Remove ${item.product.name}`}>
+                    <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.product.id, item.product.selectedWeight)} aria-label={`Remove ${item.product.name}`} disabled={user?.isBanned}>
                       <Trash2 className="h-5 w-5 text-destructive" />
                     </Button>
                   </div>
                 </Card>
               );
             })}
-             <Button variant="outline" onClick={clearCart} className="text-destructive border-destructive hover:bg-destructive/10 mt-4">
+             <Button variant="outline" onClick={clearCart} className="text-destructive border-destructive hover:bg-destructive/10 mt-4" disabled={user?.isBanned}>
               Clear Cart
             </Button>
           </div>
@@ -185,14 +186,14 @@ function CartPageInternal() {
                         size="sm"
                         className="w-full justify-between"
                         onClick={() => applyRedemption(option)}
-                        disabled={user.points < option.pointsRequired || cartSubtotal < option.discountAmount}
+                        disabled={user.points < option.pointsRequired || cartSubtotal < option.discountAmount || user?.isBanned}
                       >
                         <span>{option.description}</span>
                         <span>-{option.pointsRequired} pts</span>
                       </Button>
                     ))}
                     {appliedRedemption && (
-                      <Button variant="link" size="sm" onClick={removeRedemption} className="text-destructive p-0 h-auto">
+                      <Button variant="link" size="sm" onClick={removeRedemption} className="text-destructive p-0 h-auto" disabled={user?.isBanned}>
                         Remove Discount
                       </Button>
                     )}
@@ -221,7 +222,7 @@ function CartPageInternal() {
                   <span>Estimated Total</span>
                   <span className="text-primary">${(cartFinalTotal).toFixed(2)}</span>
                 </div>
-                 {potentialPoints > 0 && (
+                 {potentialPoints > 0 && !user?.isBanned && (
                   <div className="flex justify-center items-center text-sm text-green-600 mt-2 p-2 bg-green-500/10 rounded-md">
                     <Award className="h-4 w-4 mr-2" />
                     You'll earn approximately <span className="font-bold mx-1">{potentialPoints}</span> points with this order!
@@ -230,10 +231,16 @@ function CartPageInternal() {
                 <p className="text-xs text-muted-foreground">
                   Final payment and applicable taxes will be handled at {selectedStore.name} upon pickup.
                 </p>
-                {isBelowMinimum && (
+                {isBelowMinimum && !user?.isBanned && (
                   <div className="mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm flex items-center">
                     <AlertCircle className="h-5 w-5 mr-2 shrink-0" />
                     A minimum purchase of ${MINIMUM_PURCHASE_AMOUNT.toFixed(2)} is required. Add more items to proceed.
+                  </div>
+                )}
+                {user?.isBanned && (
+                  <div className="mt-3 p-3 bg-destructive/20 border border-destructive/50 rounded-md text-destructive text-sm flex items-center">
+                    <Ban className="h-5 w-5 mr-2 shrink-0" />
+                    Your account is suspended and cannot place orders or redeem points. Please contact support.
                   </div>
                 )}
               </CardContent>
@@ -242,7 +249,7 @@ function CartPageInternal() {
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                   size="lg" 
                   onClick={finalizeOrder}
-                  disabled={isBelowMinimum || user?.isBanned}
+                  disabled={isBelowMinimum || !!user?.isBanned}
                   title={user?.isBanned ? "Your account is suspended and cannot place orders." : (isBelowMinimum ? `Minimum order value is $${MINIMUM_PURCHASE_AMOUNT.toFixed(2)}` : "Confirm for In-Store Pickup")}
                 >
                   {user?.isBanned ? "Account Suspended" : "Confirm for In-Store Pickup"}

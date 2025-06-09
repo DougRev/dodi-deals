@@ -304,14 +304,14 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
 
 export async function createOrderInFirestore(
   orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>
-): Promise<{orderId: string }> { // Removed pointsCalculatedForOrder from return
+): Promise<{orderId: string }> { 
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
 
   const pointsCalculated = Math.floor(orderData.finalTotal * 2);
 
   const fullOrderData: Omit<Order, 'id'> = {
-    ...orderData, // Includes userStrikesAtOrderTime from AppContext
+    ...orderData, 
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
     pointsEarned: pointsCalculated,
@@ -360,7 +360,7 @@ export async function createOrderInFirestore(
 
         const newAvailabilityArray = product.availability.map(avail =>
           avail.storeId === fullOrderData.storeId
-            ? storeAvailability // Use the modified storeAvailability object
+            ? storeAvailability 
             : avail
         );
         productUpdates.push({ ref: productRef, newAvailability: newAvailabilityArray });
@@ -425,7 +425,7 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
     const snapshot = await ordersColRef
       .where('storeId', '==', storeId)
       .where('status', 'in', statuses)
-      .orderBy('orderDate', 'asc') // Keep asc for manager view typically
+      .orderBy('orderDate', 'asc') 
       .get();
 
     if (snapshot.empty) {
@@ -456,18 +456,23 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
   const usersColRef = adminDb!.collection('users');
   const productsColRef = adminDb!.collection('products');
 
+  // Hold product read promises and their corresponding item/ref data outside the loop
+  const productReadOperations: Array<{
+    ref: FirebaseFirestore.DocumentReference;
+    item: OrderItem;
+    promise: Promise<FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>>;
+  }> = [];
+
   try {
     await adminDb!.runTransaction(async (transaction) => {
       const orderDoc = await transaction.get(orderRef);
       if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
       const orderData = orderDoc.data() as Order;
 
-      // Prevent status regression or invalid transitions if needed (e.g. from Completed to Preparing)
-      // For now, we assume manager makes valid choices or UI prevents invalid ones.
-
       if (newStatus === "Completed") {
         if (orderData.userId) {
           const userRef = usersColRef.doc(orderData.userId);
+          // Read user doc first
           const userDoc = await transaction.get(userRef);
           if (userDoc.exists) {
             const userData = userDoc.data() as User;
@@ -484,20 +489,23 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
         }
         transaction.update(orderRef, { status: newStatus });
       } else if (newStatus === "Cancelled") {
-        // Stock Reversal Logic
-        const productReadPromises: Promise<FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>>[] = [];
-        const productRefsAndItems: { ref: FirebaseFirestore.DocumentReference, item: OrderItem }[] = [];
-
-        for (const item of orderData.items) {
+        // Phase 1: Collect all product read promises
+        orderData.items.forEach(item => {
           const productRef = productsColRef.doc(item.productId);
-          productRefsAndItems.push({ ref: productRef, item });
-          productReadPromises.push(transaction.get(productRef));
-        }
-        const productDocSnapshots = await Promise.all(productReadPromises);
+          productReadOperations.push({
+            ref: productRef,
+            item: item,
+            promise: transaction.get(productRef) // Schedule the read
+          });
+        });
 
+        // Phase 2: Execute all product reads
+        const productDocSnapshots = await Promise.all(productReadOperations.map(op => op.promise));
+
+        // Phase 3: Process reads and schedule writes for stock reversal
         for (let i = 0; i < productDocSnapshots.length; i++) {
           const productDocSnapshot = productDocSnapshots[i];
-          const { ref: productRefToUpdate, item } = productRefsAndItems[i];
+          const { ref: productRefToUpdate, item } = productReadOperations[i];
 
           if (productDocSnapshot.exists) {
             const product = productDocSnapshot.data() as Product;
@@ -532,16 +540,21 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
             const userUpdates: Partial<User> = { noShowStrikes: newStrikes };
             if (newStrikes >= 3) {
               userUpdates.isBanned = true;
-              console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} BANNED due to ${newStrikes} no-show strikes.`);
-              if (firebaseAdminAuthModule) { // Check if adminAuth is available
-                await firebaseAdminAuthModule.revokeRefreshTokens(orderData.userId).catch(err => console.error(`Failed to revoke refresh tokens for banned user ${orderData.userId}:`, err));
-              }
             }
-            transaction.update(userRef, userUpdates);
-            console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}.`);
+            transaction.update(userRef, userUpdates); // Schedule user update
+            
+            // If banned, revoke tokens. This should ideally happen after transaction commits.
+            // For simplicity, we do it here. If transaction fails, revocation is less critical.
+            if (newStrikes >= 3 && firebaseAdminAuthModule) {
+              console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} BANNED due to ${newStrikes} no-show strikes. Attempting to revoke refresh tokens.`);
+              await firebaseAdminAuthModule.revokeRefreshTokens(orderData.userId)
+                .then(() => console.log(`[firestoreService][AdminSDK][${functionName}] Successfully revoked refresh tokens for banned user ${orderData.userId}.`))
+                .catch(err => console.error(`[firestoreService][AdminSDK][${functionName}] Failed to revoke refresh tokens for banned user ${orderData.userId}:`, err));
+            }
+            console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}. Banned status: ${userUpdates.isBanned || false}`);
           }
         }
-        transaction.update(orderRef, { status: newStatus });
+        transaction.update(orderRef, { status: newStatus }); // Schedule order status update
       } else {
         // For other status changes (e.g., Pending Confirmation -> Preparing)
         transaction.update(orderRef, { status: newStatus });
@@ -553,3 +566,4 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
      throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
   }
 }
+
