@@ -601,7 +601,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getPotentialPointsForCart = useCallback(() => {
     const finalTotalAfterPotentialRedemption = getCartTotal();
-    return Math.floor(finalTotalAfterPotentialRedemption * 2); 
+    return Math.floor(finalTotalAfterPotentialRedemption * 1); // Updated to 1 point per dollar
   }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
@@ -676,6 +676,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
     const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
     
+    const pointsCalculated = Math.floor(finalTotal * 1); // Updated to 1 point per dollar
+
     const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
       userEmail: user.email,
@@ -692,7 +694,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      const { orderId } = await createOrderInFirestore(orderData);
+      // Pass pointsCalculated to createOrderInFirestore
+      const { orderId } = await createOrderInFirestore({ ...orderData, pointsEarned: pointsCalculated }); 
             
       if (user) fetchUserOrders(); 
       toast({ 
@@ -899,7 +902,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders
+    userOrders, loadingUserOrders, fetchUserOrders, getCartSubtotal, getCartTotal // Added missing functions here
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -912,5 +915,3 @@ export function useAppContext() {
   }
   return context;
 }
-
-    

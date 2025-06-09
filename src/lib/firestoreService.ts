@@ -303,18 +303,16 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
 }
 
 export async function createOrderInFirestore(
-  orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>
+  orderData: Omit<Order, 'id' | 'orderDate' | 'status'> & { pointsEarned: number } // Expect pointsEarned from AppContext now
 ): Promise<{orderId: string }> { 
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
-
-  const pointsCalculated = Math.floor(orderData.finalTotal * 2);
 
   const fullOrderData: Omit<Order, 'id'> = {
     ...orderData, 
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
-    pointsEarned: pointsCalculated,
+    // pointsEarned is now passed in directly from orderData (calculated in AppContext)
   };
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to create order:`, JSON.stringify(fullOrderData));
 
