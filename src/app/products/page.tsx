@@ -7,29 +7,36 @@ import { useAppContext } from '@/hooks/useAppContext';
 import type { ResolvedProduct, ProductCategory } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Filter, MapPin, Loader2, Tag } from 'lucide-react'; // Added Tag for brand
+import { Search, Filter, MapPin, Loader2, Tag } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function ProductsPage() {
-  const { products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
+  const { products, allProducts, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | ProductCategory>('All');
-  const [selectedBrand, setSelectedBrand] = useState<'All' | string>('All'); // New state for brand
+  const [selectedBrand, setSelectedBrand] = useState<'All' | string>('All');
 
   const categories = useMemo(() => {
-    if (!selectedStore || loadingProducts) return ['All']; // check loadingProducts
-    const uniqueCategories = new Set(products.map(p => p.category));
-    return ['All', ...Array.from(uniqueCategories)] as ('All' | ProductCategory)[];
-  }, [products, selectedStore, loadingProducts]);
+    if (loadingProducts) return ['All'];
+    // Get unique categories from *all* product definitions
+    const uniqueCategoriesFromAllProducts = new Set(allProducts.map(p => p.category));
+    return ['All', ...Array.from(uniqueCategoriesFromAllProducts).sort()] as ('All' | ProductCategory)[];
+  }, [allProducts, loadingProducts]);
 
   const brands = useMemo(() => {
-    if (!selectedStore || loadingProducts) return ['All']; // check loadingProducts
-    const uniqueBrands = new Set(products.map(p => p.brand));
-    return ['All', ...Array.from(uniqueBrands)].sort(); // Sort brands alphabetically
-  }, [products, selectedStore, loadingProducts]);
+    if (loadingProducts) return ['All'];
+    let productsToConsiderForBrands = allProducts;
+    if (selectedCategory !== 'All') {
+        productsToConsiderForBrands = allProducts.filter(p => p.category === selectedCategory);
+    }
+    const uniqueBrands = new Set(productsToConsiderForBrands.map(p => p.brand));
+    return ['All', ...Array.from(uniqueBrands)].sort();
+  }, [allProducts, selectedCategory, loadingProducts]);
 
-  const filteredProducts = useMemo(() => {
+  // Filtered products for display still uses the 'products' array from context,
+  // which is already resolved for the selected store and includes stock/deal information.
+  const filteredProductsForDisplay = useMemo(() => {
     if (!selectedStore) return [];
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
@@ -87,7 +94,13 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
           <Filter className="h-5 w-5 text-muted-foreground" />
-          <Select value={selectedCategory} onValueChange={(value: 'All' | ProductCategory) => setSelectedCategory(value)}>
+          <Select 
+            value={selectedCategory} 
+            onValueChange={(value: 'All' | ProductCategory) => {
+              setSelectedCategory(value);
+              setSelectedBrand('All'); // Reset brand when category changes
+            }}
+          >
             <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filter by category" />
             </SelectTrigger>
@@ -101,7 +114,7 @@ export default function ProductsPage() {
           </Select>
         </div>
          <div className="flex items-center gap-2 w-full md:w-auto">
-          <Tag className="h-5 w-5 text-muted-foreground" /> {/* Icon for brand filter */}
+          <Tag className="h-5 w-5 text-muted-foreground" />
           <Select value={selectedBrand} onValueChange={(value: 'All' | string) => setSelectedBrand(value)}>
             <SelectTrigger className="w-full md:w-[180px]">
               <SelectValue placeholder="Filter by brand" />
@@ -119,10 +132,10 @@ export default function ProductsPage() {
 
       {loadingProducts ? (
          <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <span className="ml-2">Loading products...</span></div>
-      ) : filteredProducts.length > 0 ? (
+      ) : filteredProductsForDisplay.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <ProductCard key={product.id + '-' + product.storeId} product={product} />
+          {filteredProductsForDisplay.map((product) => (
+            <ProductCard key={product.variantId} product={product} /> // Use variantId for key as product.id might not be unique if Flower product has multiple weights
           ))}
         </div>
       ) : (
@@ -137,3 +150,4 @@ export default function ProductsPage() {
     </div>
   );
 }
+
