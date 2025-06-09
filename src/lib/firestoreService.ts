@@ -5,7 +5,7 @@ import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule
 import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason } from '@/lib/types'; // Added FlowerWeight, CancellationReason
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
-import { flowerWeightToGrams } from '@/lib/types';
+import { flowerWeightToGrams, productCategories } from '@/lib/types';
 
 
 // Type for Firestore Transaction, assuming firebase-admin
@@ -322,6 +322,10 @@ export async function createOrderInFirestore(
       const productUpdates: { ref: FirebaseFirestore.DocumentReference; newAvailability: StoreAvailability[] }[] = [];
 
       for (const item of fullOrderData.items) {
+        if (!item.productId || typeof item.productId !== 'string' || item.productId.trim() === '') {
+          console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error: Invalid productId found in order items. Product: ${item.productName}, Provided ID: '${item.productId}'`);
+          throw new Error(`Invalid product ID ('${item.productId}') for item '${item.productName}' in order.`);
+        }
         const productRef = productsColRef.doc(item.productId);
         const productDoc = await transaction.get(productRef);
 
@@ -459,11 +463,11 @@ export async function updateOrderStatus(
 
   try {
     await adminDb!.runTransaction(async (transaction) => {
+      // --- PRE-READ PHASE ---
       const orderDoc = await transaction.get(orderRef);
       if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
       const orderData = orderDoc.data() as Order;
 
-      const orderUpdates: Partial<Order> = { status: newStatus };
       let userDocForUpdate: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData> | null = null;
       let productDocsForReversal: Array<{
           snapshot: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>;
@@ -471,11 +475,19 @@ export async function updateOrderStatus(
           productRef: FirebaseFirestore.DocumentReference;
       }> = [];
 
-      // --- PRE-READ PHASE ---
       if (newStatus === "Cancelled") {
-        const productReadPromises = orderData.items.map(item => {
+        const productReadPromises = orderData.items.map(async (item) => {
+          if (!item.productId || typeof item.productId !== 'string' || item.productId.trim() === '') {
+             console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: Invalid productId in order items. Product: ${item.productName}, ID: '${item.productId}'`);
+             throw new Error(`Invalid product ID ('${item.productId}') for item '${item.productName}' in order ${orderId}.`);
+          }
           const productRef = productsColRef.doc(item.productId);
-          return transaction.get(productRef).then(snap => ({ snap, item, productRef }));
+          const snap = await transaction.get(productRef);
+           if (!snap) { // Highly defensive, transaction.get should not return falsy normally
+            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: transaction.get(productRef) returned falsy for productId: ${item.productId}`);
+            throw new Error(`Failed to read product snapshot for ${item.productId} in order ${orderId}.`);
+          }
+          return { snap, item, productRef };
         });
         productDocsForReversal = await Promise.all(productReadPromises);
 
@@ -491,6 +503,8 @@ export async function updateOrderStatus(
       }
 
       // --- WRITE PHASE ---
+      const orderUpdates: Partial<Order> = { status: newStatus };
+
       if (newStatus === "Completed") {
         if (orderData.userId && userDocForUpdate && userDocForUpdate.exists) {
           const userData = userDocForUpdate.data() as User;
@@ -502,13 +516,19 @@ export async function updateOrderStatus(
           transaction.update(usersColRef.doc(orderData.userId), { points: Math.max(0, finalUserPoints) });
           console.log(`[firestoreService][AdminSDK][${functionName}] Points finalized for user ${orderData.userId}. Earned: ${pointsEarnedOnOrder}, Redeemed: ${pointsRedeemedOnOrder}, New Balance: ${Math.max(0, finalUserPoints)}.`);
         } else if (orderData.userId) {
-          console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found for points update on order ${orderId} completion.`);
+          console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found (or userDocForUpdate was null/not existent) for points update on order ${orderId} completion.`);
         }
       } else if (newStatus === "Cancelled") {
         orderUpdates.cancellationReason = cancellationReason;
         orderUpdates.cancellationDescription = cancellationDescription || "";
 
-        for (const { snapshot: productDocSnapshot, item, productRef: productRefToUpdate } of productDocsForReversal) {
+        for (const productInfo of productDocsForReversal) {
+          if (!productInfo || !productInfo.snapshot) {
+            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Write Error: productInfo or productInfo.snapshot is undefined in productDocsForReversal. Item:`, productInfo?.item?.productName);
+            throw new Error(`Critical error processing stock reversal: snapshot missing for product ${productInfo?.item?.productName} in order ${orderId}.`);
+          }
+          const { snapshot: productDocSnapshot, item, productRef: productRefToUpdate } = productInfo;
+
           if (productDocSnapshot.exists) {
             const product = productDocSnapshot.data() as Product;
             let storeAvailabilityToUpdate = product.availability.find(avail => avail.storeId === orderData.storeId);
@@ -536,17 +556,13 @@ export async function updateOrderStatus(
           const currentStrikes = userData.noShowStrikes || 0;
           const newStrikes = currentStrikes + 1;
           const userUpdatesForStrike: Partial<User> = { noShowStrikes: newStrikes };
-          if (newStrikes >= 3 && !userData.isBanned) { // Only set to banned if not already, and revoke tokens only once
+          if (newStrikes >= 3 && !userData.isBanned) {
             userUpdatesForStrike.isBanned = true;
           }
           transaction.update(usersColRef.doc(orderData.userId), userUpdatesForStrike);
           console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}. Banned status: ${userUpdatesForStrike.isBanned || userData.isBanned || false}. Reason: ${cancellationReason}`);
-
-          if (userUpdatesForStrike.isBanned && firebaseAdminAuthModule) {
-              // Token revocation happens outside transaction for safety, but initiated here.
-              // This is best-effort as transaction success is primary.
-               console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} BANNED due to ${newStrikes} no-show strikes. Will attempt to revoke refresh tokens after transaction.`);
-          }
+        } else if (cancellationReason === "Customer No-Show" && orderData.userId) {
+             console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found (or userDocForUpdate was null/not existent) for strike update on order ${orderId} cancellation.`);
         }
       }
       
@@ -555,14 +571,14 @@ export async function updateOrderStatus(
 
     // Post-transaction actions (like token revocation if a user was just banned)
     if (newStatus === "Cancelled" && cancellationReason === "Customer No-Show") {
-        const orderSnapshot = await orderRef.get(); // Re-fetch order to get potentially updated userId
+        const orderSnapshot = await orderRef.get();
         if (orderSnapshot.exists) {
             const updatedOrderData = orderSnapshot.data() as Order;
             if (updatedOrderData.userId) {
                  const userSnapshot = await usersColRef.doc(updatedOrderData.userId).get();
                  if (userSnapshot.exists) {
                      const userData = userSnapshot.data() as User;
-                     if (userData.isBanned && userData.noShowStrikes >=3 && firebaseAdminAuthModule) { // Check if actually banned and due to strikes
+                     if (userData.isBanned && userData.noShowStrikes >=3 && firebaseAdminAuthModule) {
                         console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to revoke refresh tokens for user ${updatedOrderData.userId} post-transaction.`);
                         try {
                             await firebaseAdminAuthModule.revokeRefreshTokens(updatedOrderData.userId);
@@ -575,11 +591,12 @@ export async function updateOrderStatus(
             }
         }
     }
-
-
     console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus} and related actions (if any) processed.`);
   } catch (error: any) {
-     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}:`, error.message, error.stack);
+     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}. Original error:`, error);
+     console.error(`Original error message: ${error.message}`);
+     console.error(`Original error stack: ${error.stack}`);
      throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
   }
 }
+
