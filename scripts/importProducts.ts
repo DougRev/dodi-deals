@@ -20,7 +20,8 @@ if (dotenvResult.error) {
 
 import admin from 'firebase-admin';
 import { productsToImport, type ProductImportEntry } from './productImportData';
-import type { Product, StoreAvailability, ProductCategory } from '../src/lib/types'; // Adjust path if needed
+import type { Product, StoreAvailability, ProductCategory, FlowerWeightPrice } from '../src/lib/types'; // Adjust path if needed
+import { flowerWeights, type FlowerWeight } from '../src/lib/types'; // Import flowerWeights
 
 // --- Configuration ---
 const serviceAccount = {
@@ -37,9 +38,18 @@ const ALL_STORE_IDS = [
   "Te8D2yMpTFo43WfatrM7"
 ];
 
-const DEFAULT_PRICE = 24.99;
-const DEFAULT_STOCK = 30;
+const DEFAULT_PRICE = 24.99; // For non-flower products
+const DEFAULT_STOCK = 30; // For non-flower products
 const DEFAULT_BASE_IMAGE_URL = 'https://placehold.co/600x400.png';
+
+// New defaults for Flower products
+const DEFAULT_FLOWER_TOTAL_STOCK_GRAMS = 100; // e.g., 100 grams total stock for flowers
+const DEFAULT_FLOWER_PRICES_PER_WEIGHT: Record<FlowerWeight, number> = {
+  "3.5g": 35.00,
+  "7g": 65.00,
+  "14g": 120.00,
+  "1oz": 200.00,
+};
 // --- End Configuration ---
 
 
@@ -83,12 +93,28 @@ async function importProducts() {
     const productId = `dodi_prod_${String(i + 1).padStart(3, '0')}`; // e.g., dodi_prod_001
 
     // Create availability for all specified stores
-    const availability: StoreAvailability[] = ALL_STORE_IDS.map(storeId => ({
-      storeId: storeId,
-      price: DEFAULT_PRICE,
-      stock: DEFAULT_STOCK,
-      storeSpecificImageUrl: '', // Can be left empty or set to a specific placeholder if needed
-    }));
+    let availability: StoreAvailability[];
+
+    if (entry.category === 'Flower') {
+      availability = ALL_STORE_IDS.map(storeId => ({
+        storeId: storeId,
+        totalStockInGrams: DEFAULT_FLOWER_TOTAL_STOCK_GRAMS,
+        weightOptions: flowerWeights.map(fw => ({
+          weight: fw,
+          price: DEFAULT_FLOWER_PRICES_PER_WEIGHT[fw] || 0, // Default to 0 if a weight is somehow not in our map
+        })),
+        storeSpecificImageUrl: '', // Can be left empty or set to a specific placeholder if needed
+        // price and stock should be undefined for Flower category
+      }));
+    } else {
+      availability = ALL_STORE_IDS.map(storeId => ({
+        storeId: storeId,
+        price: DEFAULT_PRICE,
+        stock: DEFAULT_STOCK,
+        storeSpecificImageUrl: '', // Can be left empty or set to a specific placeholder if needed
+        // totalStockInGrams and weightOptions should be undefined for non-Flower categories
+      }));
+    }
 
     const productData: Product = {
       id: productId, // Firestore will use the doc ID, but good to have for reference
