@@ -24,14 +24,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 
-const OTHER_BRAND_VALUE = "Other"; // Constant for "Other" brand selection
+const OTHER_BRAND_VALUE = "Other"; 
 
-const getDefaultAvailability = (category: ProductFormData['category'], stores: Store[]): StoreAvailability[] => {
-  const defaultStoreId = stores.length > 0 ? stores[0].id : '';
+const getDefaultAvailability = (category: ProductFormData['category'], storesArg: Store[]): StoreAvailability[] => {
+  const defaultStoreId = storesArg.length > 0 ? storesArg[0].id : '';
   if (category === 'Flower') {
     return [{
       storeId: defaultStoreId,
-      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })),
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), 
       totalStockInGrams: 0,
       storeSpecificImageUrl: '',
     }];
@@ -60,7 +60,7 @@ export default function AdminProductsPage() {
     defaultValues: {
       name: '',
       description: '',
-      brand: '', // Default to empty, let select handle it or manual input
+      brand: '', 
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape',
       dataAiHint: '',
@@ -85,12 +85,9 @@ export default function AdminProductsPage() {
 
     if (selectedBrandIsOther) {
       setShowManualBrandInput(true);
-      // Optionally clear the actual brand input if switching TO "Other" and it wasn't manually set before
-      // form.setValue('brand', ''); // Or keep previous manual entry if desired
-    } else if (brandNotPredefined && isFormOpen) { // If editing and current brand is not in new list, show manual
-        setShowManualBrandInput(true);
-    }
-     else {
+    } else if (brandNotPredefined && isFormOpen) {
+      setShowManualBrandInput(true);
+    } else {
       setShowManualBrandInput(false);
     }
   }, [watchedBrandSelection, watchedCategory, isFormOpen, form]);
@@ -102,11 +99,14 @@ export default function AdminProductsPage() {
     const currentAvailability = form.getValues('availability');
     const newAvailabilityStructure = currentAvailability.map(avail => {
       if (watchedCategory === 'Flower') {
+        const existingWeightOptionsMap = new Map(
+          (avail.weightOptions || []).map(wo => [wo.weight, { price: wo.price }])
+        );
         const completeWeightOptions = flowerWeights.map(fw => {
-          const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
+          const existing = existingWeightOptionsMap.get(fw);
           return {
             weight: fw,
-            price: existingOption?.price || 0,
+            price: existing?.price || 0,
           };
         });
         return {
@@ -141,17 +141,17 @@ export default function AdminProductsPage() {
         initialValues = {
           ...currentProduct,
           category: currentProduct.category || (productCategories[0] || 'Vape'),
-          brand: currentProduct.brand, // Keep existing brand
+          brand: currentProduct.brand, 
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
             if (currentProduct.category === 'Flower') {
-              const completeWeightOptions = flowerWeights.map(fw => {
-                const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
-                return {
-                  weight: fw,
-                  price: existingOption?.price || 0,
-                };
-              });
+               const existingWeightOptionsMap = new Map(
+                (avail.weightOptions || []).map(wo => [wo.weight, wo.price])
+              );
+              const completeWeightOptions = flowerWeights.map(fw => ({
+                weight: fw,
+                price: existingWeightOptionsMap.get(fw) || 0,
+              }));
               return {
                 ...avail,
                 weightOptions: completeWeightOptions,
@@ -160,7 +160,7 @@ export default function AdminProductsPage() {
                 stock: undefined,
               };
             }
-            return {
+            return { // For non-flower
               ...avail,
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
@@ -169,19 +169,12 @@ export default function AdminProductsPage() {
             };
           }) as StoreAvailability[],
         };
-        // Determine if existing brand is "Other" for initial form display
-        const currentCategoryBrands = PREDEFINED_BRANDS[initialValues.category as ProductCategory] || [];
-        if (!currentCategoryBrands.includes(initialValues.brand) && initialValues.brand !== OTHER_BRAND_VALUE) {
-            // If brand is custom, set select to "Other" and input to actual brand
-            // No, we should set the `brand` field to the actual brand, and let the useEffect handle visibility
-        }
-
-      } else {
+      } else { // Adding new product
         const defaultCat = productCategories[0] || 'Vape';
         initialValues = {
           name: '',
           description: '',
-          brand: '', // Start empty or with a default if desired
+          brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || '',
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: defaultCat,
           dataAiHint: '',
@@ -190,21 +183,21 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
-      // After reset, explicitly check brand visibility
+      // After reset, explicitly check brand visibility for the reset state
       const resetCategory = form.getValues('category');
       const resetBrand = form.getValues('brand');
       const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
-      if (resetBrand && !resetCategoryBrands.includes(resetBrand) && resetBrand !== OTHER_BRAND_VALUE) {
+
+      if (resetBrand === OTHER_BRAND_VALUE) {
           setShowManualBrandInput(true);
-      } else if (resetBrand === OTHER_BRAND_VALUE) {
+      } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) {
           setShowManualBrandInput(true);
-      }
-      else {
+      } else {
           setShowManualBrandInput(false);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFormOpen, currentProduct, form.reset, stores]);
+  }, [isFormOpen, currentProduct, stores]);
 
 
   const handleAddNewProduct = () => {
@@ -213,20 +206,19 @@ export default function AdminProductsPage() {
     form.reset({
       name: '',
       description: '',
-      brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || OTHER_BRAND_VALUE, // Default to first brand or "Other"
+      brand: PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || '', 
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: defaultCat,
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(defaultCat, stores),
     });
-    setShowManualBrandInput(form.getValues('brand') === OTHER_BRAND_VALUE);
+    setShowManualBrandInput(form.getValues('brand') === OTHER_BRAND_VALUE || !(PREDEFINED_BRANDS[defaultCat as ProductCategory] || []).includes(form.getValues('brand')));
     setIsFormOpen(true);
   };
 
   const handleEditProduct = (product: Product) => {
     setCurrentProduct(product);
-    // setShowManualBrandInput will be handled by useEffect when form opens and resets
     setIsFormOpen(true);
   };
 
@@ -255,18 +247,18 @@ export default function AdminProductsPage() {
   const handleSaveProduct = async (data: ProductFormData) => {
     setFormLoading(true);
     try {
-      // If brand was "Other" but manual input was empty, or if no brand was set.
       let finalBrand = data.brand;
-      if (data.brand === OTHER_BRAND_VALUE && !form.getValues('brand')) { // This logic might need review
-          finalBrand = 'Unknown Brand'; // Or handle as validation error
-      } else if (showManualBrandInput) {
-         // The 'brand' field should already hold the manual input value thanks to Controller
+      if (finalBrand === OTHER_BRAND_VALUE) {
+         finalBrand = ''; 
       }
 
-
       const productDataPayload: Omit<Product, 'id'> = {
-        ...data,
+        name: data.name,
+        description: data.description,
         brand: finalBrand,
+        baseImageUrl: data.baseImageUrl,
+        category: data.category,
+        dataAiHint: data.dataAiHint,
         isFeatured: data.isFeatured || false,
         availability: data.availability.map(avail => {
           if (data.category === 'Flower') {
@@ -400,7 +392,7 @@ export default function AdminProductsPage() {
                 
                 <FormItem>
                   <FormLabel className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Brand</FormLabel>
-                  {categoryBrands.length > 0 ? (
+                  {(categoryBrands.length > 0 || showManualBrandInput) ? ( // Show select if there are brands OR if manual input is already shown
                     <FormField
                       control={form.control}
                       name="brand"
@@ -408,15 +400,11 @@ export default function AdminProductsPage() {
                         <Select
                           onValueChange={(value) => {
                             field.onChange(value);
-                            if (value === OTHER_BRAND_VALUE) {
-                              setShowManualBrandInput(true);
-                              // Consider if you want to clear manual input here or let user type immediately
-                            } else {
-                              setShowManualBrandInput(false);
-                            }
+                            // setShowManualBrandInput is handled by useEffect based on 'value' (watchedBrandSelection)
                           }}
-                          value={showManualBrandInput ? OTHER_BRAND_VALUE : field.value || ''}
-                          defaultValue={field.value && categoryBrands.includes(field.value) ? field.value : (field.value ? OTHER_BRAND_VALUE : '')}
+                          // Value for Select: If manual input is shown, and current field.value IS a custom brand (not "Other"),
+                          // then Select should show "Other". Otherwise, show actual field.value.
+                          value={showManualBrandInput && field.value !== OTHER_BRAND_VALUE && !categoryBrands.includes(field.value) ? OTHER_BRAND_VALUE : field.value || ''}
                         >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a brand or 'Other'" /></SelectTrigger></FormControl>
                           <SelectContent>
@@ -427,23 +415,26 @@ export default function AdminProductsPage() {
                       )}
                     />
                   ) : (
-                     // If no predefined brands for category, always show manual input.
-                     // This useEffect handles this case by setting showManualBrandInput to true.
+                     <FormField
+                      control={form.control}
+                      name="brand"
+                      render={({ field }) => (<Input placeholder="Enter brand name" {...field} className="mt-1" />)} // Fallback if no category brands and not showing manual
+                    />
                   )}
                   {showManualBrandInput && (
                     <FormField
                       control={form.control}
-                      name="brand" // This input will now update the 'brand' field directly
+                      name="brand" 
                       render={({ field: manualField }) => (
                         <Input
                           placeholder="Enter brand name"
                           {...manualField}
-                          value={watchedBrandSelection === OTHER_BRAND_VALUE ? manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value : manualField.value} // Show actual brand if it's not 'Other'
+                          // If brand select shows "Other", this input value IS the actual brand.
+                          // If brand select shows a predefined brand, this input is hidden.
+                          // If brand select shows a custom brand (because it was loaded), this input shows it.
+                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} // Prevent "Other" from showing in input
                           onChange={(e) => {
                              manualField.onChange(e.target.value);
-                             // If user types here, and select was on "Other", it updates brand.
-                             // If select was on a predefined brand, this input is for a *new* custom brand.
-                             // The select value will still be "Other" if this input is shown due to "Other" being selected.
                           }}
                           className="mt-2"
                         />
@@ -463,13 +454,9 @@ export default function AdminProductsPage() {
                         onValueChange={(value) => {
                             field.onChange(value);
                             const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
-                            if (newCategoryBrands.length > 0) {
-                                form.setValue('brand', newCategoryBrands[0]); // Set to first brand or "Other"
-                                setShowManualBrandInput(false);
-                            } else {
-                                form.setValue('brand', ''); // Or a default like "Other"
-                                setShowManualBrandInput(true);
-                            }
+                            // Set brand to first predefined or empty if "Other" will be default
+                            form.setValue('brand', newCategoryBrands[0] || ''); 
+                            // setShowManualBrandInput will be handled by useEffect
                         }} 
                         value={field.value} 
                         defaultValue={field.value}
