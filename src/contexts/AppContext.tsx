@@ -413,7 +413,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAppliedRedemption(null);
       setStoreSelectorOpen(true);
     }
-  }, [stores, _selectedStore, setCart, _setSelectedStoreState, setStoreSelectorOpen, toast, setAppliedRedemption]);
+  }, [stores, _selectedStore]);
 
   const login = useCallback(async (email: string, pass: string) => {
     try {
@@ -425,7 +425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
       return false;
     }
-  }, [toast]);
+  }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
     try {
@@ -449,7 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
       return false;
     }
-  }, [toast]);
+  }, []);
 
   const updateUserAvatar = useCallback(async (newAvatarUrl: string) => {
     if (!auth.currentUser || !user) {
@@ -467,7 +467,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Avatar Update Failed", description: error.message || "Could not update avatar.", variant: "destructive" });
       return false;
     }
-  }, [user, toast, setUser]);
+  }, [user]);
 
   const updateUserProfileDetails = useCallback(async (newName: string): Promise<boolean> => {
     if (!auth.currentUser || !user) {
@@ -490,7 +490,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Profile Update Failed", description: error.message || "Could not update your profile.", variant: "destructive" });
       return false;
     }
-  }, [user, toast, setUser]);
+  }, [user]);
 
 
   const logout = useCallback(async () => {
@@ -519,7 +519,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
       }
     }
-  }, [router, toast, setCart, _setSelectedStoreState, setUser, setIsAuthenticated, setAppliedRedemption, setUserOrders, setLoadingUserOrders]);
+  }, [router]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -540,12 +540,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }];
     });
     toast({ title: "Item Added", description: `${product.name} added to cart.` });
-  }, [_selectedStore, toast, setCart, setStoreSelectorOpen]);
+  }, [_selectedStore, setStoreSelectorOpen]);
 
   const removeFromCart = useCallback((originalProductId: string) => {
     setCart((prevCart) => prevCart.filter(item => item.product.id !== originalProductId));
     toast({ title: "Item Removed", description: "Item removed from cart." });
-  }, [toast, setCart]);
+  }, []);
 
   const updateCartQuantity = useCallback((originalProductId: string, quantity: number) => {
     setCart((prevCart) =>
@@ -555,7 +555,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : item
       ).filter(item => item.quantity > 0)
     );
-  }, [setCart]);
+  }, []);
 
   const getCartItemQuantity = useCallback((productId: string): number => {
     if (!_selectedStore) return 0;
@@ -571,7 +571,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCart([]);
     setAppliedRedemption(null);
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
-  }, [toast, setCart, setAppliedRedemption]);
+  }, []);
 
   const getCartTotal = useCallback(() => {
     const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
@@ -580,8 +580,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getPotentialPointsForCart = useCallback(() => {
     const currentCartTotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-    // No points earned if redemption makes total <= 0, though finalTotal is capped at 0 already.
-    // Points are earned on the final amount paid.
     const finalTotalAfterPotentialRedemption = appliedRedemption ? Math.max(0, currentCartTotal - appliedRedemption.discountAmount) : currentCartTotal;
     return Math.floor(finalTotalAfterPotentialRedemption * 2); // 2 points per $1
   }, [cart, appliedRedemption]);
@@ -615,12 +613,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setAppliedRedemption(option);
     toast({ title: "Discount Applied", description: `${option.description} applied to your cart.` });
-  }, [user, cart, toast, setAppliedRedemption]);
+  }, [user, cart]);
 
   const removeRedemption = useCallback(() => {
     setAppliedRedemption(null);
     toast({ title: "Discount Removed", description: "Points discount has been removed from your cart." });
-  }, [toast, setAppliedRedemption]);
+  }, []);
 
   const finalizeOrder = useCallback(async () => {
     if (!user || !_selectedStore || cart.length === 0) {
@@ -654,25 +652,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      const { orderId, pointsEarned, newTotalPoints } = await createOrderInFirestore(
-        orderData,
-        user.id, // Pass user.id for points update logic
-        appliedRedemption ? appliedRedemption.pointsRequired : null
-      );
-
-      if (newTotalPoints !== null) {
-        setUser(prevUser => prevUser ? { ...prevUser, points: newTotalPoints } : null);
-      }
+      // createOrderInFirestore now only stores pointsEarned and pointsRedeemed on the order.
+      // User's actual points are updated by the manager when marking the order "Completed".
+      const { orderId, pointsCalculatedForOrder } = await createOrderInFirestore(orderData);
+      
+      // User's points are NOT updated locally here anymore.
+      // They will be updated in Firestore by the manager, and then the user's local profile will update on next fetch.
       
       if (user) fetchUserOrders(); // Refresh orders list
-      toast({ title: "Order Placed!", description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. You earned ${pointsEarned} points.`});
+      toast({ 
+        title: "Order Submitted!", 
+        description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Approximately ${pointsCalculatedForOrder} points will be applied upon completion.`
+      });
       clearCart();
       router.push('/profile');
     } catch (error: any) {
       console.error("Error finalizing order:", error);
       toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
     }
-  }, [user, _selectedStore, cart, appliedRedemption, clearCart, router, toast, setUser, fetchUserOrders]);
+  }, [user, _selectedStore, cart, appliedRedemption, clearCart, router, fetchUserOrders]);
 
 
   const products = useMemo(() => {

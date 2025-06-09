@@ -298,56 +298,24 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
   }
 }
 
-// Transactional function to update user points (can be positive for earning, negative for spending)
-async function updateUserPointsTransactional(
-  transaction: FirebaseFirestore.Transaction,
-  userId: string,
-  pointsDelta: number
-): Promise<void> {
-  const functionName = 'updateUserPointsTransactional';
-  // ensureAdminDbInitialized is called by the outer transactional function
-
-  const userRef = adminDb!.collection('users').doc(userId);
-  const userDoc = await transaction.get(userRef);
-
-  if (!userDoc.exists) {
-    throw new Error(`[${functionName}] User ${userId} not found for points update.`);
-  }
-  const userData = userDoc.data() as User;
-  const currentPoints = userData.points || 0;
-  const newPoints = currentPoints + pointsDelta;
-
-  if (newPoints < 0) {
-    // This should be prevented if pointsDelta is negative (spending) and exceeds currentPoints
-    throw new Error(`[${functionName}] User ${userId} would have negative points (${newPoints}) after update. Current: ${currentPoints}, Change: ${pointsDelta}.`);
-  }
-  transaction.update(userRef, { points: newPoints });
-  console.log(`[firestoreService][AdminSDK][${functionName}] Points update for user ${userId} prepared. Change: ${pointsDelta}, New Balance will be ${newPoints}.`);
-}
-
-
 export async function createOrderInFirestore(
-  orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>,
-  userIdForPoints: string | null, // User ID for both spending and earning
-  pointsToDeductIfApplicable: number | null
-): Promise<{orderId: string, pointsEarned: number, newTotalPoints: number | null }> {
+  orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'>
+): Promise<{orderId: string, pointsCalculatedForOrder: number }> {
   const functionName = 'createOrderInFirestore (Transactional)';
   ensureAdminDbInitialized(functionName);
 
-  const pointsEarnedFromOrder = Math.floor(orderData.finalTotal * 2); // 2 points per $1 on finalTotal
+  const pointsCalculated = Math.floor(orderData.finalTotal * 2); // 2 points per $1 on finalTotal
 
   const fullOrderData: Omit<Order, 'id'> = {
     ...orderData,
     orderDate: new Date().toISOString(),
     status: "Pending Confirmation",
-    pointsEarned: pointsEarnedFromOrder,
+    pointsEarned: pointsCalculated, // Store calculated points on the order
   };
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to create order:`, JSON.stringify(fullOrderData));
 
   const ordersColRef = adminDb!.collection('orders');
   const productsColRef = adminDb!.collection('products');
-
-  let finalUserPointsAfterTransaction: number | null = null;
 
   try {
     const orderId = await adminDb!.runTransaction(async (transaction) => {
@@ -381,33 +349,11 @@ export async function createOrderInFirestore(
         productUpdates.push({ ref: productRef, newAvailability: newAvailabilityArray });
       }
 
-      // 2. Update user points (earning and spending)
-      if (userIdForPoints) {
-        let netPointsChange = pointsEarnedFromOrder;
-        if (pointsToDeductIfApplicable && pointsToDeductIfApplicable > 0) {
-          netPointsChange -= pointsToDeductIfApplicable;
-        }
-        
-        const userRef = adminDb!.collection('users').doc(userIdForPoints);
-        const userDoc = await transaction.get(userRef);
-        if (!userDoc.exists) throw new Error(`User ${userIdForPoints} not found for points update.`);
-        
-        const userData = userDoc.data() as User;
-        const currentPoints = userData.points || 0;
-        finalUserPointsAfterTransaction = currentPoints + netPointsChange;
-
-        if (finalUserPointsAfterTransaction < 0) {
-          throw new Error(`User ${userIdForPoints} would have negative points (${finalUserPointsAfterTransaction}). Current: ${currentPoints}, Deducting: ${pointsToDeductIfApplicable}, Earning: ${pointsEarnedFromOrder}.`);
-        }
-        transaction.update(userRef, { points: finalUserPointsAfterTransaction });
-        console.log(`[firestoreService][AdminSDK][${functionName}] Points update for user ${userIdForPoints} prepared. Net change: ${netPointsChange}, New Balance will be ${finalUserPointsAfterTransaction}.`);
-      }
-
-      // 3. Create the order document
+      // 2. Create the order document (User points are NOT updated here)
       const newOrderRef = ordersColRef.doc(); // Auto-generate ID
       transaction.set(newOrderRef, fullOrderData);
 
-      // 4. Apply product stock updates
+      // 3. Apply product stock updates
       for (const update of productUpdates) {
         transaction.update(update.ref, { availability: update.newAvailability });
       }
@@ -415,8 +361,8 @@ export async function createOrderInFirestore(
       return newOrderRef.id;
     });
 
-    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created, stock updated, and points updated successfully.`);
-    return { orderId, pointsEarned: pointsEarnedFromOrder, newTotalPoints: finalUserPointsAfterTransaction };
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} created and stock updated successfully. Points transaction deferred to order completion.`);
+    return { orderId, pointsCalculatedForOrder: pointsCalculated };
   } catch (error: any) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed:`, error.message, error.stack);
     throw new Error(error.message || `Failed to create order due to an unexpected issue.`);
@@ -487,18 +433,80 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
 }
 
 export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
-  const functionName = 'updateOrderStatus';
+  const functionName = 'updateOrderStatus (Transactional)';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}`);
 
   const orderRef = adminDb!.collection('orders').doc(orderId);
+
   try {
-    await orderRef.update({ status: newStatus });
-    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated successfully to ${newStatus}.`);
-  } catch (error) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating order status for ${orderId}:`, error);
-    throw error;
+    if (newStatus === "Completed") {
+      await adminDb!.runTransaction(async (transaction) => {
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) throw new Error(`Order ${orderId} not found for completion.`);
+        const orderData = orderDoc.data() as Order;
+
+        // Finalize points only if order is being marked as 'Completed'
+        if (orderData.userId) {
+          const userRef = adminDb!.collection('users').doc(orderData.userId);
+          const userDoc = await transaction.get(userRef);
+          if (userDoc.exists) {
+            const userData = userDoc.data() as User;
+            const currentPoints = userData.points || 0;
+            const pointsEarnedOnOrder = orderData.pointsEarned || 0; // Points calculated at order creation
+            const pointsRedeemedOnOrder = orderData.pointsRedeemed || 0; // Points reserved at order creation
+
+            const finalUserPoints = currentPoints + pointsEarnedOnOrder - pointsRedeemedOnOrder;
+            
+            if (finalUserPoints < 0) {
+                 console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} points would be negative (${finalUserPoints}) after completing order ${orderId}. This might indicate an issue if points for redemption were not validated against balance at time of order placement. Capping points at 0.`);
+                 transaction.update(userRef, { points: 0 });
+            } else {
+                transaction.update(userRef, { points: finalUserPoints });
+            }
+            console.log(`[firestoreService][AdminSDK][${functionName}] Points finalized for user ${orderData.userId}. Earned: ${pointsEarnedOnOrder}, Redeemed: ${pointsRedeemedOnOrder}, New Balance: ${Math.max(0, finalUserPoints)}.`);
+          } else {
+            console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found for points update on order ${orderId} completion.`);
+          }
+        }
+        transaction.update(orderRef, { status: newStatus });
+        console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to Completed and points processed.`);
+      });
+    } else if (newStatus === "Cancelled") {
+      await adminDb!.runTransaction(async (transaction) => {
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) throw new Error(`Order ${orderId} not found for cancellation.`);
+        const orderData = orderDoc.data() as Order;
+
+        // Revert stock for each item in the order
+        for (const item of orderData.items) {
+          const productRef = adminDb!.collection('products').doc(item.productId);
+          const productDoc = await transaction.get(productRef);
+          if (productDoc.exists) {
+            const product = productDoc.data() as Product;
+            const newAvailabilityArray = product.availability.map(avail =>
+              avail.storeId === orderData.storeId
+                ? { ...avail, stock: avail.stock + item.quantity } // Add back stock
+                : avail
+            );
+            transaction.update(productRef, { availability: newAvailabilityArray });
+            console.log(`[firestoreService][AdminSDK][${functionName}] Stock for product ${item.productId} reverted by ${item.quantity} for cancelled order ${orderId}.`);
+          } else {
+            console.warn(`[firestoreService][AdminSDK][${functionName}] Product ${item.productId} not found during stock revert for cancelled order ${orderId}.`);
+          }
+        }
+        transaction.update(orderRef, { status: newStatus });
+        console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to Cancelled and stock reverted.`);
+      });
+    } else {
+      // For other status changes (e.g., Pending Confirmation -> Preparing)
+      await orderRef.update({ status: newStatus });
+      console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus}.`);
+    }
+  } catch (error: any) {
+     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}:`, error.message, error.stack);
+     throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
   }
 }
     
