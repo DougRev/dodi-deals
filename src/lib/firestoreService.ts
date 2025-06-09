@@ -470,7 +470,7 @@ export async function updateOrderStatus(
 
       let userDocForUpdate: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData> | null = null;
       let productDocsForReversal: Array<{
-          snapshot: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>;
+          snap: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>; // Changed from 'snapshot' to 'snap'
           item: OrderItem;
           productRef: FirebaseFirestore.DocumentReference;
       }> = [];
@@ -482,12 +482,12 @@ export async function updateOrderStatus(
              throw new Error(`Invalid product ID ('${item.productId}') for item '${item.productName}' in order ${orderId}.`);
           }
           const productRef = productsColRef.doc(item.productId);
-          const snap = await transaction.get(productRef);
+          const snap = await transaction.get(productRef); // snap is a DocumentSnapshot
            if (!snap) { // Highly defensive, transaction.get should not return falsy normally
             console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: transaction.get(productRef) returned falsy for productId: ${item.productId}`);
             throw new Error(`Failed to read product snapshot for ${item.productId} in order ${orderId}.`);
           }
-          return { snap, item, productRef };
+          return { snap, item, productRef }; // Returning object with 'snap'
         });
         productDocsForReversal = await Promise.all(productReadPromises);
 
@@ -523,14 +523,14 @@ export async function updateOrderStatus(
         orderUpdates.cancellationDescription = cancellationDescription || "";
 
         for (const productInfo of productDocsForReversal) {
-          if (!productInfo || !productInfo.snapshot) {
-            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Write Error: productInfo or productInfo.snapshot is undefined in productDocsForReversal. Item:`, productInfo?.item?.productName);
-            throw new Error(`Critical error processing stock reversal: snapshot missing for product ${productInfo?.item?.productName} in order ${orderId}.`);
+          if (!productInfo || !productInfo.snap) { // Corrected to check productInfo.snap
+            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Write Error: productInfo or productInfo.snap is undefined in productDocsForReversal. Item:`, productInfo?.item?.productName);
+            throw new Error(`Critical error processing stock reversal: snap missing for product ${productInfo?.item?.productName} in order ${orderId}.`);
           }
-          const { snapshot: productDocSnapshot, item, productRef: productRefToUpdate } = productInfo;
+          const { snap: productDocSnap, item, productRef: productRefToUpdate } = productInfo; // Corrected to destructure 'snap'
 
-          if (productDocSnapshot.exists) {
-            const product = productDocSnapshot.data() as Product;
+          if (productDocSnap.exists) { // Check if the product document exists
+            const product = productDocSnap.data() as Product;
             let storeAvailabilityToUpdate = product.availability.find(avail => avail.storeId === orderData.storeId);
             if (storeAvailabilityToUpdate) {
               if (product.category === 'Flower') {
