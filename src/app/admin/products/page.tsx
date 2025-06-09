@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -12,16 +12,37 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability } from '@/lib/types'; 
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPriceStock } from '@/lib/types'; 
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star } from 'lucide-react'; // Added Star
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Separator } from '@/components/ui/separator';
+
+const getDefaultAvailability = (category: ProductFormData['category'], stores: Store[]): StoreAvailability[] => {
+  const defaultStoreId = stores.length > 0 ? stores[0].id : '';
+  if (category === 'Flower') {
+    return [{ 
+      storeId: defaultStoreId, 
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+      storeSpecificImageUrl: '',
+      // price and stock are not set for flower
+    }];
+  }
+  return [{ 
+    storeId: defaultStoreId, 
+    price: 0, 
+    stock: 0, 
+    storeSpecificImageUrl: '',
+    // weightOptions is not set for non-flower
+  }];
+};
+
 
 export default function AdminProductsPage() {
   const { allProducts: appProducts, loadingProducts: loadingAppProducts, stores, loadingStores } = useAppContext();
@@ -40,77 +61,118 @@ export default function AdminProductsPage() {
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape', 
       dataAiHint: '',
-      isFeatured: false, // Default for new products
-      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
+      isFeatured: false,
+      availability: getDefaultAvailability(productCategories[0] || 'Vape', stores),
     },
   });
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const watchedCategory = useWatch({ control: form.control, name: 'category' });
+
+  const { fields: availabilityFields, append: appendAvailability, remove: removeAvailability, replace: replaceAvailability } = useFieldArray({
     control: form.control,
     name: "availability"
   });
 
+  // Reset availability structure when category changes
+  useEffect(() => {
+    if (form.formState.isSubmitted) return; // Don't reset if form was submitted
+
+    const currentAvailability = form.getValues('availability');
+    const newAvailabilityStructure = currentAvailability.map(avail => {
+      if (watchedCategory === 'Flower') {
+        return {
+          storeId: avail.storeId,
+          storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
+          weightOptions: avail.weightOptions && avail.weightOptions.length > 0 
+            ? avail.weightOptions 
+            : flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+          price: undefined, // Ensure base price is not set
+          stock: undefined, // Ensure base stock is not set
+        };
+      } else {
+        return {
+          storeId: avail.storeId,
+          storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
+          price: avail.price || 0,
+          stock: avail.stock || 0,
+          weightOptions: undefined, // Ensure weightOptions are not set
+        };
+      }
+    });
+    // Check if actual structural change is needed to avoid infinite loops
+    if (JSON.stringify(currentAvailability) !== JSON.stringify(newAvailabilityStructure)) {
+        form.setValue('availability', newAvailabilityStructure as any, { shouldValidate: true, shouldDirty: true });
+    }
+  }, [watchedCategory, form, stores]);
+
+
+  // Effect for initializing form (new or edit)
   useEffect(() => {
     if (isFormOpen) {
+      let initialValues: ProductFormData;
       if (currentProduct) {
-        const currentAvailability = currentProduct.availability.map(avail => ({
-          storeId: avail.storeId,
-          price: Number(avail.price),
-          stock: Number(avail.stock),
-          storeSpecificImageUrl: avail.storeSpecificImageUrl || '',
-        }));
-        form.reset({
+        initialValues = {
           ...currentProduct,
+          category: currentProduct.category || (productCategories[0] || 'Vape'),
           isFeatured: currentProduct.isFeatured || false,
-          category: currentProduct.category || (productCategories[0] || 'Vape'), 
-          availability: currentAvailability.length > 0 ? currentAvailability : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
-        });
+          availability: currentProduct.availability.map(avail => {
+            if (currentProduct.category === 'Flower') {
+              return {
+                ...avail,
+                weightOptions: avail.weightOptions || flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })),
+                price: undefined,
+                stock: undefined,
+              };
+            }
+            return {
+              ...avail,
+              price: Number(avail.price) || 0,
+              stock: Number(avail.stock) || 0,
+              weightOptions: undefined,
+            };
+          }) as StoreAvailability[],
+        };
       } else {
-        form.reset({
+        const defaultCat = productCategories[0] || 'Vape';
+        initialValues = {
           name: '',
           description: '',
           brand: '',
           baseImageUrl: 'https://placehold.co/600x400.png',
-          category: productCategories[0] || 'Vape', 
+          category: defaultCat,
           dataAiHint: '',
           isFeatured: false,
-          availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
-        });
+          availability: getDefaultAvailability(defaultCat, stores),
+        };
       }
+      form.reset(initialValues);
     }
-  }, [isFormOpen, currentProduct, form.reset]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFormOpen, currentProduct, form.reset, stores]); // Added stores to ensure default availability has store IDs
+
 
   const handleAddNewProduct = () => {
     setCurrentProduct(null);
+    const defaultCat = productCategories[0] || 'Vape';
     form.reset({
       name: '',
       description: '',
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
-      category: productCategories[0] || 'Vape', 
+      category: defaultCat,
       dataAiHint: '',
       isFeatured: false,
-      availability: [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }], 
+      availability: getDefaultAvailability(defaultCat, stores),
     });
     setIsFormOpen(true);
   };
 
   const handleEditProduct = (product: Product) => {
     setCurrentProduct(product);
-    const availabilityWithDefaults = product.availability.map(a => ({
-        ...a,
-        price: Number(a.price),
-        stock: Number(a.stock),
-        storeSpecificImageUrl: a.storeSpecificImageUrl || '',
-    }));
-    form.reset({
-        ...product,
-        isFeatured: product.isFeatured || false,
-        category: product.category || (productCategories[0] || 'Vape'), 
-        availability: availabilityWithDefaults.length > 0 ? availabilityWithDefaults : [{ storeId: '', price: 0, stock: 0, storeSpecificImageUrl: '' }],
-    });
+    // Form reset is handled by the useEffect for isFormOpen and currentProduct
     setIsFormOpen(true);
   };
+
 
   const handleDeleteProduct = (product: Product) => {
     setProductToDelete(product);
@@ -136,15 +198,31 @@ export default function AdminProductsPage() {
   const handleSaveProduct = async (data: ProductFormData) => {
     setFormLoading(true);
     try {
-      const productDataPayload = {
+      const productDataPayload: Omit<Product, 'id'> = {
         ...data,
         isFeatured: data.isFeatured || false,
-        availability: data.availability.map(avail => ({
-          ...avail,
-          price: Number(avail.price),
-          stock: Number(avail.stock),
-          storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
-        })),
+        availability: data.availability.map(avail => {
+          if (data.category === 'Flower') {
+            return {
+              storeId: avail.storeId,
+              weightOptions: avail.weightOptions?.map(wo => ({
+                ...wo,
+                price: Number(wo.price),
+                stock: Number(wo.stock),
+              })) || [],
+              storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
+              // price and stock deliberately undefined for flowers
+            };
+          } else {
+            return {
+              storeId: avail.storeId,
+              price: Number(avail.price),
+              stock: Number(avail.stock),
+              storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
+              // weightOptions deliberately undefined for non-flowers
+            };
+          }
+        }) as any, // Cast because TS struggles with discriminated union within array map
       };
 
       if (currentProduct) {
@@ -174,25 +252,19 @@ export default function AdminProductsPage() {
     }
 
     const currentFormAvailabilities = form.getValues('availability') || [];
-    let defaultPrice = 0;
-    let defaultStock = 0;
     let operationsPerformed = 0;
+    const currentCategory = form.getValues('category');
 
-    // Scenario 1: The form has exactly one entry, and it's a placeholder (empty storeId).
     if (currentFormAvailabilities.length === 1 && (!currentFormAvailabilities[0].storeId || currentFormAvailabilities[0].storeId.trim() === '')) {
-        defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
-        defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
+        const placeholder = currentFormAvailabilities[0];
+        removeAvailability(0); // Remove the placeholder.
         
-        remove(0); // Remove the placeholder.
-        
-        // Append all stores.
         stores.forEach(store => {
-            append({ 
-                storeId: store.id, 
-                price: defaultPrice, 
-                stock: defaultStock, 
-                storeSpecificImageUrl: '' 
-            });
+            appendAvailability(
+                currentCategory === 'Flower' ? 
+                { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: placeholder.weightOptions?.find(wo => wo.weight === fw)?.price || 0, stock: placeholder.weightOptions?.find(wo => wo.weight === fw)?.stock || 0 })), storeSpecificImageUrl: '' } :
+                { storeId: store.id, price: placeholder.price || 0, stock: placeholder.stock || 0, storeSpecificImageUrl: '' }
+            );
             operationsPerformed++;
         });
         if (operationsPerformed > 0) {
@@ -201,22 +273,16 @@ export default function AdminProductsPage() {
              toast({ title: "No Stores", description: "Placeholder removed, but no stores configured to add." });
         }
     } else {
-        // Scenario 2: Form has existing items, or is empty.
-        if (currentFormAvailabilities.length > 0 && currentFormAvailabilities[0]) {
-            defaultPrice = Number(currentFormAvailabilities[0].price) || 0;
-            defaultStock = Number(currentFormAvailabilities[0].stock) || 0;
-        }
-        
-        const existingStoreIdsInForm = new Set(fields.map(field => form.getValues(`availability.${fields.indexOf(field)}.storeId`)).filter(id => id && id.trim() !== ''));
-        
+        const existingStoreIdsInForm = new Set(availabilityFields.map(field => form.getValues(`availability.${availabilityFields.indexOf(field)}.storeId`)).filter(id => id && id.trim() !== ''));
+        const firstEntry = currentFormAvailabilities[0];
+
         stores.forEach(store => {
             if (!existingStoreIdsInForm.has(store.id)) {
-                append({ 
-                    storeId: store.id, 
-                    price: defaultPrice, 
-                    stock: defaultStock, 
-                    storeSpecificImageUrl: '' 
-                });
+                appendAvailability(
+                    currentCategory === 'Flower' ?
+                    { storeId: store.id, weightOptions: flowerWeights.map(fw => ({ weight: fw, price: firstEntry?.weightOptions?.find(wo => wo.weight === fw)?.price || 0, stock: firstEntry?.weightOptions?.find(wo => wo.weight === fw)?.stock || 0 })), storeSpecificImageUrl: '' } :
+                    { storeId: store.id, price: firstEntry?.price || 0, stock: firstEntry?.stock || 0, storeSpecificImageUrl: '' }
+                );
                 operationsPerformed++;
             }
         });
@@ -252,7 +318,7 @@ export default function AdminProductsPage() {
             form.reset();
           }
         }}>
-        <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-headline text-2xl text-primary">
               {currentProduct ? 'Edit Product Definition' : 'Add New Product Definition'}
@@ -260,191 +326,142 @@ export default function AdminProductsPage() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(handleSaveProduct)} className="space-y-6 py-4">
+              {/* Basic Product Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Product Name</FormLabel>
-                      <FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="brand"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Brand</FormLabel>
-                      <FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Product Name</FormLabel><FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="brand" render={({ field }) => (<FormItem><FormLabel>Brand</FormLabel><FormControl><Input placeholder="e.g., Dodi Originals" {...field} /></FormControl><FormMessage /></FormItem>)} />
               </div>
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)}/>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
+                <FormField control={form.control} name="category" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || (productCategories[0] || 'Vape')} defaultValue={field.value || (productCategories[0] || 'Vape')}>
+                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger></FormControl>
                         <SelectContent>
-                          {productCategories.map(category => (
-                            <SelectItem key={category} value={category}>{category}</SelectItem>
-                          ))}
+                          {productCategories.map(category => (<SelectItem key={category} value={category}>{category}</SelectItem>))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="dataAiHint"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Image AI Hint (Optional)</FormLabel>
-                      <FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl>
-                      <FormDescription>Keywords for AI image search (max 2 words).</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
               </div>
-              <FormField
-                control={form.control}
-                name="baseImageUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Base Image URL</FormLabel>
-                    <FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>
-                     {field.value && (
-                      <div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative">
-                        <Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/>
-                      </div>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="isFeatured"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>
-                        Feature this product on the homepage?
-                      </FormLabel>
-                      <FormDescription>
-                        Featured products are highlighted to users.
-                      </FormDescription>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <FormField control={form.control} name="baseImageUrl" render={({ field }) => ( /* ... existing baseImageUrl field ... */ <FormItem><FormLabel>Base Image URL</FormLabel><FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>{field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative"><Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/></div>)}<FormMessage /></FormItem>)}/>
+              <FormField control={form.control} name="isFeatured" render={({ field }) => ( /* ... existing isFeatured field ... */ <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
 
-
+              {/* Store Availability Section */}
               <div className="space-y-4 rounded-md border p-4">
                 <div className="flex justify-between items-center">
                     <FormLabel className="text-md font-semibold text-primary">Store Availability</FormLabel>
-                    <Button type="button" variant="outline" size="sm" onClick={handlePopulateAllStores} disabled={loadingStores || stores.length === 0}>
-                        <StoreIcon className="mr-2 h-4 w-4" /> Populate All Stores
-                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handlePopulateAllStores} disabled={loadingStores || stores.length === 0}><StoreIcon className="mr-2 h-4 w-4" /> Populate All Stores</Button>
                 </div>
                 {form.formState.errors.availability?.root && <FormMessage>{form.formState.errors.availability.root.message}</FormMessage>}
-                {fields.map((item, index) => (
-                  <Card key={item.id} className="p-4 space-y-3 relative shadow-sm">
-                    <FormLabel className="text-sm">Availability Entry #{index + 1}</FormLabel>
-                     {fields.length > 1 && (
-                       <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-6 w-6 text-destructive" onClick={() => remove(index)}>
-                         <XCircle className="h-5 w-5" />
-                       </Button>
-                     )}
-                    <FormField
-                      control={form.control}
-                      name={`availability.${index}.storeId`}
-                      render={({ field }) => (
+                
+                {availabilityFields.map((storeAvailField, storeAvailIndex) => (
+                  <Card key={storeAvailField.id} className="p-4 space-y-3 relative shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <FormLabel className="text-sm">Availability for Store #{storeAvailIndex + 1}</FormLabel>
+                      {availabilityFields.length > 1 && (<Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeAvailability(storeAvailIndex)}><XCircle className="h-5 w-5" /></Button>)}
+                    </div>
+                    <FormField control={form.control} name={`availability.${storeAvailIndex}.storeId`} render={({ field }) => (
                         <FormItem>
                           <FormLabel>Store</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ''} defaultValue={field.value || ''} disabled={loadingStores}>
                             <FormControl><SelectTrigger><SelectValue placeholder={loadingStores ? "Loading..." : "Select store"} /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              {stores.map((store: Store) => (
-                                <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
+                            <SelectContent>{stores.map((store: Store) => (<SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>))}</SelectContent>
+                          </Select><FormMessage />
                         </FormItem>
                       )}
                     />
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                        control={form.control}
-                        name={`availability.${index}.price`}
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Price ($)</FormLabel>
-                            <FormControl><Input type="number" placeholder="29.99" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                        <FormField
-                        control={form.control}
-                        name={`availability.${index}.stock`}
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Stock</FormLabel>
-                            <FormControl><Input type="number" placeholder="50" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
-                    </div>
-                     <FormField
-                      control={form.control}
-                      name={`availability.${index}.storeSpecificImageUrl`}
-                      render={({ field }) => (
+                    <FormField control={form.control} name={`availability.${storeAvailIndex}.storeSpecificImageUrl`} render={({ field }) => (
                         <FormItem>
                           <FormLabel>Store Specific Image URL (Optional)</FormLabel>
                           <FormControl><Input placeholder="Overrides base image for this store" {...field} /></FormControl>
-                          {field.value && (
-                            <div className="mt-2 rounded-md overflow-hidden border border-muted w-20 h-20 relative">
-                                <Image src={field.value} alt="Store specific preview" fill style={{ objectFit: 'cover' }} sizes="80px" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/>
-                            </div>
-                           )}
+                          {field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-20 h-20 relative"><Image src={field.value} alt="Store specific preview" fill style={{ objectFit: 'cover' }} sizes="80px" onError={(e) => e.currentTarget.src = 'https://placehold.co/80x80.png?text=Invalid'}/></div>)}
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+
+                    {watchedCategory === 'Flower' ? (
+                      <div className="space-y-3 pt-2 border-t mt-3">
+                        <FormLabel className="text-sm font-medium text-primary flex items-center"><Weight className="mr-2 h-4 w-4"/>Weight Options for Flower</FormLabel>
+                        {flowerWeights.map((fw, weightIndex) => {
+                           // Ensure weightOptions exists and has an entry for each flowerWeight
+                           const weightOptPath = `availability.${storeAvailIndex}.weightOptions`;
+                           const currentWeightOptions = form.getValues(weightOptPath as any) || [];
+                           const existingOptionIndex = currentWeightOptions.findIndex((opt: FlowerWeightPriceStock) => opt.weight === fw);
+
+                           if (existingOptionIndex === -1 && form.control._options.shouldUnregister) {
+                                // This logic might be tricky with useFieldArray. 
+                                // It's generally better to ensure default values are set correctly.
+                                // For now, we rely on the initial form.reset/setValue to populate all flowerWeights.
+                           }
+                          
+                          return (
+                            <Card key={`${storeAvailField.id}-${fw}`} className="p-3 bg-muted/50">
+                              <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
+                              <div className="grid grid-cols-2 gap-3 mt-1">
+                                <FormField
+                                  control={form.control}
+                                  name={`${weightOptPath}.${weightIndex}.price` as any}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs">Price ($)</FormLabel>
+                                      <FormControl><Input type="number" placeholder="0.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name={`${weightOptPath}.${weightIndex}.stock` as any}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs">Stock</FormLabel>
+                                      <FormControl><Input type="number" placeholder="0" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                {/* Hidden field to store the weight itself, react-hook-form needs it */}
+                                <Controller name={`${weightOptPath}.${weightIndex}.weight` as any} control={form.control} defaultValue={fw} render={({ field }) => <input type="hidden" {...field} />} />
+                              </div>
+                            </Card>
+                          );
+                        })}
+                         {form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message && <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.weightOptions?.message}</FormMessage>}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name={`availability.${storeAvailIndex}.price`} render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Price ($)</FormLabel>
+                              <FormControl><Input type="number" placeholder="29.99" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} step="0.01" /></FormControl><FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField control={form.control} name={`availability.${storeAvailIndex}.stock`} render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Stock</FormLabel>
+                              <FormControl><Input type="number" placeholder="50" {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} step="1" /></FormControl><FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                    <FormMessage>{form.formState.errors.availability?.[storeAvailIndex]?.message}</FormMessage>
                   </Card>
                 ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' })} disabled={loadingStores}>
+                <Button type="button" variant="outline" size="sm" onClick={() => {
+                    const currentCategory = form.getValues('category');
+                    const newAvailEntry = currentCategory === 'Flower' ?
+                        { storeId: stores.length > 0 ? stores[0].id : '', weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0, stock: 0 })), storeSpecificImageUrl: '' } :
+                        { storeId: stores.length > 0 ? stores[0].id : '', price: 0, stock: 0, storeSpecificImageUrl: '' };
+                    appendAvailability(newAvailEntry as any);
+                }} disabled={loadingStores}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Store Availability
                 </Button>
               </div>
@@ -502,7 +519,7 @@ export default function AdminProductsPage() {
                   <TableHead>Featured</TableHead>
                   <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Availability</TableHead>
+                  <TableHead>Availability / Pricing</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -522,7 +539,11 @@ export default function AdminProductsPage() {
                     <TableCell>{product.category}</TableCell>
                     <TableCell>
                         {product.availability?.length > 0 
-                            ? `${product.availability.length} store(s) - e.g., ${getStoreName(product.availability[0].storeId)} ($${product.availability[0].price.toFixed(2)})` 
+                            ? product.category === 'Flower' && product.availability[0].weightOptions && product.availability[0].weightOptions.length > 0
+                                ? `${product.availability.length} store(s) - e.g., ${product.availability[0].weightOptions[0].weight} @ $${product.availability[0].weightOptions[0].price.toFixed(2)}`
+                                : product.availability[0].price !== undefined // Check if price is defined for non-flower
+                                    ? `${product.availability.length} store(s) - e.g., $${(product.availability[0].price as number).toFixed(2)}`
+                                    : "Pricing not set"
                             : "Not available"}
                     </TableCell>
                     <TableCell className="text-right space-x-2">
@@ -548,3 +569,4 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+
