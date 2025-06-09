@@ -22,7 +22,7 @@ function LoginPageInternal() {
 
   useEffect(() => {
     if (!loadingAuth && isAuthenticated) {
-      const redirectUrl = searchParams.get('redirect') || '/profile';
+      const redirectUrl = searchParams.get('redirect') || '/profile'; // Changed default to /profile
       router.push(redirectUrl);
     }
   }, [isAuthenticated, router, searchParams, loadingAuth]);

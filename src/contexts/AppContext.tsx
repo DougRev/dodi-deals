@@ -182,31 +182,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchUserOrders = useCallback(async () => {
-    if (user && isAuthenticated) {
-      setLoadingUserOrders(true);
-      try {
-        const orders = await getUserOrders(user.id);
-        setUserOrders(orders);
-      } catch (error) {
-        console.error("Error fetching user orders:", error);
-        toast({ title: "Error", description: "Could not load your order history.", variant: "destructive" });
-        setUserOrders([]);
-      } finally {
-        setLoadingUserOrders(false);
-      }
-    } else {
+    if (!user || !isAuthenticated) {
       setUserOrders([]);
       setLoadingUserOrders(false);
+      return;
     }
-  }, [user, isAuthenticated]);
+  
+    setLoadingUserOrders(true);
+    try {
+      const orders = await getUserOrders(user.id);
+      setUserOrders(orders);
+    } catch (error) {
+      console.error("Error fetching user orders:", error);
+      toast({ title: "Error", description: "Could not load your order history.", variant: "destructive" });
+      setUserOrders([]);
+    } finally {
+      setLoadingUserOrders(false);
+    }
+  }, [user, isAuthenticated, toast, setUserOrders, setLoadingUserOrders]);
+
 
   useEffect(() => {
-    if (isAuthenticated && user && userOrders.length === 0 && !loadingUserOrders) {
+    if (isAuthenticated && user) {
         fetchUserOrders();
-    } else if (!isAuthenticated || !user) {
-        setUserOrders([]);
+    } else {
+        setUserOrders([]); 
+        setLoadingUserOrders(false); 
     }
-  }, [isAuthenticated, user, fetchUserOrders, userOrders.length, loadingUserOrders]);
+  }, [isAuthenticated, user, fetchUserOrders]);
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -412,7 +415,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [stores, _selectedStore, setCart, _setSelectedStoreState, setStoreSelectorOpen, toast, setAppliedRedemption]);
 
   const login = useCallback(async (email: string, pass: string) => {
-    // setLoadingAuth(true); // Removed to prevent global loading state flash
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       toast({ title: "Login Successful", description: "Welcome back!" });
@@ -420,19 +422,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
-      // setLoadingAuth(false); // Not needed if not set to true above
       return false;
     }
   }, [toast]);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
-    // setLoadingAuth(true); // Removed
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // createUserProfile will be called by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       return true;
     } catch (error: any) {
@@ -446,7 +445,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
-      // setLoadingAuth(false); // Not needed
       return false;
     }
   }, [toast]);
@@ -456,18 +454,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Authenticated", description: "You must be logged in to update your avatar.", variant: "destructive" });
       return false;
     }
-    // setLoadingAuth(true); // Keep this if avatar update should show global loader
     try {
       await updateProfile(auth.currentUser, { photoURL: newAvatarUrl });
       await updateUserAvatarInFirestore(auth.currentUser.uid, newAvatarUrl);
       setUser(prevUser => prevUser ? { ...prevUser, avatarUrl: newAvatarUrl } : null);
       toast({ title: "Avatar Updated", description: "Your profile picture has been changed." });
-      // setLoadingAuth(false);
       return true;
     } catch (error: any) {
       console.error("Error updating avatar:", error);
       toast({ title: "Avatar Update Failed", description: error.message || "Could not update avatar.", variant: "destructive" });
-      // setLoadingAuth(false);
       return false;
     }
   }, [user, toast, setUser]);
@@ -482,25 +477,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    // setLoadingAuth(true); // Keep this if profile update should show global loader
     try {
       await updateProfile(auth.currentUser, { displayName: newName });
       await updateUserNameInFirestore(auth.currentUser.uid, newName);
       setUser(prevUser => prevUser ? { ...prevUser, name: newName } : null);
       toast({ title: "Profile Updated", description: "Your name has been successfully updated." });
-      // setLoadingAuth(false);
       return true;
     } catch (error: any) {
       console.error("Error updating profile details:", error);
       toast({ title: "Profile Update Failed", description: error.message || "Could not update your profile.", variant: "destructive" });
-      // setLoadingAuth(false);
       return false;
     }
   }, [user, toast, setUser]);
 
 
   const logout = useCallback(async () => {
-    setLoadingAuth(true); // Keep global loader for logout as it affects entire app state
+    setLoadingAuth(true); 
     try {
       if (typeof window !== 'undefined') {
         await firebaseSignOut(auth);
@@ -510,6 +502,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         _setSelectedStoreState(null);
         setAppliedRedemption(null);
         setUserOrders([]);
+        setLoadingUserOrders(false); // Ensure loading state is reset
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -527,7 +520,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
         setLoadingAuth(false);
     }
-  }, [router, toast, setCart, _setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption, setUserOrders]);
+  }, [router, toast, setCart, _setSelectedStoreState, setUser, setIsAuthenticated, setLoadingAuth, setAppliedRedemption, setUserOrders, setLoadingUserOrders]);
 
 
   const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
@@ -829,3 +822,4 @@ export function useAppContext() {
   }
   return context;
 }
+
