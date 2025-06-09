@@ -9,8 +9,8 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight } from '@/lib/types';
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst } from '@/lib/types'; // Renamed import for clarity
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 // Removed unused import: import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateOrderStatus as updateOrderStatusInFirestore } from '@/lib/firestoreService';
@@ -25,16 +25,17 @@ interface AppContextType {
   updateUserAvatar: (newAvatarUrl: string) => Promise<boolean>;
   updateUserProfileDetails: (newName: string) => Promise<boolean>;
   cart: CartItem[];
-  addToCart: (product: ResolvedProduct, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  getCartItemQuantity: (productId: string) => number;
+  addToCart: (product: ResolvedProduct, quantity?: number, selectedWeight?: FlowerWeight) => void;
+  removeFromCart: (productId: string, selectedWeight?: FlowerWeight) => void;
+  updateCartQuantity: (productId: string, quantity: number, selectedWeight?: FlowerWeight) => void;
+  getCartItemQuantity: (productId: string, selectedWeight?: FlowerWeight) => number;
   getTotalCartItems: () => number;
   clearCart: () => void;
   products: ResolvedProduct[];
   allProducts: Product[];
   deals: Deal[];
-  getCartTotal: () => number;
+  getCartSubtotal: () => number; // Renamed from getCartTotal to avoid confusion with final total
+  getCartTotal: () => number; // This will be the final total after discounts
   getCartTotalSavings: () => number;
   getPotentialPointsForCart: () => number;
   stores: Store[];
@@ -60,6 +61,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const DODI_CART_KEY_PREFIX = 'dodiCart_';
 const DODI_SELECTED_STORE_KEY = 'dodiSelectedStoreId';
 const ADMIN_EMAIL = 'admin@test.com';
+const MINIMUM_PURCHASE_AMOUNT = 15;
+
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -114,7 +117,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setStores(currentStoresListFromSnapshot);
 
-      // Logic to handle initial store selection or prompt
       const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectInitially: Store | null = null;
 
@@ -123,7 +125,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       
       if (_selectedStore) {
-        // If a store is already selected, ensure it's still valid in the new list
         const currentSelectedStoreStillValid = currentStoresListFromSnapshot.some(s => s.id === _selectedStore.id);
         if (!currentSelectedStoreStillValid) {
           _setSelectedStoreState(null); 
@@ -145,7 +146,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
 
-      setStores(initialStoresSeedData); // Fallback to seed data on error
+      setStores(initialStoresSeedData); 
       const savedStoreIdOnError = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectOnError: Store | null = null;
       if (savedStoreIdOnError) {
@@ -163,7 +164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Removed _selectedStore from dependencies to prevent potential loops. Selection is handled internally.
+  }, []); 
 
 
   useEffect(() => {
@@ -203,15 +204,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    const currentUserId = user?.id; // Capture stable id
+    const currentUserId = user?.id;
     if (isAuthenticated && currentUserId) {
       fetchUserOrders();
     } else {
       setUserOrders([]);
       setLoadingUserOrders(false); 
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, user?.id]); // Depend on user.id for stability
+  }, [isAuthenticated, user?.id, fetchUserOrders]);
 
 
   const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
@@ -242,6 +242,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         avatarUrl?: string;
         assignedStoreId?: string | null;
         storeRole?: StoreRole | null;
+        noShowStrikes: number;
+        isBanned: boolean;
       } = {
         email: firebaseUser.email,
         name: displayName,
@@ -250,6 +252,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: existingData?.createdAt || new Date().toISOString(),
         assignedStoreId: determinedAssignedStoreId,
         storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole,
+        noShowStrikes: existingData?.noShowStrikes ?? 0,
+        isBanned: existingData?.isBanned ?? false,
       };
 
     if (determinedAvatarUrl) {
@@ -297,6 +301,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (!determinedAvatarUrl && existingData?.avatarUrl) {
          updates.avatarUrl = undefined;
       }
+      if (existingData.noShowStrikes === undefined) updates.noShowStrikes = 0;
+      if (existingData.isBanned === undefined) updates.isBanned = false;
 
 
       if (Object.keys(updates).length > 0) {
@@ -326,6 +332,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isAdmin: profileDataToSet.isAdmin,
       assignedStoreId: profileDataToSet.assignedStoreId,
       storeRole: profileDataToSet.storeRole,
+      noShowStrikes: profileDataToSet.noShowStrikes,
+      isBanned: profileDataToSet.isBanned,
     };
     return profileToReturn;
   };
@@ -340,6 +348,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
+            if (userProfile.isBanned) {
+              toast({ title: "Account Suspended", description: "This account has been suspended due to repeated no-shows.", variant: "destructive", duration: Infinity });
+              await firebaseSignOut(auth); // Log them out immediately if banned
+            }
           } else {
             setUser(null);
             setIsAuthenticated(false);
@@ -418,25 +430,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [stores, _selectedStore]);
 
   const login = useCallback(async (email: string, pass: string) => {
+    setLoadingAuth(true);
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      // Profile check (including isBanned) is now handled by onAuthStateChanged
+      // No need to explicitly call createUserProfile here after signIn.
+      // If createUserProfile inside onAuthStateChanged detects banned, it will toast and sign out.
+      if (userCredential.user) {
+        // onAuthStateChanged will update the user state and isAuthenticated.
+        // We can check the temporarily fetched profile here if needed for immediate feedback,
+        // but the main check is in onAuthStateChanged.
+        const tempProfile = await createUserProfile(userCredential.user);
+        if (tempProfile?.isBanned) {
+           // This is a fallback, onAuthStateChanged should handle the primary logout.
+           toast({ title: "Account Suspended", description: "This account has been suspended.", variant: "destructive", duration: Infinity });
+           await firebaseSignOut(auth);
+           setLoadingAuth(false);
+           return false;
+        }
+      }
       toast({ title: "Login Successful", description: "Welcome back!" });
+      setLoadingAuth(false);
       return true;
     } catch (error: any) {
       console.error("Firebase login error:", error);
       toast({ title: "Login Failed", description: error.message || "Invalid email or password.", variant: "destructive" });
+      setLoadingAuth(false);
       return false;
     }
   }, []);
 
   const register = useCallback(async (email: string, pass: string, name?: string) => {
+    setLoadingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // Profile creation in Firestore is handled by onAuthStateChanged
+      // Profile creation and banned check is handled by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
+      setLoadingAuth(false);
       return true;
     } catch (error: any) {
       console.error("Firebase registration error:", error);
@@ -449,6 +482,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message;
       }
       toast({ title: "Registration Failed", description: errorMessage, variant: "destructive" });
+      setLoadingAuth(false);
       return false;
     }
   }, []);
@@ -505,7 +539,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         _setSelectedStoreState(null);
         setAppliedRedemption(null);
         setUserOrders([]);
-        setLoadingUserOrders(true); // Reset to true on logout
+        setLoadingUserOrders(true); 
         localStorage.removeItem(DODI_SELECTED_STORE_KEY);
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith(DODI_CART_KEY_PREFIX)) {
@@ -524,46 +558,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
 
-  const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1) => {
+  const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1, selectedWeight?: FlowerWeight) => {
     if (!_selectedStore) {
       toast({ title: "No Store Selected", description: "Please select a store before adding to cart.", variant: "destructive" });
       setStoreSelectorOpen(true);
       return;
     }
+     if (user?.isBanned) {
+      toast({ title: "Account Suspended", description: "Your account is suspended. You cannot place orders.", variant: "destructive" });
+      return;
+    }
     setCart((prevCart) => {
-      const existingItem = prevCart.find(item => item.product.id === product.id && item.product.storeId === product.storeId);
-      if (existingItem) {
-        return prevCart.map(item =>
-          (item.product.id === product.id && item.product.storeId === product.storeId)
-            ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
-            : item
-        );
-      }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock) }];
-    });
-    toast({ title: "Item Added", description: `${product.name} added to cart.` });
-  }, [_selectedStore, setStoreSelectorOpen]);
+      const itemIdentifier = product.id + (selectedWeight || '');
+      const existingItemIndex = prevCart.findIndex(item => (item.product.id + (item.selectedWeight || '')) === itemIdentifier && item.product.storeId === product.storeId);
 
-  const removeFromCart = useCallback((originalProductId: string) => {
-    setCart((prevCart) => prevCart.filter(item => item.product.id !== originalProductId));
+      if (existingItemIndex > -1) {
+        const updatedCart = [...prevCart];
+        const newQuantity = Math.min(updatedCart[existingItemIndex].quantity + quantity, product.stock);
+        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity };
+        return updatedCart;
+      }
+      return [...prevCart, { product, quantity: Math.min(quantity, product.stock), selectedWeight }];
+    });
+    toast({ title: "Item Added", description: `${product.name}${selectedWeight ? ` (${selectedWeight})` : ''} added to cart.` });
+  }, [_selectedStore, setStoreSelectorOpen, user?.isBanned]);
+
+  const removeFromCart = useCallback((productId: string, selectedWeight?: FlowerWeight) => {
+    const itemIdentifier = productId + (selectedWeight || '');
+    setCart((prevCart) => prevCart.filter(item => (item.product.id + (item.selectedWeight || '')) !== itemIdentifier));
     toast({ title: "Item Removed", description: "Item removed from cart." });
   }, []);
 
-  const updateCartQuantity = useCallback((originalProductId: string, quantity: number) => {
+  const updateCartQuantity = useCallback((productId: string, quantity: number, selectedWeight?: FlowerWeight) => {
+    const itemIdentifier = productId + (selectedWeight || '');
     setCart((prevCart) =>
       prevCart.map(item =>
-        item.product.id === originalProductId
+        (item.product.id + (item.selectedWeight || '')) === itemIdentifier
           ? { ...item, quantity: Math.max(0, Math.min(quantity, item.product.stock)) }
           : item
       ).filter(item => item.quantity > 0)
     );
   }, []);
-
-  const getCartItemQuantity = useCallback((productId: string): number => {
+  
+  const getCartItemQuantity = useCallback((productId: string, selectedWeight?: FlowerWeight): number => {
     if (!_selectedStore) return 0;
-    const item = cart.find(i => i.product.id === productId && i.product.storeId === _selectedStore.id);
+    const itemIdentifier = productId + (selectedWeight || '');
+    const item = cart.find(i => (i.product.id + (i.selectedWeight || '')) === itemIdentifier && i.product.storeId === _selectedStore.id);
     return item ? item.quantity : 0;
   }, [cart, _selectedStore]);
+
 
   const getTotalCartItems = useCallback(() => {
     return cart.reduce((total, item) => total + item.quantity, 0);
@@ -575,16 +618,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "Cart Cleared", description: "Your cart has been emptied." });
   }, []);
 
+  const getCartSubtotal = useCallback(() => {
+    return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  }, [cart]);
+
   const getCartTotal = useCallback(() => {
-    const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    const subtotal = getCartSubtotal();
     return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
-  }, [cart, appliedRedemption]);
+  }, [getCartSubtotal, appliedRedemption]);
 
   const getPotentialPointsForCart = useCallback(() => {
-    const currentCartTotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-    const finalTotalAfterPotentialRedemption = appliedRedemption ? Math.max(0, currentCartTotal - appliedRedemption.discountAmount) : currentCartTotal;
+    const finalTotalAfterPotentialRedemption = getCartTotal();
     return Math.floor(finalTotalAfterPotentialRedemption * 2); // 2 points per $1
-  }, [cart, appliedRedemption]);
+  }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
     let savings = cart.reduce((totalSavings, item) => {
@@ -604,18 +650,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Login Required", description: "Please log in to use points.", variant: "destructive" });
       return;
     }
+    if (user.isBanned) {
+      toast({ title: "Account Suspended", description: "Your account is suspended. You cannot redeem points.", variant: "destructive" });
+      return;
+    }
     if (user.points < option.pointsRequired) {
       toast({ title: "Not Enough Points", description: `You need ${option.pointsRequired} points for this reward. You have ${user.points}.`, variant: "destructive" });
       return;
     }
-    const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    const subtotal = getCartSubtotal();
     if (subtotal < option.discountAmount) {
       toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount.`, variant: "destructive" });
       return;
     }
     setAppliedRedemption(option);
     toast({ title: "Discount Applied", description: `${option.description} applied to your cart.` });
-  }, [user, cart]);
+  }, [user, getCartSubtotal]);
 
   const removeRedemption = useCallback(() => {
     setAppliedRedemption(null);
@@ -627,10 +677,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Cannot Finalize", description: "User not logged in, no store selected, or cart is empty.", variant: "destructive"});
       return;
     }
+    if (user.isBanned) {
+      toast({ title: "Account Suspended", description: "Your account is suspended. You cannot place orders.", variant: "destructive" });
+      return;
+    }
+
+    const currentCartSubtotal = getCartSubtotal();
+    if (currentCartSubtotal < MINIMUM_PURCHASE_AMOUNT) {
+      toast({
+        title: "Minimum Purchase Not Met",
+        description: `A minimum purchase of $${MINIMUM_PURCHASE_AMOUNT.toFixed(2)} is required. Your current subtotal is $${currentCartSubtotal.toFixed(2)}.`,
+        variant: "destructive"
+      });
+      return;
+    }
 
     const orderItems: OrderItem[] = cart.map(item => ({
       productId: item.product.id,
       productName: item.product.name,
+      selectedWeight: item.selectedWeight,
       quantity: item.quantity,
       pricePerItem: item.product.price,
       originalPricePerItem: item.product.originalPrice,
@@ -651,12 +716,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
+      userStrikesAtOrderTime: user.noShowStrikes, // Store strikes at order time
     };
 
     try {
-      const { orderId, pointsCalculatedForOrder } = await createOrderInFirestore(orderData);
+      const { orderId } = await createOrderInFirestore(orderData);
             
-      if (user) fetchUserOrders(); // Refresh orders list for the current user
+      if (user) fetchUserOrders(); 
       toast({ 
         title: "Order Submitted!", 
         description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Points will be applied by the store upon order completion.`
@@ -667,7 +733,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error("Error finalizing order:", error);
       toast({ title: "Order Failed", description: error.message || "Could not submit your order. Please try again.", variant: "destructive" });
     }
-  }, [user, _selectedStore, cart, appliedRedemption, clearCart, router, fetchUserOrders]);
+  }, [user, _selectedStore, cart, appliedRedemption, clearCart, router, fetchUserOrders, getCartSubtotal]);
 
 
   const products = useMemo(() => {
@@ -681,7 +747,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (rule && Array.isArray(rule.selectedDays) && rule.selectedDays.includes(currentDayOfWeek) &&
                 typeof rule.category === 'string' && typeof rule.discountPercentage === 'number' && rule.discountPercentage > 0) {
                 activeRule = rule;
-                break;
+                break; 
             }
         }
     }
@@ -701,32 +767,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
-        let effectivePrice = availabilityForStore.price;
-        let originalPriceValue = availabilityForStore.price;
-        let isProductOnDeal = false;
+        if (p.category === 'Flower') {
+          const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
+          availabilityForStore.weightOptions?.forEach(wo => {
+            const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
+            const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
+            
+            let effectivePrice = wo.price;
+            let originalPriceValue = wo.price;
+            let isProductOnDeal = false;
+            if (activeRule && p.category === activeRule.category) {
+              isProductOnDeal = true;
+              effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
+            }
 
-        if (activeRule && p.category === activeRule.category) {
-          isProductOnDeal = true;
-          effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
+            resolved.push({
+              id: p.id, // Base product ID
+              variantId: `${p.id}-${wo.weight}`, // Unique ID for this weight variant
+              name: p.name,
+              description: p.description,
+              brand: p.brand,
+              category: p.category,
+              dataAiHint: p.dataAiHint,
+              isFeatured: p.isFeatured || false,
+              storeId: _selectedStore.id,
+              price: effectivePrice,
+              originalPrice: isProductOnDeal ? originalPriceValue : undefined,
+              stock: unitsAvailable, // Stock is units of this weight
+              imageUrl: currentImageUrl,
+              selectedWeight: wo.weight, // The specific weight for this resolved product variant
+              availableWeights: availabilityForStore.weightOptions, // All options for selection UI
+              totalStockInGrams: totalGramsInStock,
+            });
+          });
+        } else {
+          let effectivePrice = availabilityForStore.price || 0; // Added fallback for price
+          let originalPriceValue = availabilityForStore.price || 0; // Added fallback for price
+          let isProductOnDeal = false;
+
+          if (activeRule && p.category === activeRule.category) {
+            isProductOnDeal = true;
+            effectivePrice = parseFloat((originalPriceValue * (1 - activeRule.discountPercentage / 100)).toFixed(2));
+          }
+
+          resolved.push({
+            id: p.id,
+            variantId: p.id, // For non-flower, variantId is same as id
+            name: p.name,
+            description: p.description,
+            brand: p.brand,
+            category: p.category,
+            dataAiHint: p.dataAiHint,
+            isFeatured: p.isFeatured || false,
+            storeId: _selectedStore.id,
+            price: effectivePrice,
+            originalPrice: isProductOnDeal ? originalPriceValue : undefined,
+            stock: availabilityForStore.stock || 0, // Added fallback for stock
+            imageUrl: currentImageUrl,
+          });
         }
-
-        resolved.push({
-          id: p.id,
-          name: p.name,
-          description: p.description,
-          brand: p.brand,
-          category: p.category,
-          dataAiHint: p.dataAiHint,
-          isFeatured: p.isFeatured || false,
-          storeId: _selectedStore.id,
-          price: effectivePrice,
-          originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-          stock: availabilityForStore.stock,
-          imageUrl: currentImageUrl,
-        });
       }
     });
     return resolved;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, allProducts, loadingProducts]);
 
 
@@ -759,12 +862,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return products
       .filter(p => p.category === categoryOnDealToday && p.originalPrice && p.price < p.originalPrice && p.stock > 0)
       .map(dealProduct => ({
-        id: `${dealProduct.id}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
-        product: dealProduct,
+        id: `${dealProduct.variantId}-deal-${currentDayOfWeek}-${categoryOnDealToday}-${discountPercentageToday}`,
+        product: dealProduct, // dealProduct is already a ResolvedProduct (variant)
         discountPercentage: discountPercentageToday,
         expiresAt: endOfToday.toISOString(),
         title: `${currentDayOfWeek}'s ${categoryOnDealToday} Deal!`,
-        description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${dealProduct.name}.`,
+        description: `${discountPercentageToday}% off all ${categoryOnDealToday} products today! Includes ${dealProduct.name}${dealProduct.selectedWeight ? ` (${dealProduct.selectedWeight})` : ''}.`,
         storeId: _selectedStore.id,
         categoryOnDeal: categoryOnDealToday,
       }));
@@ -789,6 +892,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     products,
     allProducts,
     deals,
+    getCartSubtotal,
     getCartTotal,
     getCartTotalSavings,
     getPotentialPointsForCart,
@@ -810,7 +914,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetchUserOrders,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
-    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
+    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
     userOrders, loadingUserOrders, fetchUserOrders
@@ -826,3 +930,4 @@ export function useAppContext() {
   }
   return context;
 }
+

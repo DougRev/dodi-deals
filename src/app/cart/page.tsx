@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent, Award } from 'lucide-react'; // Added Award
+import { Trash2, ShoppingBag, ArrowLeft, MapPin, Percent, Award, AlertCircle } from 'lucide-react'; // Added Award, AlertCircle
 import type { ResolvedProduct } from '@/lib/types';
+
+const MINIMUM_PURCHASE_AMOUNT = 15;
 
 // Internal component containing the original CartPage logic
 function CartPageInternal() {
@@ -20,7 +22,8 @@ function CartPageInternal() {
     cart, 
     removeFromCart, 
     updateCartQuantity, 
-    getCartTotal, 
+    getCartTotal,
+    getCartSubtotal, // Use subtotal for minimum purchase check
     getCartTotalSavings,
     getPotentialPointsForCart, 
     clearCart, 
@@ -67,16 +70,17 @@ function CartPageInternal() {
     );
   }
 
-  const handleQuantityChange = (productId: string, newQuantity: number) => {
+  const handleQuantityChange = (productId: string, newQuantity: number, selectedWeight?: ResolvedProduct['selectedWeight']) => {
     if (newQuantity >= 0) {
-      updateCartQuantity(productId, newQuantity);
+      updateCartQuantity(productId, newQuantity, selectedWeight);
     }
   };
 
-  const cartTotal = getCartTotal();
+  const cartSubtotal = getCartSubtotal();
+  const cartFinalTotal = getCartTotal();
   const totalSavings = getCartTotalSavings();
   const potentialPoints = getPotentialPointsForCart();
-  const subtotalBeforeRedemption = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+  const isBelowMinimum = cartSubtotal < MINIMUM_PURCHASE_AMOUNT && cart.length > 0;
 
 
   return (
@@ -104,7 +108,7 @@ function CartPageInternal() {
               const isDealItem = item.product.originalPrice && item.product.originalPrice > item.product.price;
               const itemSaving = isDealItem ? (item.product.originalPrice! - item.product.price) * item.quantity : 0;
               return (
-                <Card key={item.product.id} className="flex flex-col md:flex-row items-center p-4 gap-4 shadow-md">
+                <Card key={item.product.variantId} className="flex flex-col md:flex-row items-center p-4 gap-4 shadow-md">
                   <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-md overflow-hidden shrink-0">
                     <Image
                       src={item.product.imageUrl}
@@ -116,6 +120,9 @@ function CartPageInternal() {
                   </div>
                   <div className="flex-grow">
                     <h3 className="text-lg font-semibold text-primary">{item.product.name}</h3>
+                    {item.product.selectedWeight && (
+                      <p className="text-sm font-medium text-accent">Weight: {item.product.selectedWeight}</p>
+                    )}
                     <p className="text-sm text-muted-foreground">{item.product.brand}</p>
                     <p className="text-sm text-muted-foreground">{item.product.category}</p>
                     <div className="flex items-baseline space-x-2 mt-1">
@@ -140,11 +147,11 @@ function CartPageInternal() {
                       min="0"
                       max={item.product.stock}
                       value={item.quantity}
-                      onChange={(e) => handleQuantityChange(item.product.id, parseInt(e.target.value))}
+                      onChange={(e) => handleQuantityChange(item.product.id, parseInt(e.target.value), item.product.selectedWeight)}
                       className="w-20 h-10 text-center"
                       aria-label={`Quantity for ${item.product.name}`}
                     />
-                    <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.product.id)} aria-label={`Remove ${item.product.name}`}>
+                    <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.product.id, item.product.selectedWeight)} aria-label={`Remove ${item.product.name}`}>
                       <Trash2 className="h-5 w-5 text-destructive" />
                     </Button>
                   </div>
@@ -165,7 +172,7 @@ function CartPageInternal() {
               <CardContent className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-semibold">${subtotalBeforeRedemption.toFixed(2)}</span>
+                  <span className="font-semibold">${cartSubtotal.toFixed(2)}</span>
                 </div>
 
                 {user && user.points > 0 && (
@@ -178,7 +185,7 @@ function CartPageInternal() {
                         size="sm"
                         className="w-full justify-between"
                         onClick={() => applyRedemption(option)}
-                        disabled={user.points < option.pointsRequired || subtotalBeforeRedemption < option.discountAmount}
+                        disabled={user.points < option.pointsRequired || cartSubtotal < option.discountAmount}
                       >
                         <span>{option.description}</span>
                         <span>-{option.pointsRequired} pts</span>
@@ -212,7 +219,7 @@ function CartPageInternal() {
                 <Separator />
                 <div className="flex justify-between text-xl font-bold">
                   <span>Estimated Total</span>
-                  <span className="text-primary">${(cartTotal).toFixed(2)}</span>
+                  <span className="text-primary">${(cartFinalTotal).toFixed(2)}</span>
                 </div>
                  {potentialPoints > 0 && (
                   <div className="flex justify-center items-center text-sm text-green-600 mt-2 p-2 bg-green-500/10 rounded-md">
@@ -223,14 +230,22 @@ function CartPageInternal() {
                 <p className="text-xs text-muted-foreground">
                   Final payment and applicable taxes will be handled at {selectedStore.name} upon pickup.
                 </p>
+                {isBelowMinimum && (
+                  <div className="mt-3 p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm flex items-center">
+                    <AlertCircle className="h-5 w-5 mr-2 shrink-0" />
+                    A minimum purchase of ${MINIMUM_PURCHASE_AMOUNT.toFixed(2)} is required. Add more items to proceed.
+                  </div>
+                )}
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
                 <Button 
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                   size="lg" 
-                  onClick={finalizeOrder} 
+                  onClick={finalizeOrder}
+                  disabled={isBelowMinimum || user?.isBanned}
+                  title={user?.isBanned ? "Your account is suspended and cannot place orders." : (isBelowMinimum ? `Minimum order value is $${MINIMUM_PURCHASE_AMOUNT.toFixed(2)}` : "Confirm for In-Store Pickup")}
                 >
-                  Confirm for In-Store Pickup
+                  {user?.isBanned ? "Account Suspended" : "Confirm for In-Store Pickup"}
                 </Button>
                 <Button asChild variant="outline" className="w-full">
                   <Link href="/products">
