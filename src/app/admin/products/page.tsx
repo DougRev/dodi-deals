@@ -29,7 +29,7 @@ const getDefaultAvailability = (category: ProductFormData['category'], stores: S
   if (category === 'Flower') {
     return [{
       storeId: defaultStoreId,
-      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), // Only price, stock removed
+      weightOptions: flowerWeights.map(fw => ({ weight: fw, price: 0 })), // Only price
       totalStockInGrams: 0, // Added totalStockInGrams
       storeSpecificImageUrl: '',
     }];
@@ -84,7 +84,7 @@ export default function AdminProductsPage() {
           return {
             weight: fw,
             price: existingOption?.price || 0,
-            // stock: undefined // stock is removed from FlowerWeightPrice
+            // stock is removed from FlowerWeightPrice
           };
         });
         return {
@@ -126,18 +126,18 @@ export default function AdminProductsPage() {
                 const existingOption = avail.weightOptions?.find(wo => wo.weight === fw);
                 return {
                   weight: fw,
-                  price: existingOption?.price || 0,
+                  price: existingOption?.price || 0, // Only price
                 };
               });
               return {
                 ...avail,
                 weightOptions: completeWeightOptions,
                 totalStockInGrams: avail.totalStockInGrams || 0,
-                price: undefined,
-                stock: undefined,
+                price: undefined, // No base price for flowers
+                stock: undefined, // No base stock for flowers
               };
             }
-            return {
+            return { // For non-flower
               ...avail,
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
@@ -218,7 +218,7 @@ export default function AdminProductsPage() {
             return {
               storeId: avail.storeId,
               weightOptions: avail.weightOptions?.map(wo => ({
-                ...wo,
+                weight: wo.weight, // Ensure weight is part of the payload
                 price: Number(wo.price),
               })) || [],
               totalStockInGrams: Number(avail.totalStockInGrams) || 0,
@@ -232,7 +232,7 @@ export default function AdminProductsPage() {
               storeSpecificImageUrl: avail.storeSpecificImageUrl === '' ? undefined : avail.storeSpecificImageUrl,
             };
           }
-        }) as any,
+        }) as any, // Cast because Zod schema expects specific structures
       };
 
       if (currentProduct) {
@@ -571,5 +571,6 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+    
 
     
