@@ -21,7 +21,7 @@ import {
   type Store, 
   daysOfWeek, 
   type ProductCategory, 
-  productCategories, // productCategories now includes "Hemp Accessory"
+  productCategories, 
   type CustomDealRule,
 } from '@/lib/types';
 import { addStore, updateStore, deleteStore } from '@/lib/firestoreService';

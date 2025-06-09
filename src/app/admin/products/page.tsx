@@ -263,7 +263,7 @@ export default function AdminProductsPage() {
       if (data.category === 'Flower') {
         finalBrand = 'Dodi Hemp';
       } else if (finalBrand === OTHER_BRAND_VALUE) {
-         finalBrand = '';
+         finalBrand = ''; // If 'Other' was selected and manual input was used, that value is already in data.brand. If not, make it empty.
       }
 
       const productDataPayload: Omit<Product, 'id'> = {
@@ -697,3 +697,5 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+
+    

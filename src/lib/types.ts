@@ -8,25 +8,26 @@ export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
 export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Updated Product Categories
-export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory']);
+export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid']);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
-export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory'];
+export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid'];
 
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
-  'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Juice Head", "Twist", "Squeeze", "Dodi Hemp"],
-  'Flower': ["Dodi Hemp"], // Only Dodi Hemp for Flower
+  'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Dodi Hemp"], // Juice Head, Twist, Squeeze removed
+  'Flower': ["Dodi Hemp"],
   'Pre-roll': ["Dodi Hemp"],
   'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp"],
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
   'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
+  'E-Liquid': ["Juice Head", "Twist", "Squeeze"], // New E-Liquid category
 };
 
 
 // Business rules for fixed daily categories (used as fallback or informational)
 export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
   Monday: 'Flower',
-  Tuesday: 'Edible', // Note: AppContext uses 'Vape' for Tuesday site-wide deal
+  Tuesday: 'Vape', 
   Wednesday: 'Pre-roll',
   Thursday: 'Hemp Accessory',
   Friday: 'Vape',
@@ -325,3 +326,5 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
+
+    

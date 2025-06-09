@@ -165,31 +165,30 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "vape disposable",
     isFeatured: false,
   },
-  // Juice Head (E-Liquid style, categorized as Vape)
+  
+  // === E-Liquid ===
   {
     name: "Juice Head E-Liquid - Peach Pear (100ml)",
     description: "Classic Peach Pear e-liquid from Juice Head, perfect for vape mods. Available in various nicotine strengths.",
-    category: "Vape",
+    category: "E-Liquid",
     brand: "Juice Head",
-    dataAiHint: "vape eliquid",
+    dataAiHint: "eliquid peach",
     isFeatured: false,
   },
-  // Twist E-Liquids (E-Liquid style, categorized as Vape)
   {
     name: "Twist E-Liquids - Pink Punch Lemonade (60ml x2)",
     description: "Iconic Pink Punch Lemonade flavor from Twist E-Liquids, typically sold in dual 60ml bottles.",
-    category: "Vape",
+    category: "E-Liquid",
     brand: "Twist",
-    dataAiHint: "vape eliquid",
+    dataAiHint: "eliquid lemonade",
     isFeatured: false,
   },
-  // Squeeze E-Liquids (E-Liquid style, categorized as Vape)
   {
     name: "Squeeze E-Liquids - Green Apple (100ml)",
     description: "Crisp Green Apple e-liquid by Squeeze, delivering a tart and sweet vaping experience.",
-    category: "Vape",
+    category: "E-Liquid",
     brand: "Squeeze",
-    dataAiHint: "vape eliquid",
+    dataAiHint: "eliquid apple",
     isFeatured: false,
   },
 
@@ -293,7 +292,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Artistic Design Rolling Tray - Galaxy Medium",
     description: "Medium sized rolling tray with a unique galaxy artistic design. Metal construction.",
     category: "Hemp Accessory",
-    brand: "Generic Brand", // Example for less specific brand, or could be a specific tray brand
+    brand: "Generic Brand", 
     dataAiHint: "rolling tray",
     isFeatured: false,
   },
