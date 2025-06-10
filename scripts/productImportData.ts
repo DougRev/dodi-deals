@@ -207,7 +207,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "Each gummy contains 10mg Live Resin D9, 10mg CBG, and 5mg THCV for an uplifting experience.",
     category: "Edible",
     brand: "Dodi Hemp",
-    dataAiHint: "edible gummy_rise",
+    dataAiHint: "edible gummy rise", // Changed to two words
     isFeatured: false,
   },
   // CannaElite Edibles
@@ -216,7 +216,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "Delicious strawberry-flavored gummies infused with premium Delta-9 THC by CannaElite.",
     category: "Edible",
     brand: "CannaElite",
-    dataAiHint: "edible gummy_delta9",
+    dataAiHint: "edible gummy delta9", // Changed to two words
     isFeatured: true,
   },
   {
@@ -233,7 +233,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "A vibrant mix of rainbow belt flavored gummies from Hidden Hills, known for their potent blends.",
     category: "Edible",
     brand: "Hidden Hills",
-    dataAiHint: "edible gummy_rainbow",
+    dataAiHint: "edible gummy rainbow", // Changed to two words
     isFeatured: false,
   },
   {
@@ -241,7 +241,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "A unique edible bar from Hidden Hills combining liquid diamonds with peach mango flavor.",
     category: "Edible",
     brand: "Hidden Hills",
-    dataAiHint: "edible bar_diamond",
+    dataAiHint: "edible bar diamond", // Changed to two words
     isFeatured: false,
   },
 
@@ -251,7 +251,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "High-purity THCa diamonds suspended in rich terpene sauce. Black Lime strain for a zesty profile.",
     category: "Concentrate",
     brand: "Dodi Hemp",
-    dataAiHint: "concentrate diamond_sauce",
+    dataAiHint: "concentrate diamond sauce", // Changed to two words
     isFeatured: true,
   },
   {
@@ -304,6 +304,30 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "gold papers",
     isFeatured: false,
   },
-];
 
-    
+  // === Drinks ===
+  {
+    name: "Dodi ChillWave CBD Seltzer - Berry Bliss",
+    description: "Refreshing berry-flavored CBD seltzer for a calming experience. Zero sugar.",
+    category: "Drinks",
+    brand: "Dodi Drinks",
+    dataAiHint: "cbd seltzer",
+    isFeatured: true,
+  },
+  {
+    name: "Elevate Delta-8 Infused Lemonade",
+    description: "Classic lemonade with a Delta-8 THC infusion for a mild, uplifting buzz.",
+    category: "Drinks",
+    brand: "Generic Drink Brand",
+    dataAiHint: "infused lemonade",
+    isFeatured: false,
+  },
+  {
+    name: "Dodi Boost THCV Energy Drink - Tropical Punch",
+    description: "THCV-infused energy drink with a tropical punch flavor to help you focus and energize.",
+    category: "Drinks",
+    brand: "Dodi Drinks",
+    dataAiHint: "energy drink",
+    isFeatured: false,
+  },
+];
