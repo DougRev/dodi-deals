@@ -10,7 +10,7 @@ import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndP
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories } from '@/lib/types'; // Added productCategories
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams } from '@/lib/types'; // Added flowerWeightToGrams
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders } from '@/lib/firestoreService';
 
@@ -789,17 +789,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           // New Daily Deal Logic
           if (currentDayName === 'Tuesday' && p.category === 'E-Liquid') {
-            isBogoEligibleProduct = true; // Mark as BOGO eligible, price remains basePrice
-            // No direct price change here; BOGO handled in cart.
+            isBogoEligibleProduct = true; 
           } else if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
             isProductOnDeal = true;
-            effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2)); // 15% off
+            effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2)); 
           } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
             isProductOnDeal = true;
-            effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2)); // 20% off
+            effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2)); 
           }
 
-          // Check for custom store deals if no site-wide percentage deal was applied
+          
           if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
             for (const rule of _selectedStore.dailyDeals) {
               if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
@@ -834,8 +833,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (p.category === 'Flower' && availabilityForStore.weightOptions) {
           const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
           availabilityForStore.weightOptions.forEach(wo => {
-            const gramsForThisWeight = allFlowerWeightsConst.find(fw => fw.weight === wo.weight)?.grams || 0;
-            const unitsAvailable = gramsForThisWeight > 0 ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
+            const gramsForThisWeight = flowerWeightToGrams(wo.weight); // Corrected calculation
+            const unitsAvailable = (gramsForThisWeight && gramsForThisWeight > 0) ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
             if (unitsAvailable > 0) { 
                resolved.push(processProductVariant(wo.price, unitsAvailable, wo.weight));
             }
@@ -851,7 +850,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   const deals: Deal[] = useMemo(() => {
-    if (!_selectedStore || loadingProducts) { // Removed products.length === 0 condition here
+    if (!_selectedStore || loadingProducts) { 
       return [];
     }
 
@@ -863,7 +862,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const generatedDeals: Deal[] = [];
 
-    // Tuesday: BOGO 50% Off all E-Liquid
+    
     if (currentDayName === 'Tuesday') {
       generatedDeals.push({
         id: `deal-${currentDayName}-eliquid-bogo`,
@@ -876,13 +875,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // Wednesday: 15% Off all Dodi products
+    
     if (currentDayName === 'Wednesday') {
       generatedDeals.push({
         id: `deal-${currentDayName}-dodi-brands`,
         title: "15% Off Dodi Brands!",
         description: "Enjoy 15% off all products from Dodi Hemp, Dodi Accessories, etc.",
-        brandOnDeal: 'Dodi', // Generic "Dodi" to match "Dodi Hemp", "Dodi Accessories"
+        brandOnDeal: 'Dodi', 
         discountPercentage: 15,
         dealType: 'percentage',
         expiresAt: endOfToday.toISOString(),
@@ -890,7 +889,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     }
     
-    // Thursday: 20% Off all Drinks
+    
     if (currentDayName === 'Thursday') {
          generatedDeals.push({
             id: `deal-${currentDayName}-drinks`,
@@ -904,18 +903,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
     }
     
-    // Add products affected by percentage-based store-specific deals
+    
      if (_selectedStore.dailyDeals) {
         _selectedStore.dailyDeals.forEach(rule => {
             if (rule.selectedDays.includes(currentDayName)) {
                 const productsInDealCategory = products.filter(p => 
                     p.category === rule.category && 
-                    p.originalPrice && p.price < p.originalPrice // Ensure it's actually discounted by this rule
+                    p.originalPrice && p.price < p.originalPrice 
                 );
                 if (productsInDealCategory.length > 0) {
                      generatedDeals.push({
                         id: `deal-store-${rule.category}-${rule.discountPercentage}`,
-                        product: productsInDealCategory[0], // Show first product as example for the card
+                        product: productsInDealCategory[0], 
                         title: `${rule.discountPercentage}% Off ${rule.category}!`,
                         description: `Special store deal: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
                         categoryOnDeal: rule.category,
@@ -929,7 +928,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
     }
 
-    // Remove duplicate deal announcements if a site-wide one covers a store-specific one
+    
     const uniqueDeals: Deal[] = [];
     const dealKeys = new Set<string>();
     for (const deal of generatedDeals) {
@@ -1001,3 +1000,5 @@ export function useAppContext() {
   }
   return context;
 }
+
+    
