@@ -591,26 +591,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getCartSubtotal = useCallback(() => {
-    return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    let subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
+    
+    // Apply BOGO 50% for E-Liquids on Tuesdays
+    const today = new Date();
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+    if (currentDayName === 'Tuesday') {
+        const eLiquidItems = cart.filter(item => item.product.category === 'E-Liquid');
+        if (eLiquidItems.length >= 2) {
+            // Create a flat list of individual E-Liquid units, sorted by price
+            const individualELiquidUnits = eLiquidItems.reduce((acc, item) => {
+                for (let i = 0; i < item.quantity; i++) {
+                    acc.push(item.product);
+                }
+                return acc;
+            }, [] as ResolvedProduct[]);
+            individualELiquidUnits.sort((a, b) => a.price - b.price);
+
+            let bogoDiscount = 0;
+            for (let i = 0; i < Math.floor(individualELiquidUnits.length / 2); i++) {
+                // The discount is 50% of the price of the first item in each pair (which is the cheaper one)
+                bogoDiscount += individualELiquidUnits[i * 2].price * 0.5;
+            }
+            subtotal -= bogoDiscount; // BOGO is applied to subtotal before other redemptions
+        }
+    }
+    return subtotal;
   }, [cart]);
 
   const getCartTotal = useCallback(() => {
-    const subtotal = getCartSubtotal();
+    const subtotal = getCartSubtotal(); // This subtotal already includes BOGO if applicable
     return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
   }, [getCartSubtotal, appliedRedemption]);
 
   const getPotentialPointsForCart = useCallback(() => {
     const finalTotalAfterPotentialRedemption = getCartTotal();
-    return Math.floor(finalTotalAfterPotentialRedemption * 1);
+    return Math.floor(finalTotalAfterPotentialRedemption * 1); // 1 point per dollar
   }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
-    let savings = cart.reduce((totalSavings, item) => {
+    let savings = 0;
+    // Percentage off savings
+    savings += cart.reduce((totalSavings, item) => {
       if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
         totalSavings += (item.product.originalPrice - item.product.price) * item.quantity;
       }
       return totalSavings;
     }, 0);
+
+    // BOGO savings for E-Liquids on Tuesdays
+    const today = new Date();
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+    if (currentDayName === 'Tuesday') {
+        const eLiquidItems = cart.filter(item => item.product.category === 'E-Liquid');
+        if (eLiquidItems.length >= 2) {
+            const individualELiquidUnits = eLiquidItems.reduce((acc, item) => {
+                for (let i = 0; i < item.quantity; i++) {
+                    acc.push(item.product);
+                }
+                return acc;
+            }, [] as ResolvedProduct[]);
+            individualELiquidUnits.sort((a, b) => a.price - b.price);
+            for (let i = 0; i < Math.floor(individualELiquidUnits.length / 2); i++) {
+                savings += individualELiquidUnits[i * 2].price * 0.5;
+            }
+        }
+    }
+    
+    // Points redemption savings
     if (appliedRedemption) {
       savings += appliedRedemption.discountAmount;
     }
@@ -630,9 +678,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Enough Points", description: `You need ${option.pointsRequired} points for this reward. You have ${user.points}.`, variant: "destructive" });
       return;
     }
-    const subtotal = getCartSubtotal();
+    const subtotal = getCartSubtotal(); // Subtotal already includes BOGO
     if (subtotal < option.discountAmount) {
-      toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount.`, variant: "destructive" });
+      toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount (after BOGO if applicable).`, variant: "destructive" });
       return;
     }
     setAppliedRedemption(option);
@@ -654,7 +702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const currentCartSubtotal = getCartSubtotal();
+    const currentCartSubtotal = getCartSubtotal(); // This subtotal already reflects BOGO if applicable
     if (currentCartSubtotal < MINIMUM_PURCHASE_AMOUNT) {
       toast({
         title: "Minimum Purchase Not Met",
@@ -669,14 +717,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       productName: item.product.name,
       selectedWeight: item.product.selectedWeight,
       quantity: item.quantity,
-      pricePerItem: item.product.price,
+      pricePerItem: item.product.price, // This price is after percentage discounts, but BOGO is handled at subtotal
       originalPricePerItem: item.product.originalPrice,
     }));
 
-    const subtotal = orderItems.reduce((sum, item) => sum + (item.pricePerItem * item.quantity), 0);
-    const finalTotal = appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
+    const subtotalBeforeRedemption = getCartSubtotal(); // Includes BOGO
+    const finalTotal = appliedRedemption ? Math.max(0, subtotalBeforeRedemption - appliedRedemption.discountAmount) : subtotalBeforeRedemption;
     
-    const pointsCalculated = Math.floor(finalTotal * 1);
+    const pointsCalculated = Math.floor(finalTotal * 1); // 1 point per dollar
 
     const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
@@ -685,7 +733,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       storeId: _selectedStore.id,
       storeName: _selectedStore.name,
       items: orderItems,
-      subtotal: subtotal,
+      subtotal: subtotalBeforeRedemption, 
       discountApplied: appliedRedemption?.discountAmount,
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
@@ -694,7 +742,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      // Pass pointsCalculated to createOrderInFirestore
       const { orderId } = await createOrderInFirestore({ ...orderData, pointsEarned: pointsCalculated }); 
             
       if (user) fetchUserOrders(); 
@@ -717,16 +764,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const today = new Date();
     const currentDayIndex = today.getDay(); 
     const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; 
-
-    let siteWideDiscountInfo: { category?: ProductCategory; brand?: string; discountPercentage: number; title: string; } | null = null;
-
-    if (currentDayName === 'Tuesday') {
-      siteWideDiscountInfo = { category: 'Vape', discountPercentage: 25, title: "Tuesday Vape Special!" };
-    } else if (currentDayName === 'Wednesday') {
-      siteWideDiscountInfo = { brand: 'Dodi Hemp', discountPercentage: 15, title: "Dodi Brand Wednesday!" };
-    } else if (currentDayName === 'Thursday') {
-      siteWideDiscountInfo = { category: 'Edible', discountPercentage: 20, title: "Thirsty Thursday Edibles!" };
-    }
     
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
@@ -748,28 +785,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           let effectivePrice = basePrice;
           let originalPriceValue = basePrice;
           let isProductOnDeal = false;
-          // let appliedDealTitle = ""; // Not currently used on product card
+          let isBogoEligibleProduct = false;
 
-          // 1. Check for site-wide deal
-          if (siteWideDiscountInfo) {
-            if (siteWideDiscountInfo.category && p.category === siteWideDiscountInfo.category) {
-              isProductOnDeal = true;
-              effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
-              // appliedDealTitle = siteWideDiscountInfo.title;
-            } else if (siteWideDiscountInfo.brand && p.brand === siteWideDiscountInfo.brand) {
-              isProductOnDeal = true;
-              effectivePrice = parseFloat((originalPriceValue * (1 - siteWideDiscountInfo.discountPercentage / 100)).toFixed(2));
-              // appliedDealTitle = siteWideDiscountInfo.title;
-            }
+          // New Daily Deal Logic
+          if (currentDayName === 'Tuesday' && p.category === 'E-Liquid') {
+            isBogoEligibleProduct = true; // Mark as BOGO eligible, price remains basePrice
+            // No direct price change here; BOGO handled in cart.
+          } else if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
+            isProductOnDeal = true;
+            effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2)); // 15% off
+          } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
+            isProductOnDeal = true;
+            effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2)); // 20% off
           }
 
-          // 2. If no site-wide deal applied, check for custom store deal
-          if (!isProductOnDeal && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+          // Check for custom store deals if no site-wide percentage deal was applied
+          if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
             for (const rule of _selectedStore.dailyDeals) {
               if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
                 isProductOnDeal = true;
                 effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
-                // appliedDealTitle = `${rule.discountPercentage}% off ${rule.category} today!`;
                 break; 
               }
             }
@@ -792,6 +827,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             selectedWeight: selectedWeight,
             availableWeights: p.category === 'Flower' ? availabilityForStore.weightOptions : undefined,
             totalStockInGrams: p.category === 'Flower' ? availabilityForStore.totalStockInGrams : undefined,
+            isBogoEligible: isBogoEligibleProduct,
           };
         };
 
@@ -815,7 +851,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   const deals: Deal[] = useMemo(() => {
-    if (!_selectedStore || loadingProducts || products.length === 0 ) {
+    if (!_selectedStore || loadingProducts) { // Removed products.length === 0 condition here
       return [];
     }
 
@@ -825,37 +861,86 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
-    let activeSiteWideDealConfig: { category?: ProductCategory; brand?: string; discountPercentage: number; title: string; } | null = null;
+    const generatedDeals: Deal[] = [];
 
+    // Tuesday: BOGO 50% Off all E-Liquid
     if (currentDayName === 'Tuesday') {
-        activeSiteWideDealConfig = { category: 'Vape', discountPercentage: 25, title: "Terrific Tuesday Vapes: 25% Off!" };
-    } else if (currentDayName === 'Wednesday') {
-        activeSiteWideDealConfig = { brand: 'Dodi Hemp', discountPercentage: 15, title: "Wonderful Wednesday: 15% Off Dodi Hemp!" };
-    } else if (currentDayName === 'Thursday') {
-        activeSiteWideDealConfig = { category: 'Edible', discountPercentage: 20, title: "Tasty Thursday Edibles: 20% Off!" };
+      generatedDeals.push({
+        id: `deal-${currentDayName}-eliquid-bogo`,
+        title: "BOGO 50% Off E-Liquids!",
+        description: "Buy one E-Liquid, get a second one 50% off (discount applies to item of equal or lesser value in cart).",
+        categoryOnDeal: 'E-Liquid',
+        dealType: 'bogo',
+        expiresAt: endOfToday.toISOString(),
+        storeId: _selectedStore.id,
+      });
     }
 
-    if (!activeSiteWideDealConfig) {
-        return [];
+    // Wednesday: 15% Off all Dodi products
+    if (currentDayName === 'Wednesday') {
+      generatedDeals.push({
+        id: `deal-${currentDayName}-dodi-brands`,
+        title: "15% Off Dodi Brands!",
+        description: "Enjoy 15% off all products from Dodi Hemp, Dodi Accessories, etc.",
+        brandOnDeal: 'Dodi', // Generic "Dodi" to match "Dodi Hemp", "Dodi Accessories"
+        discountPercentage: 15,
+        dealType: 'percentage',
+        expiresAt: endOfToday.toISOString(),
+        storeId: _selectedStore.id,
+      });
     }
     
-    return products
-      .filter(p => {
-          if (activeSiteWideDealConfig!.category && p.category === activeSiteWideDealConfig!.category) return true;
-          if (activeSiteWideDealConfig!.brand && p.brand === activeSiteWideDealConfig!.brand) return true;
-          return false;
-      })
-      .filter(p => p.originalPrice && p.price < p.originalPrice && p.stock > 0) 
-      .map(dealProduct => ({
-        id: `${dealProduct.variantId}-deal-${currentDayName}-${activeSiteWideDealConfig!.discountPercentage}`,
-        product: dealProduct, 
-        discountPercentage: activeSiteWideDealConfig!.discountPercentage,
-        expiresAt: endOfToday.toISOString(),
-        title: activeSiteWideDealConfig!.title,
-        description: `${activeSiteWideDealConfig!.discountPercentage}% off select items today! Includes ${dealProduct.name}${dealProduct.selectedWeight ? ` (${dealProduct.selectedWeight})` : ''}.`,
-        storeId: _selectedStore.id,
-        categoryOnDeal: dealProduct.category,
-      }));
+    // Thursday: 20% Off all Drinks
+    if (currentDayName === 'Thursday') {
+         generatedDeals.push({
+            id: `deal-${currentDayName}-drinks`,
+            title: "20% Off All Drinks!",
+            description: "Quench your thirst with 20% off our new Drinks category.",
+            categoryOnDeal: 'Drinks',
+            discountPercentage: 20,
+            dealType: 'percentage',
+            expiresAt: endOfToday.toISOString(),
+            storeId: _selectedStore.id,
+        });
+    }
+    
+    // Add products affected by percentage-based store-specific deals
+     if (_selectedStore.dailyDeals) {
+        _selectedStore.dailyDeals.forEach(rule => {
+            if (rule.selectedDays.includes(currentDayName)) {
+                const productsInDealCategory = products.filter(p => 
+                    p.category === rule.category && 
+                    p.originalPrice && p.price < p.originalPrice // Ensure it's actually discounted by this rule
+                );
+                if (productsInDealCategory.length > 0) {
+                     generatedDeals.push({
+                        id: `deal-store-${rule.category}-${rule.discountPercentage}`,
+                        product: productsInDealCategory[0], // Show first product as example for the card
+                        title: `${rule.discountPercentage}% Off ${rule.category}!`,
+                        description: `Special store deal: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
+                        categoryOnDeal: rule.category,
+                        discountPercentage: rule.discountPercentage,
+                        dealType: 'percentage',
+                        expiresAt: endOfToday.toISOString(),
+                        storeId: _selectedStore.id,
+                    });
+                }
+            }
+        });
+    }
+
+    // Remove duplicate deal announcements if a site-wide one covers a store-specific one
+    const uniqueDeals: Deal[] = [];
+    const dealKeys = new Set<string>();
+    for (const deal of generatedDeals) {
+        const key = `${deal.dealType}-${deal.categoryOnDeal || 'nonecat'}-${deal.brandOnDeal || 'nonebrand'}-${deal.discountPercentage || 0}`;
+        if (!dealKeys.has(key)) {
+            uniqueDeals.push(deal);
+            dealKeys.add(key);
+        }
+    }
+    return uniqueDeals;
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, products, loadingProducts]);
 
@@ -903,7 +988,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, getCartSubtotal, getCartTotal // Added missing functions here
+    userOrders, loadingUserOrders, fetchUserOrders
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;

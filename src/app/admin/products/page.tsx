@@ -88,7 +88,7 @@ export default function AdminProductsPage() {
 
       if (selectedBrandIsOther) {
         setShowManualBrandInput(true);
-      } else if (brandNotPredefined && isFormOpen) {
+      } else if (brandNotPredefined && isFormOpen) { // Only show manual if not in predefined for selected category when form is open
         setShowManualBrandInput(true);
       } else {
         setShowManualBrandInput(false);
@@ -195,11 +195,11 @@ export default function AdminProductsPage() {
       } else {
         const resetBrand = form.getValues('brand');
         const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
-        if (resetBrand === OTHER_BRAND_VALUE) {
+        if (resetBrand === OTHER_BRAND_VALUE) { // If 'Other' was explicitly set from dropdown
             setShowManualBrandInput(true);
-        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) {
+        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) { // If brand exists but not in category's list
             setShowManualBrandInput(true);
-        } else {
+        } else { // Default or brand is in category's predefined list
             setShowManualBrandInput(false);
         }
       }
@@ -261,10 +261,12 @@ export default function AdminProductsPage() {
     try {
       let finalBrand = data.brand;
       if (data.category === 'Flower') {
-        finalBrand = 'Dodi Hemp';
-      } else if (finalBrand === OTHER_BRAND_VALUE) {
-         finalBrand = ''; // If 'Other' was selected and manual input was used, that value is already in data.brand. If not, make it empty.
+        finalBrand = 'Dodi Hemp'; // Ensure Flower is always Dodi Hemp
+      } else if (data.brand === OTHER_BRAND_VALUE && data.category !== 'Flower') { // Check against category as well
+         const manualBrandInput = form.getValues('brand'); // Get from possibly updated field
+         finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; // If still 'Other', means manual entry was empty
       }
+
 
       const productDataPayload: Omit<Product, 'id'> = {
         name: data.name,
@@ -437,14 +439,14 @@ export default function AdminProductsPage() {
                   {watchedCategory !== 'Flower' && showManualBrandInput && (
                     <FormField
                       control={form.control}
-                      name="brand"
+                      name="brand" // This field will hold the manual brand input
                       render={({ field: manualField }) => (
                         <Input
                           placeholder="Enter brand name"
                           {...manualField}
-                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value}
+                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} // If 'Other' from select, clear for typing
                           onChange={(e) => {
-                             manualField.onChange(e.target.value);
+                             manualField.onChange(e.target.value); // Update the form's brand field directly
                           }}
                           className="mt-2"
                         />
@@ -464,11 +466,13 @@ export default function AdminProductsPage() {
                         onValueChange={(value) => {
                             field.onChange(value);
                             if (value === 'Flower') {
-                                form.setValue('brand', 'Dodi Hemp');
-                                setShowManualBrandInput(false);
+                                form.setValue('brand', 'Dodi Hemp'); // Set brand to Dodi Hemp
+                                setShowManualBrandInput(false); // Hide manual input
                             } else {
+                                // For other categories, set brand to first predefined or empty if none
                                 const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
                                 form.setValue('brand', newCategoryBrands[0] || '');
+                                // setShowManualBrandInput(!(newCategoryBrands.length > 0)); // Show manual if no predefined
                             }
                         }}
                         value={field.value}
@@ -697,5 +701,3 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
-    

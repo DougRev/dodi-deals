@@ -8,9 +8,9 @@ export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
 export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Updated Product Categories
-export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid']);
+export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks']);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
-export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid'];
+export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks'];
 
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
@@ -21,17 +21,18 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
   'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
   'E-Liquid': ["Juice Head", "Twist", "Squeeze"],
+  'Drinks': ["Generic Drink Brand", "Dodi Drinks"], // Added Drinks
 };
 
 
-// Business rules for fixed daily categories (used as fallback or informational)
-export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
-  Monday: 'Flower',
-  Tuesday: 'Vape',
-  Wednesday: 'Pre-roll',
-  Thursday: 'Hemp Accessory',
-  Friday: 'Vape',
-};
+// Business rules for fixed daily categories (used as fallback or informational) - REMOVED as new logic is more complex
+// export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
+//   Monday: 'Flower',
+//   Tuesday: 'Vape',
+//   Wednesday: 'Pre-roll',
+//   Thursday: 'Hemp Accessory',
+//   Friday: 'Vape',
+// };
 
 // Schema for a Custom Deal Rule
 export const CustomDealRuleSchema = z.object({
@@ -238,19 +239,22 @@ export interface ResolvedProduct {
   originalPrice?: number;
   imageUrl: string;
   selectedWeight?: FlowerWeight;
+  isBogoEligible?: boolean; // New flag for Tuesday E-Liquid BOGO
 }
 
 
 // This is for the "Hot Deals" / "Special Offers" displayed to the user.
 export interface Deal {
   id: string;
-  product: ResolvedProduct;
-  discountPercentage: number;
+  product?: ResolvedProduct; // Optional for general banner deals
+  discountPercentage?: number; // Optional for BOGO
   expiresAt: string;
   title: string;
   description?: string;
   storeId: string;
-  categoryOnDeal: ProductCategory;
+  categoryOnDeal?: ProductCategory;
+  brandOnDeal?: string; // For "Dodi brand" deals
+  dealType?: 'percentage' | 'bogo'; // To differentiate deal types
 }
 
 export const StoreRoleEnum = z.enum(['Manager', 'Employee']);

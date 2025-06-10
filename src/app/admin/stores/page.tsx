@@ -190,12 +190,12 @@ export default function AdminStoresPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0 text-sm text-blue-600 space-y-1">
-                        <p><span className="font-semibold">Tuesday:</span> 25% off all Vape products.</p>
-                        <p><span className="font-semibold">Wednesday:</span> 15% off all Dodi Hemp brand products.</p>
-                        <p><span className="font-semibold">Thursday:</span> 20% off all Edible products.</p>
+                        <p><span className="font-semibold">Tuesday:</span> BOGO 50% Off all E-Liquid products.</p>
+                        <p><span className="font-semibold">Wednesday:</span> 15% Off all Dodi brand products.</p>
+                        <p><span className="font-semibold">Thursday:</span> 20% Off all Drinks products.</p>
                         <p className="text-xs text-blue-500 mt-2">
-                          Note: These site-wide deals take precedence over custom rules for the same category/brand on the specified days.
-                          Custom rules will apply to other categories or on other days.
+                          Note: These site-wide deals generally take precedence if a custom rule targets the exact same category/brand on the specified day.
+                          Custom rules are best for different categories or days, or store-specific promotions.
                         </p>
                       </CardContent>
                     </Card>
@@ -406,5 +406,3 @@ export default function AdminStoresPage() {
     </div>
   );
 }
-
-    
