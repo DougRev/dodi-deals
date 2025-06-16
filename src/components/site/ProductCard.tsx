@@ -7,13 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ResolvedProduct, FlowerWeight } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { ShoppingCart, Plus, Minus, Percent, Weight } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Percent, Weight, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { Badge } from '@/components/ui/badge';
-import { FlowerWeightSelectorDialog } from './FlowerWeightSelectorDialog'; // Import the new dialog
+import { FlowerWeightSelectorDialog } from './FlowerWeightSelectorDialog';
 
 interface ProductCardProps {
   product: ResolvedProduct;
 }
+
+const FLOWER_LOW_STOCK_THRESHOLD_GRAMS = 10; // If total grams are less than this, show low stock warning
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addToCart, isAuthenticated, selectedStore, getCartItemQuantity, updateCartQuantity } = useAppContext();
@@ -24,7 +26,6 @@ export function ProductCard({ product }: ProductCardProps) {
     setCurrentImgSrc(product.imageUrl);
   }, [product.imageUrl]);
 
-  // For non-flower products or if a specific variant is already in cart (not typical for base flower card)
   const currentQuantityInCart = getCartItemQuantity(product.id, product.selectedWeight);
 
   const handleIncreaseQuantity = () => {
@@ -39,7 +40,7 @@ export function ProductCard({ product }: ProductCardProps) {
     }
   };
   
-  const handleBaseAddToCart = () => { // For non-flower products
+  const handleBaseAddToCart = () => {
     if (!selectedStore) {
         alert("Please select a store first.");
         return;
@@ -54,10 +55,11 @@ export function ProductCard({ product }: ProductCardProps) {
 
   const isOutOfStock = product.category !== 'Flower' && product.stock === 0;
   const isFlowerProductWithNoStock = product.category === 'Flower' && (!product.totalStockInGrams || product.totalStockInGrams <= 0);
+  const isFlowerLowStock = product.category === 'Flower' && product.totalStockInGrams && product.totalStockInGrams > 0 && product.totalStockInGrams < FLOWER_LOW_STOCK_THRESHOLD_GRAMS;
 
   const canIncrease = product.category !== 'Flower' && currentQuantityInCart < product.stock;
   const isDeal = product.originalPrice && product.originalPrice > product.price;
-  const discountPercent = isDeal ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
+  const discountPercent = isDeal && product.originalPrice ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100) : 0;
 
   return (
     <>
@@ -76,7 +78,7 @@ export function ProductCard({ product }: ProductCardProps) {
               }}
             />
           </div>
-          {isDeal && product.category !== 'Flower' && ( // Percentage off deals are usually not for base flower card display
+          {isDeal && product.category !== 'Flower' && (
             <Badge
               variant="destructive"
               className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
@@ -120,13 +122,19 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.category === 'Flower' ? (
             isFlowerProductWithNoStock ? (
               <p className="text-xs text-destructive font-semibold">Out of Stock</p>
+            ) : isFlowerLowStock ? (
+              <p className="text-xs text-destructive font-semibold flex items-center">
+                <AlertTriangle className="h-3 w-3 mr-1"/> Low Stock!
+              </p>
             ) : (
               <p className="text-xs text-green-600">Available in various weights</p>
             )
           ) : (
             <>
               {product.stock < 10 && product.stock > 0 && !isOutOfStock && (
-                <p className="text-xs text-destructive">Only {product.stock} left in stock!</p>
+                <p className="text-xs text-destructive flex items-center">
+                    <AlertTriangle className="h-3 w-3 mr-1"/>Only {product.stock} left in stock!
+                </p>
               )}
               {isOutOfStock && (
                 <p className="text-xs text-destructive font-semibold">Out of Stock</p>
