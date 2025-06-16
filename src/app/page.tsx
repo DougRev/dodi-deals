@@ -76,7 +76,7 @@ export default function HomePage() {
         <section className="relative py-16 md:py-24 rounded-lg overflow-hidden shadow-xl bg-gradient-to-br from-primary/80 via-primary/60 to-accent/70">
           <div className="absolute inset-0">
             <Image
-              src="https://placehold.co/1200x400.png" 
+              src="/images/banner.png" 
               alt="Dodi Deals background"
               fill
               style={{ objectFit: 'cover' }}
@@ -192,8 +192,6 @@ export default function HomePage() {
           </div>
         </section>
       )}
-
-      {/* Removed the old "Welcome to {selectedStore.name}!" section here */}
     </div>
   );
 }
