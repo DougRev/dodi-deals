@@ -59,6 +59,7 @@ export const StoreSchema = z.object({
   city: z.string().min(2, { message: "City must be at least 2 characters." }),
   hours: z.string().min(5, { message: "Operating hours must be specified." }),
   dailyDeals: z.array(CustomDealRuleSchema).optional().default([]),
+  isHidden: z.boolean().optional().default(false),
 });
 
 // Type inferred from the Zod schema for form data
@@ -71,6 +72,7 @@ export interface Store {
   city: string;
   hours: string;
   dailyDeals?: CustomDealRule[]; 
+  isHidden?: boolean;
 }
 
 // --- Product Related Schemas & Types ---
@@ -338,3 +340,4 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
+

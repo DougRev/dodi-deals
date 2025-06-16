@@ -37,7 +37,8 @@ interface AppContextType {
   getCartTotal: () => number; 
   getCartTotalSavings: () => number;
   getPotentialPointsForCart: () => number;
-  stores: Store[];
+  stores: Store[]; // All stores, including hidden ones for admins
+  displayableStores: Store[]; // Filtered stores for user display
   selectedStore: Store | null;
   selectStore: (storeId: string | null) => void;
   isStoreSelectorOpen: boolean;
@@ -73,7 +74,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  const [stores, setStores] = useState<Store[]>(initialStoresSeedData);
+  const [stores, setStores] = useState<Store[]>(initialStoresSeedData.map(s => ({...s, isHidden: s.isHidden === undefined ? false : s.isHidden })));
   const [loadingStores, setLoadingStores] = useState(true);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -106,68 +107,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     doSeed().catch(err => console.error("Error during initial data seed:", err));
   }, []);
 
+
   useEffect(() => {
     setLoadingStores(true);
     const storesCol = collection(db, 'stores');
     const unsubscribe = onSnapshot(storesCol, (snapshot) => {
-      let currentStoresListFromSnapshot = initialStoresSeedData;
+      let firestoreStores = initialStoresSeedData.map(s => ({ ...s, isHidden: s.isHidden === undefined ? false : s.isHidden }));
 
       if (!snapshot.empty) {
-        const firestoreStores = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Store));
-        if (firestoreStores.length > 0) {
-          currentStoresListFromSnapshot = firestoreStores;
+        const fetchedStores = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), isHidden: docSnap.data().isHidden || false } as Store));
+        if (fetchedStores.length > 0) {
+            firestoreStores = fetchedStores;
         }
       }
-      setStores(currentStoresListFromSnapshot);
+      setStores(firestoreStores);
 
       const savedStoreId = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
       let storeToSelectInitially: Store | null = null;
 
       if (savedStoreId) {
-        storeToSelectInitially = currentStoresListFromSnapshot.find(s => s.id === savedStoreId) || null;
+        const potentialStore = firestoreStores.find(s => s.id === savedStoreId);
+        if (potentialStore) {
+          if (!user?.isAdmin && potentialStore.isHidden) {
+            // Non-admin trying to access a hidden store
+            if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+            _setSelectedStoreState(null);
+            if (firestoreStores.some(s => !s.isHidden)) {
+              setStoreSelectorOpen(true);
+            }
+          } else {
+            // Admin can select hidden store, or store is not hidden
+            storeToSelectInitially = potentialStore;
+          }
+        } else {
+          // Saved store ID no longer exists
+          if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
+          _setSelectedStoreState(null);
+           if (firestoreStores.some(s => !s.isHidden)) {
+             setStoreSelectorOpen(true);
+           }
+        }
+      } else {
+        // No saved store, open selector if there are any visible stores
+        _setSelectedStoreState(null);
+        if (firestoreStores.some(s => !s.isHidden)) {
+          setStoreSelectorOpen(true);
+        }
       }
       
-      if (_selectedStore) {
-        const currentSelectedStoreStillValid = currentStoresListFromSnapshot.some(s => s.id === _selectedStore.id);
-        if (!currentSelectedStoreStillValid) {
-          _setSelectedStoreState(null); 
-          if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-           if (currentStoresListFromSnapshot.length > 0) setStoreSelectorOpen(true);
-        }
-      } else if (storeToSelectInitially) {
-         _setSelectedStoreState(storeToSelectInitially);
-         setStoreSelectorOpen(false);
-      } else {
-        if (typeof window !== 'undefined') localStorage.removeItem(DODI_SELECTED_STORE_KEY);
-        if (currentStoresListFromSnapshot.length > 0) {
-          setStoreSelectorOpen(true); 
-        }
+      if (storeToSelectInitially) {
+        _setSelectedStoreState(storeToSelectInitially);
+        setStoreSelectorOpen(false);
       }
-
+      
       setLoadingStores(false);
     }, (error) => {
       console.error("Error fetching stores: ", error);
       toast({ title: "Error", description: "Could not load store information.", variant: "destructive" });
-
-      setStores(initialStoresSeedData); 
-      const savedStoreIdOnError = typeof window !== 'undefined' ? localStorage.getItem(DODI_SELECTED_STORE_KEY) : null;
-      let storeToSelectOnError: Store | null = null;
-      if (savedStoreIdOnError) {
-          storeToSelectOnError = initialStoresSeedData.find(s => s.id === savedStoreIdOnError) || null;
-      }
-      _setSelectedStoreState(storeToSelectOnError);
-
-      if (!storeToSelectOnError && initialStoresSeedData.length > 0) {
-          setStoreSelectorOpen(true);
-      } else if (storeToSelectOnError) {
-          setStoreSelectorOpen(false);
+      setStores(initialStoresSeedData.map(s => ({...s, isHidden: s.isHidden === undefined ? false : s.isHidden })));
+      _setSelectedStoreState(null);
+      if (initialStoresSeedData.some(s => !s.isHidden)) {
+        setStoreSelectorOpen(true);
       }
       setLoadingStores(false);
     });
 
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, [user]); // Re-run if user (and thus admin status) changes
+
+
+  const displayableStores = useMemo(() => {
+    if (user?.isAdmin) {
+      return stores; // Admins see all stores
+    }
+    return stores.filter(store => !store.isHidden);
+  }, [stores, user]);
 
 
   useEffect(() => {
@@ -413,6 +427,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (storeId) {
       const store = stores.find(s => s.id === storeId);
       if (store) {
+        // Non-admin cannot select a hidden store
+        if (!user?.isAdmin && store.isHidden) {
+            toast({ title: "Store Unavailable", description: "This store is currently not available.", variant: "default" });
+            return;
+        }
+
         if (_selectedStore?.id !== store.id) {
           setCart([]);
           setAppliedRedemption(null);
@@ -429,7 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAppliedRedemption(null);
       setStoreSelectorOpen(true);
     }
-  }, [stores, _selectedStore]);
+  }, [stores, _selectedStore, user?.isAdmin]);
 
   const login = useCallback(async (email: string, pass: string) => {
     setLoadingAuth(true);
@@ -833,6 +853,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const products = useMemo(() => {
     if (!_selectedStore || loadingProducts || allProducts.length === 0) return [];
+    // If a store is selected but it's hidden and the user is not an admin, treat as no store selected for product resolution
+    if (_selectedStore.isHidden && !user?.isAdmin) return [];
+
 
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; 
@@ -954,13 +977,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return resolved;
-  }, [_selectedStore, allProducts, loadingProducts]);
+  }, [_selectedStore, allProducts, loadingProducts, user?.isAdmin]);
 
 
   const deals: Deal[] = useMemo(() => {
     if (!_selectedStore || loadingProducts) { 
       return [];
     }
+    // If a store is selected but it's hidden and the user is not an admin, show no deals
+    if (_selectedStore.isHidden && !user?.isAdmin) return [];
 
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
@@ -1034,7 +1059,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     return Array.from(uniqueDealsMap.values());
 
-  }, [_selectedStore, products, loadingProducts]);
+  }, [_selectedStore, products, loadingProducts, user?.isAdmin]);
 
   const toggleFavoriteProduct = useCallback(async (productId: string) => {
     if (!user || !isAuthenticated) {
@@ -1073,6 +1098,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!user?.favoriteProductIds || user.favoriteProductIds.length === 0 || !_selectedStore || loadingProducts) {
       return [];
     }
+    if (_selectedStore.isHidden && !user?.isAdmin) return [];
+
 
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
@@ -1190,7 +1217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return null;
       })
       .filter(Boolean) as ResolvedProduct[];
-  }, [user?.favoriteProductIds, allProducts, _selectedStore, loadingProducts]);
+  }, [user?.favoriteProductIds, allProducts, _selectedStore, loadingProducts, user?.isAdmin]);
 
   const cancelMyOrder = useCallback(async (orderId: string): Promise<boolean> => {
     if (!user || !isAuthenticated) {
@@ -1233,6 +1260,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getCartTotalSavings,
     getPotentialPointsForCart,
     stores,
+    displayableStores,
     selectedStore: _selectedStore, 
     selectStore,
     isStoreSelectorOpen,
@@ -1254,7 +1282,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     cancelMyOrder,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
-    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
+    updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores, displayableStores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
     userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts, cancelMyOrder
@@ -1270,3 +1298,4 @@ export function useAppContext() {
   }
   return context;
 }
+

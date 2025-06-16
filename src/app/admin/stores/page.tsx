@@ -7,9 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-// import { Label } from "@/components/ui/label"; // No longer used here
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,9 +26,10 @@ import {
 import { addStore, updateStore, deleteStore } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle, Info } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Building, Gift, Percent, XCircle, Info, EyeOff, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 
 export default function AdminStoresPage() {
@@ -48,6 +48,7 @@ export default function AdminStoresPage() {
       city: '',
       hours: '',
       dailyDeals: [], 
+      isHidden: false,
     },
   });
 
@@ -62,7 +63,8 @@ export default function AdminStoresPage() {
       if (currentStore) {
         form.reset({ 
           ...currentStore, 
-          dailyDeals: currentStore.dailyDeals?.map(deal => ({...deal, id: deal.id || crypto.randomUUID() })) || [] 
+          dailyDeals: currentStore.dailyDeals?.map(deal => ({...deal, id: deal.id || crypto.randomUUID() })) || [],
+          isHidden: currentStore.isHidden || false,
         });
       } else {
         form.reset({
@@ -71,6 +73,7 @@ export default function AdminStoresPage() {
           city: '',
           hours: '',
           dailyDeals: [],
+          isHidden: false,
         });
       }
     }
@@ -85,6 +88,7 @@ export default function AdminStoresPage() {
       city: '',
       hours: '',
       dailyDeals: [],
+      isHidden: false,
     });
     setIsFormOpen(true);
   };
@@ -93,7 +97,8 @@ export default function AdminStoresPage() {
     setCurrentStore(store);
     form.reset({ 
       ...store, 
-      dailyDeals: store.dailyDeals?.map(deal => ({ ...deal, id: deal.id || crypto.randomUUID() })) || []
+      dailyDeals: store.dailyDeals?.map(deal => ({ ...deal, id: deal.id || crypto.randomUUID() })) || [],
+      isHidden: store.isHidden || false,
     });
     setIsFormOpen(true);
   };
@@ -122,7 +127,7 @@ export default function AdminStoresPage() {
   const handleSaveStore = async (data: StoreFormData) => {
     setLoading(true);
     const dailyDealsToSave = data.dailyDeals?.map(({ id, ...rest }) => rest) || [];
-    const finalData = { ...data, dailyDeals: dailyDealsToSave };
+    const finalData = { ...data, dailyDeals: dailyDealsToSave, isHidden: data.isHidden || false };
 
     try {
       if (currentStore) {
@@ -134,7 +139,7 @@ export default function AdminStoresPage() {
       }
       setIsFormOpen(false);
       setCurrentStore(null);
-      form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [] });
+      form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [], isHidden: false });
     } catch (error: any) {
       console.error("Failed to save store:", error);
       toast({ title: "Error Saving Store", description: error.message || "Failed to save store.", variant: "destructive" });
@@ -161,7 +166,7 @@ export default function AdminStoresPage() {
           setIsFormOpen(isOpen);
           if (!isOpen) {
             setCurrentStore(null); 
-            form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [] });
+            form.reset({ name: '', address: '', city: '', hours: '', dailyDeals: [], isHidden: false });
           }
         }}>
         <DialogContent className="sm:max-w-lg md:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -177,6 +182,30 @@ export default function AdminStoresPage() {
               <FormField control={form.control} name="city" render={({ field }) => (<FormItem><FormLabel>City & State</FormLabel><FormControl><Input placeholder="Indianapolis, IN" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="hours" render={({ field }) => (<FormItem><FormLabel>Operating Hours</FormLabel><FormControl><Input placeholder="Mon-Sat: 9am - 9pm, Sun: 10am - 6pm" {...field} /></FormControl><FormMessage /></FormItem>)} />
               
+              <FormField
+                control={form.control}
+                name="isHidden"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        id="isHiddenStore"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel htmlFor="isHiddenStore" className="flex items-center">
+                        <EyeOff className="mr-2 h-4 w-4 text-muted-foreground"/> Hide this store from public view?
+                      </FormLabel>
+                      <FormDescription>
+                        Hidden stores are not visible in the store selector for regular users but can be managed by admins.
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+
               <Accordion type="single" collapsible className="w-full border p-4 rounded-lg" defaultValue="custom-deal-rules">
                 <AccordionItem value="custom-deal-rules">
                   <AccordionTrigger className="text-lg font-semibold hover:no-underline">
@@ -368,6 +397,7 @@ export default function AdminStoresPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Visibility</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>City</TableHead>
                   <TableHead>Hours</TableHead>
@@ -379,6 +409,17 @@ export default function AdminStoresPage() {
                 {appStores.map((store) => (
                   <TableRow key={store.id}>
                     <TableCell className="font-medium">{store.name}</TableCell>
+                    <TableCell>
+                      {store.isHidden ? (
+                        <Badge variant="outline" className="text-orange-600 border-orange-400">
+                          <EyeOff className="mr-1 h-3 w-3" /> Hidden
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-green-700 bg-green-100 border-green-300">
+                          <Eye className="mr-1 h-3 w-3" /> Visible
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>{store.address}</TableCell>
                     <TableCell>{store.city}</TableCell>
                     <TableCell>{store.hours}</TableCell>
@@ -406,3 +447,4 @@ export default function AdminStoresPage() {
     </div>
   );
 }
+

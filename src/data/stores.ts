@@ -8,7 +8,8 @@ export const initialStores: Store[] = [
     address: '123 Main St',
     city: 'Indianapolis, IN',
     hours: 'Mon-Sat: 9am - 9pm, Sun: 10am - 6pm',
-    dailyDeals: [], // Initialize with empty array for custom deal rules
+    dailyDeals: [], 
+    isHidden: false,
   },
   {
     id: 'store_002',
@@ -16,7 +17,8 @@ export const initialStores: Store[] = [
     address: '456 Oak Ave',
     city: 'Fort Wayne, IN',
     hours: 'Mon-Sat: 10am - 8pm, Sun: 11am - 5pm',
-    dailyDeals: [], // Initialize with empty array for custom deal rules
+    dailyDeals: [], 
+    isHidden: false,
   },
   {
     id: 'store_003',
@@ -24,6 +26,8 @@ export const initialStores: Store[] = [
     address: '789 Pine Rd',
     city: 'Evansville, IN',
     hours: 'Mon-Fri: 9am - 7pm, Sat: 10am - 6pm, Sun: Closed',
-    dailyDeals: [], // Initialize with empty array for custom deal rules
+    dailyDeals: [], 
+    isHidden: false,
   },
 ];
+
