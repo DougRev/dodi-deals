@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from '@/hooks/use-toast';
 import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle } from 'lucide-react'; // Added PackageIcon
 import Link from 'next/link';
