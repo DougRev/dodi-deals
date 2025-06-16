@@ -1,34 +1,33 @@
 
 "use client";
 
-import { useState } from 'react'; // Import useState
+import { useState } from 'react'; 
 import { useAppContext } from '@/hooks/useAppContext';
 import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight } from 'lucide-react'; // Added Star, ChevronLeft, ChevronRight
+import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight } from 'lucide-react'; 
 import { Card, CardContent } from '@/components/ui/card';
 
 const MAX_FEATURED_PRODUCTS_ON_HOMEPAGE = 3;
-const DEALS_PER_PAGE = 2; // Number of deals to show per page
+const DEALS_PER_PAGE = 2; 
 
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [currentDealsPage, setCurrentDealsPage] = useState(1);
 
-  // Filter for featured products available at the selected store
+  // 'products' from context is now the list of base products (one card per flower)
   const featuredProducts = products
     .filter(p => p.isFeatured)
     .slice(0, MAX_FEATURED_PRODUCTS_ON_HOMEPAGE);
 
-  // Pagination logic for deals
   const totalDealsPages = Math.ceil(deals.length / DEALS_PER_PAGE);
   const dealsStartIndex = (currentDealsPage - 1) * DEALS_PER_PAGE;
   const dealsEndIndex = dealsStartIndex + DEALS_PER_PAGE;
   const displayedDeals = deals.slice(dealsStartIndex, dealsEndIndex);
 
-  if (loadingStores || (!selectedStore && !loadingStores)) { // Show loader if stores are loading, or prompt if loading is done but no store
+  if (loadingStores || (!selectedStore && !loadingStores)) { 
     if (!selectedStore && !loadingStores) {
       return (
         <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
@@ -54,7 +53,6 @@ export default function HomePage() {
       </div>
     );
   }
-  // At this point, selectedStore should be available if loadingStores is false.
 
   return (
     <div className="space-y-12">
@@ -149,4 +147,3 @@ export default function HomePage() {
     </div>
   );
 }
-

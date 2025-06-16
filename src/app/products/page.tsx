@@ -19,7 +19,6 @@ export default function ProductsPage() {
 
   const categories = useMemo(() => {
     if (loadingProducts || !allProducts) return ['All'];
-    // Get unique categories from *all* product definitions
     const uniqueCategoriesFromAllProducts = new Set(allProducts.map(p => p.category));
     return ['All', ...Array.from(uniqueCategoriesFromAllProducts).sort()] as ('All' | ProductCategory)[];
   }, [allProducts, loadingProducts]);
@@ -34,10 +33,9 @@ export default function ProductsPage() {
     return ['All', ...Array.from(uniqueBrands)].sort();
   }, [allProducts, selectedCategory, loadingProducts]);
 
-  // Filtered products for display still uses the 'products' array from context,
-  // which is already resolved for the selected store and includes stock/deal information.
   const filteredProductsForDisplay = useMemo(() => {
     if (!selectedStore) return [];
+    // 'products' from context is now the list of base products (one card per flower)
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
       const matchesBrand = selectedBrand === 'All' || product.brand === selectedBrand;
@@ -99,7 +97,7 @@ export default function ProductsPage() {
             value={selectedCategory} 
             onValueChange={(value: 'All' | ProductCategory) => {
               setSelectedCategory(value);
-              setSelectedBrand('All'); // Reset brand when category changes
+              setSelectedBrand('All'); 
             }}
           >
             <SelectTrigger className="w-full md:w-[180px]">

@@ -9,8 +9,8 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams } from '@/lib/types'; // Added flowerWeightToGrams
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice } from '@/lib/types';
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders } from '@/lib/firestoreService';
 
@@ -172,7 +172,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onSnapshot(productsCol, (snapshot) => {
       const fetchedProducts = snapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<Product, 'id'>;
-        // Ensure category is one of the valid enum values, default if not
         const validCategory = productCategories.includes(data.category as ProductCategory) ? data.category : productCategories[0];
         return { 
             id: docSnap.id, 
@@ -433,7 +432,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLoadingAuth(false);
         return false;
       }
-      // onAuthStateChanged will set user state and handle banned toast if re-authenticated normally
       toast({ title: "Login Successful", description: "Welcome back!" });
       setLoadingAuth(false);
       return true;
@@ -452,7 +450,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
-      // createUserProfile will be called by onAuthStateChanged
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       setLoadingAuth(false);
       return true;
@@ -530,30 +527,102 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
 
-  const addToCart = useCallback((product: ResolvedProduct, quantity: number = 1, selectedWeight?: FlowerWeight) => {
+  const addToCart = useCallback((baseProduct: ResolvedProduct, quantity: number = 1, selectedWeightParam?: FlowerWeight) => {
     if (!_selectedStore) {
       toast({ title: "No Store Selected", description: "Please select a store before adding to cart.", variant: "destructive" });
       setStoreSelectorOpen(true);
       return;
     }
-     if (user?.isBanned) {
+    if (user?.isBanned) {
       toast({ title: "Account Suspended", description: "Your account is suspended. You cannot place orders.", variant: "destructive" });
       return;
     }
+
+    let productToAdd: ResolvedProduct = baseProduct;
+    let itemIdentifier = baseProduct.variantId; // For non-flower or base flower card
+    let finalSelectedWeight = baseProduct.selectedWeight; // Use product's own selectedWeight if already a variant
+
+    if (baseProduct.category === 'Flower' && selectedWeightParam) {
+      finalSelectedWeight = selectedWeightParam;
+      itemIdentifier = `${baseProduct.id}-${finalSelectedWeight}`;
+
+      const weightOption = baseProduct.availableWeights?.find(wo => wo.weight === finalSelectedWeight);
+      if (!weightOption) {
+        toast({ title: "Error", description: `Selected weight ${finalSelectedWeight} not available for ${baseProduct.name}.`, variant: "destructive" });
+        return;
+      }
+
+      const gramsForSelectedWeight = flowerWeightToGrams(finalSelectedWeight);
+      const stockForSelectedWeight = baseProduct.totalStockInGrams && gramsForSelectedWeight > 0
+        ? Math.floor(baseProduct.totalStockInGrams / gramsForSelectedWeight)
+        : 0;
+
+      if (quantity > stockForSelectedWeight) {
+        toast({ title: "Not Enough Stock", description: `Only ${stockForSelectedWeight} units of ${baseProduct.name} (${finalSelectedWeight}) available.`, variant: "default" });
+        quantity = stockForSelectedWeight;
+        if (quantity === 0) return;
+      }
+      
+      // Apply daily deals to the specific weight option price
+      let effectivePrice = weightOption.price;
+      let originalPrice: number | undefined = weightOption.price;
+      let isProductOnDeal = false;
+      let isBogoEligibleProduct = false;
+
+      const today = new Date();
+      const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+
+      if (currentDayName === 'Tuesday' && baseProduct.category === 'E-Liquid') { // This part won't apply to Flower, but kept for consistency
+        isBogoEligibleProduct = true;
+      } else if (currentDayName === 'Wednesday' && baseProduct.brand.toLowerCase().startsWith('dodi')) {
+        isProductOnDeal = true;
+        effectivePrice = parseFloat((originalPrice * (1 - 0.15)).toFixed(2));
+      } else if (currentDayName === 'Thursday' && baseProduct.category === 'Drinks') {
+        isProductOnDeal = true;
+        effectivePrice = parseFloat((originalPrice * (1 - 0.20)).toFixed(2));
+      }
+
+      if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+        for (const rule of _selectedStore.dailyDeals) {
+          if (rule.selectedDays.includes(currentDayName) && rule.category === baseProduct.category) {
+            isProductOnDeal = true;
+            effectivePrice = parseFloat((originalPrice * (1 - rule.discountPercentage / 100)).toFixed(2));
+            break;
+          }
+        }
+      }
+      
+      productToAdd = {
+        ...baseProduct,
+        variantId: itemIdentifier,
+        price: effectivePrice,
+        originalPrice: isProductOnDeal ? originalPrice : undefined,
+        stock: stockForSelectedWeight,
+        selectedWeight: finalSelectedWeight,
+        isBogoEligible: isBogoEligibleProduct,
+      };
+    } else if (baseProduct.category !== 'Flower') { // For non-flower products, ensure stock check
+       if (quantity > baseProduct.stock) {
+        toast({ title: "Not Enough Stock", description: `Only ${baseProduct.stock} units of ${baseProduct.name} available.`, variant: "default" });
+        quantity = baseProduct.stock;
+        if (quantity === 0) return;
+      }
+    }
+
+
     setCart((prevCart) => {
-      const itemIdentifier = product.variantId; 
-      const existingItemIndex = prevCart.findIndex(item => item.product.variantId === itemIdentifier && item.product.storeId === product.storeId);
+      const existingItemIndex = prevCart.findIndex(item => item.product.variantId === itemIdentifier && item.product.storeId === productToAdd.storeId);
 
       if (existingItemIndex > -1) {
         const updatedCart = [...prevCart];
-        const newQuantity = Math.min(updatedCart[existingItemIndex].quantity + quantity, product.stock);
-        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity };
+        const newQuantity = Math.min(updatedCart[existingItemIndex].quantity + quantity, productToAdd.stock);
+        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity, product: productToAdd }; // Ensure product details are updated if price changed
         return updatedCart;
       }
-      return [...prevCart, { product, quantity: Math.min(quantity, product.stock), selectedWeight: product.selectedWeight }]; 
+      return [...prevCart, { product: productToAdd, quantity: Math.min(quantity, productToAdd.stock), selectedWeight: finalSelectedWeight }];
     });
-    toast({ title: "Item Added", description: `${product.name}${product.selectedWeight ? ` (${product.selectedWeight})` : ''} added to cart.` });
-  }, [_selectedStore, setStoreSelectorOpen, user?.isBanned]);
+    toast({ title: "Item Added", description: `${productToAdd.name}${finalSelectedWeight ? ` (${finalSelectedWeight})` : ''} added to cart.` });
+  }, [_selectedStore, user?.isBanned, setStoreSelectorOpen]);
 
   const removeFromCart = useCallback((productId: string, selectedWeight?: FlowerWeight) => {
     const variantIdToRemove = selectedWeight ? `${productId}-${selectedWeight}` : productId;
@@ -593,13 +662,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const getCartSubtotal = useCallback(() => {
     let subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
     
-    // Apply BOGO 50% for E-Liquids on Tuesdays
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     if (currentDayName === 'Tuesday') {
         const eLiquidItems = cart.filter(item => item.product.category === 'E-Liquid');
         if (eLiquidItems.length >= 2) {
-            // Create a flat list of individual E-Liquid units, sorted by price
             const individualELiquidUnits = eLiquidItems.reduce((acc, item) => {
                 for (let i = 0; i < item.quantity; i++) {
                     acc.push(item.product);
@@ -610,28 +677,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             let bogoDiscount = 0;
             for (let i = 0; i < Math.floor(individualELiquidUnits.length / 2); i++) {
-                // The discount is 50% of the price of the first item in each pair (which is the cheaper one)
                 bogoDiscount += individualELiquidUnits[i * 2].price * 0.5;
             }
-            subtotal -= bogoDiscount; // BOGO is applied to subtotal before other redemptions
+            subtotal -= bogoDiscount; 
         }
     }
     return subtotal;
   }, [cart]);
 
   const getCartTotal = useCallback(() => {
-    const subtotal = getCartSubtotal(); // This subtotal already includes BOGO if applicable
+    const subtotal = getCartSubtotal(); 
     return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
   }, [getCartSubtotal, appliedRedemption]);
 
   const getPotentialPointsForCart = useCallback(() => {
     const finalTotalAfterPotentialRedemption = getCartTotal();
-    return Math.floor(finalTotalAfterPotentialRedemption * 1); // 1 point per dollar
+    return Math.floor(finalTotalAfterPotentialRedemption * 1); 
   }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
     let savings = 0;
-    // Percentage off savings
     savings += cart.reduce((totalSavings, item) => {
       if (item.product.originalPrice && item.product.originalPrice > item.product.price) {
         totalSavings += (item.product.originalPrice - item.product.price) * item.quantity;
@@ -639,7 +704,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return totalSavings;
     }, 0);
 
-    // BOGO savings for E-Liquids on Tuesdays
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     if (currentDayName === 'Tuesday') {
@@ -658,7 +722,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
     }
     
-    // Points redemption savings
     if (appliedRedemption) {
       savings += appliedRedemption.discountAmount;
     }
@@ -678,7 +741,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Enough Points", description: `You need ${option.pointsRequired} points for this reward. You have ${user.points}.`, variant: "destructive" });
       return;
     }
-    const subtotal = getCartSubtotal(); // Subtotal already includes BOGO
+    const subtotal = getCartSubtotal(); 
     if (subtotal < option.discountAmount) {
       toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount (after BOGO if applicable).`, variant: "destructive" });
       return;
@@ -702,7 +765,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const currentCartSubtotal = getCartSubtotal(); // This subtotal already reflects BOGO if applicable
+    const currentCartSubtotal = getCartSubtotal(); 
     if (currentCartSubtotal < MINIMUM_PURCHASE_AMOUNT) {
       toast({
         title: "Minimum Purchase Not Met",
@@ -717,14 +780,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       productName: item.product.name,
       selectedWeight: item.product.selectedWeight,
       quantity: item.quantity,
-      pricePerItem: item.product.price, // This price is after percentage discounts, but BOGO is handled at subtotal
+      pricePerItem: item.product.price, 
       originalPricePerItem: item.product.originalPrice,
     }));
 
-    const subtotalBeforeRedemption = getCartSubtotal(); // Includes BOGO
+    const subtotalBeforeRedemption = getCartSubtotal(); 
     const finalTotal = appliedRedemption ? Math.max(0, subtotalBeforeRedemption - appliedRedemption.discountAmount) : subtotalBeforeRedemption;
     
-    const pointsCalculated = Math.floor(finalTotal * 1); // 1 point per dollar
+    const pointsCalculated = Math.floor(finalTotal * 1); 
 
     const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
       userId: user.id,
@@ -762,8 +825,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!_selectedStore || loadingProducts || allProducts.length === 0) return [];
 
     const today = new Date();
-    const currentDayIndex = today.getDay(); 
-    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1]; 
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; 
     
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
@@ -781,71 +843,109 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
-        const processProductVariant = (basePrice: number, stock: number, selectedWeight?: FlowerWeight) => {
-          let effectivePrice = basePrice;
-          let originalPriceValue = basePrice;
-          let isProductOnDeal = false;
-          let isBogoEligibleProduct = false;
-
-          // New Daily Deal Logic
-          if (currentDayName === 'Tuesday' && p.category === 'E-Liquid') {
-            isBogoEligibleProduct = true; 
-          } else if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
-            isProductOnDeal = true;
-            effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2)); 
-          } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
-            isProductOnDeal = true;
-            effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2)); 
-          }
-
-          
-          if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
-            for (const rule of _selectedStore.dailyDeals) {
-              if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
-                isProductOnDeal = true;
-                effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
-                break; 
-              }
-            }
-          }
-          
-          return {
-            id: p.id,
-            variantId: selectedWeight ? `${p.id}-${selectedWeight}` : p.id,
-            name: p.name,
-            description: p.description,
-            brand: p.brand,
-            category: p.category,
-            dataAiHint: p.dataAiHint,
-            isFeatured: p.isFeatured || false,
-            storeId: _selectedStore.id,
-            price: effectivePrice,
-            originalPrice: isProductOnDeal ? originalPriceValue : undefined,
-            stock: stock, 
-            imageUrl: currentImageUrl,
-            selectedWeight: selectedWeight,
-            availableWeights: p.category === 'Flower' ? availabilityForStore.weightOptions : undefined,
-            totalStockInGrams: p.category === 'Flower' ? availabilityForStore.totalStockInGrams : undefined,
-            isBogoEligible: isBogoEligibleProduct,
-          };
+        // Common properties for base product or variant
+        const baseResolvedInfo = {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          brand: p.brand,
+          category: p.category,
+          dataAiHint: p.dataAiHint,
+          isFeatured: p.isFeatured || false,
+          storeId: _selectedStore.id,
+          imageUrl: currentImageUrl,
         };
 
-        if (p.category === 'Flower' && availabilityForStore.weightOptions) {
-          const totalGramsInStock = availabilityForStore.totalStockInGrams || 0;
-          availabilityForStore.weightOptions.forEach(wo => {
-            const gramsForThisWeight = flowerWeightToGrams(wo.weight); // Corrected calculation
-            const unitsAvailable = (gramsForThisWeight && gramsForThisWeight > 0) ? Math.floor(totalGramsInStock / gramsForThisWeight) : 0;
-            if (unitsAvailable > 0) { 
-               resolved.push(processProductVariant(wo.price, unitsAvailable, wo.weight));
-            }
+        if (p.category === 'Flower' && availabilityForStore.weightOptions && availabilityForStore.totalStockInGrams !== undefined && availabilityForStore.totalStockInGrams > 0) {
+          const validWeightOptions = availabilityForStore.weightOptions.filter(wo => {
+            const grams = flowerWeightToGrams(wo.weight);
+            return grams > 0 && (availabilityForStore.totalStockInGrams || 0) >= grams;
           });
-        } else if (availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
-          resolved.push(processProductVariant(availabilityForStore.price, availabilityForStore.stock));
+
+          if (validWeightOptions.length > 0) {
+            const prices = validWeightOptions.map(wo => wo.price);
+            const minPrice = Math.min(...prices);
+            
+            const smallestWeightOption = validWeightOptions.reduce((smallest, current) => {
+                return flowerWeightToGrams(current.weight) < flowerWeightToGrams(smallest.weight) ? current : smallest;
+            }, validWeightOptions[0]);
+            
+            const smallestWeightGrams = flowerWeightToGrams(smallestWeightOption.weight);
+            const stockForSmallestUnit = smallestWeightGrams > 0 ? Math.floor((availabilityForStore.totalStockInGrams || 0) / smallestWeightGrams) : 0;
+
+            // Apply daily deals to the base product's display price (minPrice)
+            let effectiveMinPrice = minPrice;
+            let originalMinPrice: number | undefined = minPrice;
+            let isProductOnDeal = false;
+            // BOGO eligibility is handled by product type, not by changing price here
+            let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid'); 
+
+            if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
+              isProductOnDeal = true;
+              effectiveMinPrice = parseFloat((originalMinPrice * (1 - 0.15)).toFixed(2));
+            } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
+              isProductOnDeal = true;
+              effectiveMinPrice = parseFloat((originalMinPrice * (1 - 0.20)).toFixed(2));
+            }
+
+            if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+              for (const rule of _selectedStore.dailyDeals) {
+                if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
+                  isProductOnDeal = true;
+                  effectiveMinPrice = parseFloat((originalMinPrice * (1 - rule.discountPercentage / 100)).toFixed(2));
+                  break;
+                }
+              }
+            }
+
+            resolved.push({
+              ...baseResolvedInfo,
+              variantId: p.id, // Base flower product card uses product.id as variantId
+              price: effectiveMinPrice,
+              originalPrice: isProductOnDeal ? originalMinPrice : undefined,
+              stock: stockForSmallestUnit, // Represents availability of smallest unit
+              availableWeights: validWeightOptions,
+              totalStockInGrams: availabilityForStore.totalStockInGrams,
+              isBogoEligible: isBogoEligibleProduct,
+              selectedWeight: undefined, // Not pre-selected for base card
+            });
+          }
+        } else if (p.category !== 'Flower' && availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
+            let effectivePrice = availabilityForStore.price;
+            let originalPriceValue: number | undefined = availabilityForStore.price;
+            let isProductOnDeal = false;
+            let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid');
+
+            if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
+                isProductOnDeal = true;
+                effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2));
+            } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
+                isProductOnDeal = true;
+                effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2));
+            }
+             if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+                for (const rule of _selectedStore.dailyDeals) {
+                    if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
+                        isProductOnDeal = true;
+                        effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
+                        break; 
+                    }
+                }
+            }
+
+            resolved.push({
+                ...baseResolvedInfo,
+                variantId: p.id, // Non-flower products also use product.id as variantId for card
+                price: effectivePrice,
+                originalPrice: isProductOnDeal ? originalPriceValue : undefined,
+                stock: availabilityForStore.stock,
+                isBogoEligible: isBogoEligibleProduct,
+                selectedWeight: undefined, 
+            });
         }
       }
     });
     return resolved;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, allProducts, loadingProducts]);
 
 
@@ -855,14 +955,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const today = new Date();
-    const currentDayIndex = today.getDay(); 
-    const currentDayName = daysOfWeek[currentDayIndex === 0 ? 6 : currentDayIndex - 1];
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     const endOfToday = new Date(today);
     endOfToday.setHours(23, 59, 59, 999);
 
     const generatedDeals: Deal[] = [];
 
-    
     if (currentDayName === 'Tuesday') {
       generatedDeals.push({
         id: `deal-${currentDayName}-eliquid-bogo`,
@@ -874,8 +972,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeId: _selectedStore.id,
       });
     }
-
-    
     if (currentDayName === 'Wednesday') {
       generatedDeals.push({
         id: `deal-${currentDayName}-dodi-brands`,
@@ -888,8 +984,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeId: _selectedStore.id,
       });
     }
-    
-    
     if (currentDayName === 'Thursday') {
          generatedDeals.push({
             id: `deal-${currentDayName}-drinks`,
@@ -902,45 +996,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             storeId: _selectedStore.id,
         });
     }
-    
-    
      if (_selectedStore.dailyDeals) {
         _selectedStore.dailyDeals.forEach(rule => {
             if (rule.selectedDays.includes(currentDayName)) {
-                const productsInDealCategory = products.filter(p => 
-                    p.category === rule.category && 
-                    p.originalPrice && p.price < p.originalPrice 
+                // Find a sample product that this custom rule would apply to for display purposes
+                const sampleProductForDeal = products.find(p => 
+                    p.category === rule.category &&
+                    (!p.originalPrice || p.price === parseFloat((p.originalPrice * (1 - rule.discountPercentage / 100)).toFixed(2))) // Ensure this product IS affected by THIS rule
                 );
-                if (productsInDealCategory.length > 0) {
-                     generatedDeals.push({
-                        id: `deal-store-${rule.category}-${rule.discountPercentage}`,
-                        product: productsInDealCategory[0], 
-                        title: `${rule.discountPercentage}% Off ${rule.category}!`,
-                        description: `Special store deal: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
-                        categoryOnDeal: rule.category,
-                        discountPercentage: rule.discountPercentage,
-                        dealType: 'percentage',
-                        expiresAt: endOfToday.toISOString(),
-                        storeId: _selectedStore.id,
-                    });
-                }
+
+                generatedDeals.push({
+                    id: `deal-store-${rule.category}-${rule.discountPercentage}-${_selectedStore.id}`,
+                    product: sampleProductForDeal, // Can be undefined if no specific product matches for display
+                    title: `${rule.discountPercentage}% Off ${rule.category}!`,
+                    description: `Store Special: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
+                    categoryOnDeal: rule.category,
+                    discountPercentage: rule.discountPercentage,
+                    dealType: 'percentage',
+                    expiresAt: endOfToday.toISOString(),
+                    storeId: _selectedStore.id,
+                });
             }
         });
     }
-
     
-    const uniqueDeals: Deal[] = [];
-    const dealKeys = new Set<string>();
+    const uniqueDealsMap = new Map<string, Deal>();
     for (const deal of generatedDeals) {
-        const key = `${deal.dealType}-${deal.categoryOnDeal || 'nonecat'}-${deal.brandOnDeal || 'nonebrand'}-${deal.discountPercentage || 0}`;
-        if (!dealKeys.has(key)) {
-            uniqueDeals.push(deal);
-            dealKeys.add(key);
+        const key = `${deal.dealType}-${deal.categoryOnDeal || 'nonecat'}-${deal.brandOnDeal || 'nonebrand'}-${deal.discountPercentage || 0}-${deal.product?.id || 'general'}`;
+        if (!uniqueDealsMap.has(key)) {
+            uniqueDealsMap.set(key, deal);
         }
     }
-    return uniqueDeals;
+    return Array.from(uniqueDealsMap.values());
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_selectedStore, products, loadingProducts]);
 
 
