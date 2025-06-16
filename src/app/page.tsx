@@ -6,18 +6,33 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight } from 'lucide-react'; 
-import { Card, CardContent } from '@/components/ui/card';
+import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingBag, Leaf, CakeSlice, Briefcase, Cigarette } from 'lucide-react'; 
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { ProductCategory } from '@/lib/types';
 
 const MAX_FEATURED_PRODUCTS_ON_HOMEPAGE = 3;
 const DEALS_PER_PAGE = 2; 
+
+interface CategorySpotlightItem {
+  name: ProductCategory;
+  href: string;
+  icon: React.ElementType;
+  dataAiHint: string;
+}
+
+const categorySpotlights: CategorySpotlightItem[] = [
+  { name: "Vape", href: "/products?category=Vape", icon: Cigarette, dataAiHint: "vape device" },
+  { name: "Flower", href: "/products?category=Flower", icon: Leaf, dataAiHint: "cannabis flower" },
+  { name: "Edible", href: "/products?category=Edible", icon: CakeSlice, dataAiHint: "cannabis edible" },
+  { name: "Hemp Accessory", href: "/products?category=Hemp%20Accessory", icon: Briefcase, dataAiHint: "hemp accessory" },
+];
 
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [currentDealsPage, setCurrentDealsPage] = useState(1);
 
-  // 'products' from context is now the list of base products (one card per flower)
   const featuredProducts = products
     .filter(p => p.isFeatured)
     .slice(0, MAX_FEATURED_PRODUCTS_ON_HOMEPAGE);
@@ -56,10 +71,41 @@ export default function HomePage() {
 
   return (
     <div className="space-y-12">
+      {/* Hero Section - Only if store is selected */}
+      {selectedStore && (
+        <section className="relative py-16 md:py-24 rounded-lg overflow-hidden shadow-xl bg-gradient-to-br from-primary/80 via-primary/60 to-accent/70">
+          <div className="absolute inset-0">
+            <Image
+              src="https://placehold.co/1200x400.png" 
+              alt="Dodi Deals background"
+              fill
+              style={{ objectFit: 'cover' }}
+              className="opacity-20"
+              data-ai-hint="cannabis products background"
+              priority
+            />
+          </div>
+          <div className="container mx-auto px-4 md:px-6 relative z-10 text-center">
+            <h1 className="text-4xl md:text-5xl font-bold font-headline text-primary-foreground mb-4">
+              Dodi Deals at {selectedStore.name}
+            </h1>
+            <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
+              Your premium destination for the finest selection of vapes, THCa, edibles, and accessories. 
+              Order online for convenient in-store pickup!
+            </p>
+            <Button asChild size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground shadow-md hover:shadow-lg transition-shadow">
+              <Link href="/products">
+                Shop All Products <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+          </div>
+        </section>
+      )}
+
       {/* Deals Section - Conditionally Rendered */}
       {!loadingProducts && deals.length > 0 && (
         <section>
-          <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h1>
+          <h2 className="text-3xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h2>
           <p className="text-center text-muted-foreground mb-8">Don't miss out on these limited-time offers!</p>
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -96,6 +142,7 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* Featured Products Section */}
       <section>
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-3xl font-bold font-headline text-primary flex items-center">
@@ -125,18 +172,28 @@ export default function HomePage() {
         )}
       </section>
 
-      <section className="text-center p-8 bg-muted/50 rounded-lg">
-        <h2 className="text-3xl font-bold font-headline text-primary mb-4">Welcome to {selectedStore.name}!</h2>
-        <p className="text-lg text-foreground mb-6 max-w-2xl mx-auto">
-          Your premium destination at {selectedStore.city} for the finest selection of vapes and THCa products. 
-          Explore our daily deals and extensive product catalog. Order online for convenient in-store pickup.
-        </p>
-        <Button asChild size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
-          <Link href="/products">
-            Shop All Products at this Store
-          </Link>
-        </Button>
-      </section>
+      {/* Category Spotlights Section - Only if store is selected */}
+      {selectedStore && (
+        <section>
+          <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {categorySpotlights.map((category) => (
+              <Link href={category.href} key={category.name} passHref>
+                <Card className="group hover:shadow-xl hover:border-accent transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center">
+                  <CardHeader className="p-2">
+                    <category.icon className="h-12 w-12 text-primary group-hover:text-accent transition-colors mx-auto mb-2" />
+                    <CardTitle className="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                      {category.name}
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Removed the old "Welcome to {selectedStore.name}!" section here */}
     </div>
   );
 }
