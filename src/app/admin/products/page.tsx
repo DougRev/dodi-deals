@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
@@ -23,14 +23,16 @@ import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, Sto
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress'; 
+import { Progress } from '@/components/ui/progress';
 
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { app as firebaseApp } from '@/lib/firebase'; 
+import { app as firebaseApp } from '@/lib/firebase';
 
 const storage = getStorage(firebaseApp);
 
 const OTHER_BRAND_VALUE = "Other";
+const SUBCATEGORY_NONE_VALUE = "_NONE_";
+
 
 const getDefaultAvailability = (category: ProductFormData['category'], storesArg: Store[]): StoreAvailability[] => {
   const defaultStoreId = storesArg.length > 0 ? storesArg[0].id : '';
@@ -108,20 +110,19 @@ export default function AdminProductsPage() {
 
       if (selectedBrandIsOther) {
         setShowManualBrandInput(true);
-      } else if (brandNotPredefined && isFormOpen) { 
+      } else if (brandNotPredefined && isFormOpen) {
         setShowManualBrandInput(true);
       } else {
         setShowManualBrandInput(false);
       }
     }
-    // Reset subcategory if category changes
     const subcategoriesForSelectedCategory = SUBCATEGORIES_MAP[watchedCategory as ProductCategory] || [];
     if (subcategoriesForSelectedCategory.length === 0) {
         form.setValue('subcategory', '', { shouldValidate: true });
     } else {
         const currentSubcategory = form.getValues('subcategory');
         if (currentSubcategory && !subcategoriesForSelectedCategory.includes(currentSubcategory)) {
-            form.setValue('subcategory', '', { shouldValidate: true }); // Reset if current subcategory not valid for new category
+            form.setValue('subcategory', '', { shouldValidate: true });
         }
     }
 
@@ -196,7 +197,7 @@ export default function AdminProductsPage() {
                 stock: undefined,
               };
             }
-            return { 
+            return {
               ...avail,
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
@@ -205,7 +206,7 @@ export default function AdminProductsPage() {
             };
           }) as StoreAvailability[],
         };
-      } else { 
+      } else {
         const defaultCat = productCategories[0] || 'Vape';
         initialValues = {
           name: '',
@@ -220,12 +221,12 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
-      setImageFileToUpload(null); 
+      setImageFileToUpload(null);
       setImagePreviewUrl(null);
       setIsUploadingImage(false);
       setUploadImageProgress(0);
       if (fileInputRef.current) {
-        fileInputRef.current.value = ""; 
+        fileInputRef.current.value = "";
       }
 
       const resetCategory = form.getValues('category');
@@ -235,11 +236,11 @@ export default function AdminProductsPage() {
       } else {
         const resetBrand = form.getValues('brand');
         const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
-        if (resetBrand === OTHER_BRAND_VALUE) { 
+        if (resetBrand === OTHER_BRAND_VALUE) {
             setShowManualBrandInput(true);
-        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) { 
+        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) {
             setShowManualBrandInput(true);
-        } else { 
+        } else {
             setShowManualBrandInput(false);
         }
       }
@@ -307,19 +308,19 @@ export default function AdminProductsPage() {
     try {
       let finalBrand = data.brand;
       if (data.category === 'Flower') {
-        finalBrand = 'Dodi Hemp'; 
-      } else if (data.brand === OTHER_BRAND_VALUE && data.category !== 'Flower') { 
-         const manualBrandInput = form.getValues('brand'); 
-         finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; 
+        finalBrand = 'Dodi Hemp';
+      } else if (data.brand === OTHER_BRAND_VALUE && data.category !== 'Flower') {
+         const manualBrandInput = form.getValues('brand');
+         finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput;
       }
 
       const productDataPayload: Omit<Product, 'id'> & { subcategory?: string } = {
         name: data.name,
         description: data.description,
         brand: finalBrand,
-        baseImageUrl: data.baseImageUrl, 
+        baseImageUrl: data.baseImageUrl,
         category: data.category,
-        subcategory: data.subcategory || undefined, // Ensure undefined if empty
+        subcategory: data.subcategory || undefined,
         dataAiHint: data.dataAiHint,
         isFeatured: data.isFeatured || false,
         availability: data.availability.map(avail => {
@@ -372,7 +373,7 @@ export default function AdminProductsPage() {
       const file = event.target.files[0];
       setImageFileToUpload(file);
       setImagePreviewUrl(URL.createObjectURL(file));
-      form.setValue('baseImageUrl', '', {shouldValidate: false}); 
+      form.setValue('baseImageUrl', '', {shouldValidate: false});
     }
   };
 
@@ -402,7 +403,7 @@ export default function AdminProductsPage() {
         toast({ title: "Image Upload Failed", description: errorMessage, variant: "destructive" });
         setIsUploadingImage(false);
         setUploadImageProgress(0);
-        if (fileInputRef.current) { // Reset file input on failure
+        if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
       },
@@ -411,9 +412,9 @@ export default function AdminProductsPage() {
           form.setValue('baseImageUrl', downloadURL, { shouldValidate: true, shouldDirty: true });
           toast({ title: "Image Uploaded", description: "Image uploaded and URL set. Save the product to finalize." });
           setIsUploadingImage(false);
-          setImageFileToUpload(null); // Clear the selected file state
-          setImagePreviewUrl(null);   // Clear the local blob preview state
-          if (fileInputRef.current) { // Reset the actual file input element
+          setImageFileToUpload(null);
+          setImagePreviewUrl(null);
+          if (fileInputRef.current) {
             fileInputRef.current.value = "";
           }
         });
@@ -480,7 +481,7 @@ export default function AdminProductsPage() {
 
 
   const uniqueCategoriesForFilter = useMemo(() => ['All', ...new Set(appProducts.map(p => p.category))].sort() as ('All' | ProductCategory)[], [appProducts]);
-  
+
   const uniqueBrandsForFilter = useMemo(() => {
     const relevantProducts = categoryFilter === 'All' ? appProducts : appProducts.filter(p => p.category === categoryFilter);
     return ['All', ...new Set(relevantProducts.map(p => p.brand))].sort();
@@ -543,7 +544,7 @@ export default function AdminProductsPage() {
               {/* Basic Product Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Product Name</FormLabel><FormControl><Input placeholder="e.g., Indigo Haze Vape Pen" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                
+
                 <FormItem>
                   <FormLabel className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Brand</FormLabel>
                   {watchedCategory === 'Flower' ? (
@@ -577,14 +578,14 @@ export default function AdminProductsPage() {
                   {watchedCategory !== 'Flower' && showManualBrandInput && (
                     <FormField
                       control={form.control}
-                      name="brand" 
+                      name="brand"
                       render={({ field: manualField }) => (
                         <Input
                           placeholder="Enter brand name"
                           {...manualField}
-                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} 
+                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value}
                           onChange={(e) => {
-                             manualField.onChange(e.target.value); 
+                             manualField.onChange(e.target.value);
                           }}
                           className="mt-2"
                         />
@@ -596,7 +597,7 @@ export default function AdminProductsPage() {
               </div>
 
               <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)}/>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="category" render={({ field }) => (
                     <FormItem>
@@ -605,13 +606,13 @@ export default function AdminProductsPage() {
                         onValueChange={(value) => {
                             field.onChange(value);
                             if (value === 'Flower') {
-                                form.setValue('brand', 'Dodi Hemp'); 
-                                setShowManualBrandInput(false); 
+                                form.setValue('brand', 'Dodi Hemp');
+                                setShowManualBrandInput(false);
                             } else {
                                 const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
                                 form.setValue('brand', newCategoryBrands[0] || '');
                             }
-                            form.setValue('subcategory', ''); // Reset subcategory when category changes
+                            form.setValue('subcategory', '');
                         }}
                         value={field.value}
                         defaultValue={field.value}
@@ -626,13 +627,20 @@ export default function AdminProductsPage() {
                   )}
                 />
                 {formSubcategories.length > 0 && (
-                  <FormField control={form.control} name="subcategory" render={({ field }) => (
+                  <FormField
+                    control={form.control}
+                    name="subcategory"
+                    render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center"><Layers className="mr-2 h-4 w-4 text-muted-foreground"/>Subcategory</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''} defaultValue={field.value || ''}>
+                        <Select
+                           onValueChange={(value) => field.onChange(value === SUBCATEGORY_NONE_VALUE ? '' : value)}
+                           value={field.value || SUBCATEGORY_NONE_VALUE}
+                           defaultValue={field.value || SUBCATEGORY_NONE_VALUE}
+                        >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select subcategory" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value={SUBCATEGORY_NONE_VALUE}>None</SelectItem>
                             {formSubcategories.map(sub => (<SelectItem key={sub} value={sub}>{sub}</SelectItem>))}
                           </SelectContent>
                         </Select>
@@ -642,9 +650,9 @@ export default function AdminProductsPage() {
                   />
                 )}
               </div>
-              
+
               <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
-              
+
               <Card className="p-4 space-y-3 shadow-sm">
                 <FormLabel className="text-md font-semibold text-primary flex items-center"><ImageIcon className="mr-2 h-5 w-5"/>Product Image</FormLabel>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -685,11 +693,11 @@ export default function AdminProductsPage() {
                   <div className="flex flex-col items-center">
                       <Label className="text-xs mb-1 self-start">Preview</Label>
                       <div className="w-32 h-32 rounded-md overflow-hidden border border-muted relative bg-muted/30 flex items-center justify-center">
-                        <Image 
-                            src={currentDisplayImageUrl} 
-                            alt="Product image preview" 
-                            fill 
-                            style={{ objectFit: 'cover' }} 
+                        <Image
+                            src={currentDisplayImageUrl}
+                            alt="Product image preview"
+                            fill
+                            style={{ objectFit: 'cover' }}
                             sizes="128px"
                             onError={(e) => e.currentTarget.src = 'https://placehold.co/128x128.png?text=Error'}/>
                       </div>
@@ -697,7 +705,7 @@ export default function AdminProductsPage() {
                   </div>
                 </div>
               </Card>
-              
+
               <FormField control={form.control} name="isFeatured" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
 
               <div className="space-y-4 rounded-md border p-4">
