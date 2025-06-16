@@ -354,6 +354,25 @@ export default function AdminProductsPage() {
   };
 
   const handleImageUpload = async () => {
+    // IMPORTANT: Firebase Storage Security Rules
+    // Ensure your Firebase Storage rules allow uploads to the `product_images/` path.
+    // Example for development (allows any authenticated user, refine for production):
+    //
+    // rules_version = '2';
+    // service firebase.storage {
+    //   match /b/{bucket}/o {
+    //     match /product_images/{allPaths=**} {
+    //       allow read; // Or more restrictive if needed
+    //       allow write: if request.auth != null; // Allows any authenticated user
+    //     }
+    //   }
+    // }
+    //
+    // For more secure rules, check for admin custom claims:
+    // allow write: if request.auth != null && request.auth.token.isAdmin == true;
+    // (This requires setting custom claims on your admin users via Firebase Admin SDK)
+    // You can configure these rules in your Firebase Project Console > Storage > Rules.
+    //
     if (!imageFileToUpload) {
       toast({ title: "No Image Selected", description: "Please choose an image file first.", variant: "destructive" });
       return;
@@ -372,7 +391,13 @@ export default function AdminProductsPage() {
       },
       (error) => {
         console.error("Image upload error:", error);
-        toast({ title: "Image Upload Failed", description: error.message || "Could not upload image.", variant: "destructive" });
+        // Firebase Storage errors often include codes like 'storage/unauthorized' or 'storage/object-not-found'
+        // These are helpful for debugging, especially permission issues.
+        let errorMessage = error.message || "Could not upload image.";
+        if ((error as any).code === 'storage/unauthorized') {
+          errorMessage = "Upload failed: You do not have permission. Please check Firebase Storage security rules.";
+        }
+        toast({ title: "Image Upload Failed", description: errorMessage, variant: "destructive" });
         setIsUploadingImage(false);
         setUploadImageProgress(0);
       },
