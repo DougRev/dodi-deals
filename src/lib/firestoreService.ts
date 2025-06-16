@@ -248,7 +248,8 @@ export async function getAllUsers(): Promise<User[]> {
         assignedStoreId: data.assignedStoreId || null,
         storeRole: data.storeRole || null,
         noShowStrikes: data.noShowStrikes || 0, 
-        isBanned: data.isBanned || false,       
+        isBanned: data.isBanned || false,
+        favoriteProductIds: data.favoriteProductIds || [],       
       } as User;
     });
   } catch (error) {
@@ -391,6 +392,23 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
     throw error;
   }
 }
+
+export async function updateUserFavorites(userId: string, favoriteProductIds: string[]): Promise<void> {
+  const functionName = 'updateUserFavorites';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Updating favorites for userId: ${userId} to:`, favoriteProductIds);
+
+  const userRef = adminDb!.collection('users').doc(userId);
+  try {
+    await userRef.update({ favoriteProductIds: favoriteProductIds });
+    console.log(`[firestoreService][AdminSDK][${functionName}] User favorites updated successfully for ${userId}.`);
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user favorites for ${userId}:`, error);
+    throw error;
+  }
+}
+
 
 export async function createOrderInFirestore(
   orderData: Omit<Order, 'id' | 'orderDate' | 'status'> & { pointsEarned: number }
@@ -752,3 +770,6 @@ export async function updateProductStockForStoreByManager(
   }
 }
 
+
+
+    

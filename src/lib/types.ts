@@ -8,7 +8,7 @@ export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
 export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Updated Product Categories
-export const productCategoriesList: [string, ...string[]] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks'];
+export const productCategoriesList: [string, ...string[]] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks', 'Vape Hardware'];
 export const ProductCategoryEnum = z.enum(productCategoriesList);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
 export const productCategories: ProductCategory[] = [...productCategoriesList];
@@ -23,7 +23,8 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
   'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
   'E-Liquid': ["Juice Head", "Twist", "Squeeze"],
-  'Drinks': ["Generic Drink Brand", "Dodi Drinks"], // Added Drinks
+  'Drinks': ["Generic Drink Brand", "Dodi Drinks"],
+  'Vape Hardware': ["SMOK", "GeekVape", "Vaporesso", "Uwell", "Voopoo"],
 };
 
 
@@ -269,6 +270,7 @@ export interface User {
   noShowStrikes: number; // Added for 3-strike rule
   isBanned: boolean;     // Added for 3-strike rule
   createdAt: string;     // Ensure createdAt is part of the User type
+  favoriteProductIds?: string[]; // For user favorites
 }
 
 export interface CartItem {
@@ -331,5 +333,7 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_15_300', pointsRequired: 300, discountAmount: 15, description: '$15 Off (300 Points)' },
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
+
+    
 
     

@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -53,6 +53,8 @@ interface AppContextType {
   userOrders: Order[];
   loadingUserOrders: boolean;
   fetchUserOrders: () => Promise<void>;
+  toggleFavoriteProduct: (productId: string) => Promise<void>;
+  isProductFavorited: (productId: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -254,6 +256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole,
         noShowStrikes: existingData?.noShowStrikes ?? 0,
         isBanned: existingData?.isBanned ?? false,
+        favoriteProductIds: existingData?.favoriteProductIds || [],
       };
 
     if (!userSnap.exists()) {
@@ -269,6 +272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             storeRole: profileDataToSet.storeRole,
             noShowStrikes: profileDataToSet.noShowStrikes,
             isBanned: profileDataToSet.isBanned,
+            favoriteProductIds: profileDataToSet.favoriteProductIds,
         };
          if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
 
@@ -280,7 +284,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error: any) {
         console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false };
+        return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false, favoriteProductIds: [] };
       }
     } else { 
       const updates: Partial<User> = {};
@@ -307,6 +311,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (existingData.isBanned === undefined) {
         updates.isBanned = false;
         profileDataToSet.isBanned = false;
+      }
+      if (existingData.favoriteProductIds === undefined) {
+        updates.favoriteProductIds = [];
+        profileDataToSet.favoriteProductIds = [];
       }
       
       if (updates.isAdmin) {
@@ -622,7 +630,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return [...prevCart, { product: productToAdd, quantity: Math.min(quantity, productToAdd.stock), selectedWeight: finalSelectedWeight }];
     });
     toast({ title: "Item Added", description: `${productToAdd.name}${finalSelectedWeight ? ` (${finalSelectedWeight})` : ''} added to cart.` });
-  }, [_selectedStore, user?.isBanned, setStoreSelectorOpen]);
+  }, [_selectedStore, user?.isBanned, setStoreSelectorOpen, user]);
 
   const removeFromCart = useCallback((productId: string, selectedWeight?: FlowerWeight) => {
     const variantIdToRemove = selectedWeight ? `${productId}-${selectedWeight}` : productId;
@@ -1031,6 +1039,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   }, [_selectedStore, products, loadingProducts]);
 
+  const toggleFavoriteProduct = useCallback(async (productId: string) => {
+    if (!user || !isAuthenticated) {
+      toast({ title: "Login Required", description: "Please log in to favorite products.", variant: "destructive" });
+      return;
+    }
+    
+    const currentFavorites = user.favoriteProductIds || [];
+    let updatedFavorites: string[];
+    let isNowFavorited: boolean;
+
+    if (currentFavorites.includes(productId)) {
+      updatedFavorites = currentFavorites.filter(id => id !== productId);
+      isNowFavorited = false;
+    } else {
+      updatedFavorites = [...currentFavorites, productId];
+      isNowFavorited = true;
+    }
+
+    try {
+      await updateUserFavorites(user.id, updatedFavorites);
+      setUser(prevUser => prevUser ? { ...prevUser, favoriteProductIds: updatedFavorites } : null);
+      toast({ title: isNowFavorited ? "Favorited!" : "Unfavorited", description: isNowFavorited ? "Product added to your favorites." : "Product removed from your favorites."});
+    } catch (error: any) {
+      console.error("Error toggling favorite:", error);
+      toast({ title: "Error", description: error.message || "Could not update favorites.", variant: "destructive" });
+    }
+  }, [user, isAuthenticated]);
+
+  const isProductFavorited = useCallback((productId: string): boolean => {
+    return !!user?.favoriteProductIds?.includes(productId);
+  }, [user?.favoriteProductIds]);
+
 
   const contextValue = useMemo(() => ({
     isAuthenticated,
@@ -1070,12 +1110,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     userOrders,
     loadingUserOrders,
     fetchUserOrders,
+    toggleFavoriteProduct,
+    isProductFavorited,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders
+    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -1088,5 +1130,7 @@ export function useAppContext() {
   }
   return context;
 }
+
+    
 
     
