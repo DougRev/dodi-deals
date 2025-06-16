@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -19,10 +19,16 @@ import { ProductSchema, type ProductFormData, type Product, type Store, productC
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag, Search as SearchIcon, Filter as FilterIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag, Search as SearchIcon, Filter as FilterIcon, UploadCloud, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress'; // For upload progress
+
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { app as firebaseApp } from '@/lib/firebase'; // Your Firebase app instance
+
+const storage = getStorage(firebaseApp);
 
 const OTHER_BRAND_VALUE = "Other";
 
@@ -60,6 +66,13 @@ export default function AdminProductsPage() {
   const [brandFilter, setBrandFilter] = useState<'All' | string>('All');
   const [featuredFilter, setFeaturedFilter] = useState<'All' | 'Featured' | 'Not Featured'>('All');
 
+  // State for image upload
+  const [imageFileToUpload, setImageFileToUpload] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadImageProgress, setUploadImageProgress] = useState(0);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(ProductSchema),
@@ -77,6 +90,8 @@ export default function AdminProductsPage() {
 
   const watchedCategory = useWatch({ control: form.control, name: 'category' });
   const watchedBrandSelection = useWatch({ control: form.control, name: 'brand' });
+  const watchedBaseImageUrl = useWatch({ control: form.control, name: 'baseImageUrl' });
+
 
   const { fields: availabilityFields, append: appendAvailability, remove: removeAvailability } = useFieldArray({
     control: form.control,
@@ -193,6 +208,10 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
+      setImageFileToUpload(null); // Reset image upload state
+      setImagePreviewUrl(null);
+      setIsUploadingImage(false);
+      setUploadImageProgress(0);
 
       const resetCategory = form.getValues('category');
       if (resetCategory === 'Flower') {
@@ -227,6 +246,8 @@ export default function AdminProductsPage() {
       isFeatured: false,
       availability: getDefaultAvailability(defaultCat, stores),
     });
+    setImageFileToUpload(null);
+    setImagePreviewUrl(null);
     if (defaultCat === 'Flower') {
       setShowManualBrandInput(false);
     } else {
@@ -273,12 +294,11 @@ export default function AdminProductsPage() {
          finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; 
       }
 
-
       const productDataPayload: Omit<Product, 'id'> = {
         name: data.name,
         description: data.description,
         brand: finalBrand,
-        baseImageUrl: data.baseImageUrl,
+        baseImageUrl: data.baseImageUrl, // This will be the URL from manual input or upload
         category: data.category,
         dataAiHint: data.dataAiHint,
         isFeatured: data.isFeatured || false,
@@ -314,12 +334,58 @@ export default function AdminProductsPage() {
       setIsFormOpen(false);
       setCurrentProduct(null);
       form.reset();
+      setImageFileToUpload(null);
+      setImagePreviewUrl(null);
     } catch (error: any) {
       console.error("Failed to save product:", error);
       toast({ title: "Error Saving Product", description: error.message || "Failed to save product.", variant: "destructive" });
     } finally {
       setFormLoading(false);
     }
+  };
+
+  const handleImageFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
+      setImageFileToUpload(file);
+      setImagePreviewUrl(URL.createObjectURL(file));
+      form.setValue('baseImageUrl', '', {shouldValidate: false}); // Clear manual URL if file is chosen
+    }
+  };
+
+  const handleImageUpload = async () => {
+    if (!imageFileToUpload) {
+      toast({ title: "No Image Selected", description: "Please choose an image file first.", variant: "destructive" });
+      return;
+    }
+    setIsUploadingImage(true);
+    setUploadImageProgress(0);
+
+    const imageFileName = `${imageFileToUpload.name}_${Date.now()}`;
+    const sRef = storageRef(storage, `product_images/${imageFileName}`);
+    const uploadTask = uploadBytesResumable(sRef, imageFileToUpload);
+
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadImageProgress(progress);
+      },
+      (error) => {
+        console.error("Image upload error:", error);
+        toast({ title: "Image Upload Failed", description: error.message || "Could not upload image.", variant: "destructive" });
+        setIsUploadingImage(false);
+        setUploadImageProgress(0);
+      },
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          form.setValue('baseImageUrl', downloadURL, { shouldValidate: true, shouldDirty: true });
+          toast({ title: "Image Uploaded", description: "Image uploaded and URL set. Save the product to finalize." });
+          setIsUploadingImage(false);
+          setImageFileToUpload(null);
+          // Keep imagePreviewUrl as is, it will be replaced by watchedBaseImageUrl once form value updates
+        });
+      }
+    );
   };
 
   const getStoreName = (storeId: string) => stores.find(s => s.id === storeId)?.name || 'Unknown';
@@ -401,6 +467,8 @@ export default function AdminProductsPage() {
     });
   }, [appProducts, searchTerm, categoryFilter, brandFilter, featuredFilter]);
 
+  const currentDisplayImageUrl = imagePreviewUrl || watchedBaseImageUrl || 'https://placehold.co/100x100.png?text=No+Image';
+
 
   return (
     <div className="space-y-8">
@@ -422,6 +490,10 @@ export default function AdminProductsPage() {
             setCurrentProduct(null);
             form.reset();
             setShowManualBrandInput(false);
+            setImageFileToUpload(null);
+            setImagePreviewUrl(null);
+            setIsUploadingImage(false);
+            setUploadImageProgress(0);
           }
         }}>
         <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -517,7 +589,61 @@ export default function AdminProductsPage() {
                 />
                 <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
               </div>
-              <FormField control={form.control} name="baseImageUrl" render={({ field }) => ( <FormItem><FormLabel>Base Image URL</FormLabel><FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} /></FormControl>{field.value && (<div className="mt-2 rounded-md overflow-hidden border border-muted w-24 h-24 relative"><Image src={field.value} alt="Base product preview" fill style={{ objectFit: 'cover' }} sizes="100px" onError={(e) => e.currentTarget.src = 'https://placehold.co/100x100.png?text=Invalid'}/></div>)}<FormMessage /></FormItem>)}/>
+              
+              {/* Image Upload Section */}
+              <Card className="p-4 space-y-3 shadow-sm">
+                <FormLabel className="text-md font-semibold text-primary flex items-center"><ImageIcon className="mr-2 h-5 w-5"/>Product Image</FormLabel>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div>
+                    <FormField control={form.control} name="baseImageUrl" render={({ field }) => (
+                        <FormItem className="mb-2">
+                          <FormLabel className="text-xs">Manual Image URL</FormLabel>
+                          <FormControl><Input placeholder="https://placehold.co/600x400.png" {...field} disabled={!!imageFileToUpload || isUploadingImage} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Separator className="my-3 md:hidden"/>
+                     <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageFileChange}
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingImage}
+                      />
+                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploadingImage} className="w-full mb-2">
+                      <UploadCloud className="mr-2 h-4 w-4" /> Choose Image File
+                    </Button>
+                    {imageFileToUpload && !isUploadingImage && (
+                      <Button type="button" onClick={handleImageUpload} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+                        Upload Selected Image
+                      </Button>
+                    )}
+                    {isUploadingImage && (
+                      <div className="w-full text-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto mb-2" />
+                        <Progress value={uploadImageProgress} className="w-full h-2" />
+                        <p className="text-xs text-muted-foreground mt-1">{Math.round(uploadImageProgress)}% uploaded</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-center">
+                      <Label className="text-xs mb-1 self-start">Preview</Label>
+                      <div className="w-32 h-32 rounded-md overflow-hidden border border-muted relative bg-muted/30 flex items-center justify-center">
+                        <Image 
+                            src={currentDisplayImageUrl} 
+                            alt="Product image preview" 
+                            fill 
+                            style={{ objectFit: 'cover' }} 
+                            sizes="128px"
+                            onError={(e) => e.currentTarget.src = 'https://placehold.co/128x128.png?text=Error'}/>
+                      </div>
+                      {imageFileToUpload && <p className="text-xs text-muted-foreground mt-1 truncate w-full text-center" title={imageFileToUpload.name}>{imageFileToUpload.name}</p>}
+                  </div>
+                </div>
+              </Card>
+              
               <FormField control={form.control} name="isFeatured" render={({ field }) => ( <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4 shadow-sm"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Feature this product on the homepage?</FormLabel><FormDescription>Featured products are highlighted to users.</FormDescription></div><FormMessage /></FormItem>)}/>
 
               <div className="space-y-4 rounded-md border p-4">
@@ -627,9 +753,9 @@ export default function AdminProductsPage() {
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={formLoading}>Cancel</Button>
-                <Button type="submit" disabled={formLoading || loadingStores} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  {formLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={formLoading || isUploadingImage}>Cancel</Button>
+                <Button type="submit" disabled={formLoading || loadingStores || isUploadingImage} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  {formLoading || isUploadingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {currentProduct ? 'Save Changes' : 'Create Product'}
                 </Button>
               </DialogFooter>
