@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { toast } from '@/hooks/use-toast';
 import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle } from 'lucide-react'; // Added PackageIcon
 import Link from 'next/link';
@@ -67,6 +67,15 @@ const ManagerAddProductFormSchema = z.object({
         path: [`weightOptions`],
       });
     }
+     data.weightOptions?.forEach((wo, index) => {
+        if (wo.price <= 0) {
+             ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `Price for weight ${wo.weight} must be positive.`,
+                path: [`weightOptions`, index, `price`],
+            });
+        }
+    });
     if (data.totalStockInGrams === undefined || data.totalStockInGrams < 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -78,6 +87,13 @@ const ManagerAddProductFormSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Price/Stock should not be set for Flower products; use Weight Options and Total Stock (grams).", path: ['price']});
     }
   } else { // Not a Flower product
+    if (data.brand === OTHER_BRAND_VALUE) {
+        // This check is tricky because the manual input field updates the same 'brand' model.
+        // If 'Other' is selected and the manual input is empty, 'brand' would be OTHER_BRAND_VALUE.
+        // The min(2) on brand field should prevent submission if manual input is empty,
+        // unless OTHER_BRAND_VALUE itself is considered > 2 chars and not handled.
+        // Ideally, have a separate field for manual brand input or ensure "Other" is replaced.
+    }
     if (data.weightOptions && data.weightOptions.length > 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Weight options are only for Flower products.", path: ['weightOptions']});
     }
@@ -100,13 +116,11 @@ export default function ManagerStockPage() {
   const [storeProducts, setStoreProducts] = useState<EditableProduct[]>([]);
   const [loadingPageData, setLoadingPageData] = useState(true);
   
-  // State for Edit Stock Modal
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [selectedProductForStockEdit, setSelectedProductForStockEdit] = useState<EditableProduct | null>(null);
   const [newStockValue, setNewStockValue] = useState<string>("");
   const [isUpdatingStock, setIsUpdatingStock] = useState(false);
 
-  // State for Add Product Modal
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [showManualBrandInputManager, setShowManualBrandInputManager] = useState(false);
@@ -124,11 +138,10 @@ export default function ManagerStockPage() {
     defaultValues: {
       name: '',
       description: '',
-      brand: '',
+      brand: PREDEFINED_BRANDS[productCategories[0] as ProductCategory]?.[0] || OTHER_BRAND_VALUE,
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] as ProductCategory,
       dataAiHint: '',
-      // Availability fields are direct for manager's store
       price: undefined,
       stock: undefined,
       totalStockInGrams: undefined,
@@ -141,31 +154,36 @@ export default function ManagerStockPage() {
   const watchedBaseImageUrlManager = useWatch({ control: addProductForm.control, name: 'baseImageUrl' });
 
   useEffect(() => {
+    const currentBrand = addProductForm.getValues('brand');
     if (watchedCategoryManager === 'Flower') {
       addProductForm.setValue('brand', 'Dodi Hemp');
       setShowManualBrandInputManager(false);
     } else {
-      const selectedBrandIsOther = watchedBrandSelectionManager === OTHER_BRAND_VALUE;
       const currentCategoryBrands = PREDEFINED_BRANDS[watchedCategoryManager as ProductCategory] || [];
-      const brandNotPredefined = watchedBrandSelectionManager && !currentCategoryBrands.includes(watchedBrandSelectionManager) && watchedBrandSelectionManager !== OTHER_BRAND_VALUE;
-
-      if (selectedBrandIsOther) {
-        setShowManualBrandInputManager(true);
-      } else if (brandNotPredefined && isAddProductModalOpen) {
-        setShowManualBrandInputManager(true);
-      } else {
-        setShowManualBrandInputManager(false);
+      if (currentBrand === 'Dodi Hemp' && watchedCategoryManager !== 'Flower') { // if switching from Flower to non-Flower
+         addProductForm.setValue('brand', currentCategoryBrands[0] || OTHER_BRAND_VALUE);
       }
+      setShowManualBrandInputManager(addProductForm.getValues('brand') === OTHER_BRAND_VALUE || !currentCategoryBrands.includes(addProductForm.getValues('brand')));
     }
-  }, [watchedBrandSelectionManager, watchedCategoryManager, isAddProductModalOpen, addProductForm]);
+  }, [watchedCategoryManager, addProductForm]);
+
+  useEffect(() => {
+    if (watchedCategoryManager !== 'Flower') {
+        const currentBrand = addProductForm.getValues('brand');
+        const currentCategoryBrands = PREDEFINED_BRANDS[watchedCategoryManager as ProductCategory] || [];
+        setShowManualBrandInputManager(currentBrand === OTHER_BRAND_VALUE || !currentCategoryBrands.includes(currentBrand));
+    }
+  }, [watchedBrandSelectionManager, watchedCategoryManager, addProductForm]);
+
 
    useEffect(() => {
     if (isAddProductModalOpen) {
       const defaultCat = productCategories[0] as ProductCategory;
+      const defaultBrandForCat = PREDEFINED_BRANDS[defaultCat]?.[0] || OTHER_BRAND_VALUE;
       addProductForm.reset({
         name: '',
         description: '',
-        brand: defaultCat === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCat]?.[0] || ''),
+        brand: defaultCat === 'Flower' ? 'Dodi Hemp' : defaultBrandForCat,
         baseImageUrl: 'https://placehold.co/600x400.png',
         category: defaultCat,
         dataAiHint: '',
@@ -341,44 +359,64 @@ export default function ManagerStockPage() {
 
 
   const handleCreateProductByManager = async (data: ManagerAddProductFormData) => {
+    console.log("[ManagerStockPage] handleCreateProductByManager called with data:", JSON.stringify(data, null, 2));
     if (!memoizedUser || !memoizedSelectedStore?.id) {
         toast({ title: "Error", description: "User or store information is missing.", variant: "destructive"});
+        console.error("[ManagerStockPage] User or selected store missing.");
         return;
     }
+    console.log("[ManagerStockPage] Setting isCreatingProduct to true");
     setIsCreatingProduct(true);
 
     try {
+        let finalBrand = data.brand;
+        if (data.category === 'Flower') {
+            finalBrand = 'Dodi Hemp';
+        } else if (data.brand === OTHER_BRAND_VALUE || data.brand.trim() === '') {
+            // This case should ideally be caught by Zod validation making manual brand input required if "Other" is selected.
+            // If it reaches here, it implies "Other" was selected and no manual brand was entered.
+            finalBrand = 'Generic Brand'; // Fallback, and log a warning.
+            console.warn(`[ManagerStockPage] Brand was '${data.brand}', falling back to 'Generic Brand'. Manual input might be missing or form logic needs review for 'Other' brand selection.`);
+        }
+
+
         const productCoreData: Pick<AdminProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'> = {
             name: data.name,
             description: data.description,
-            brand: data.category === 'Flower' ? 'Dodi Hemp' : (data.brand === OTHER_BRAND_VALUE ? '' : data.brand), // Enforce Dodi Hemp for Flower or handle Other
+            brand: finalBrand,
             category: data.category,
             baseImageUrl: data.baseImageUrl,
-            dataAiHint: data.dataAiHint,
+            dataAiHint: data.dataAiHint || '',
         };
         
         const managerStoreAvailabilityData: StoreAvailability = {
             storeId: memoizedSelectedStore.id,
-            storeSpecificImageUrl: undefined, // Managers don't set this on creation for simplicity
+            storeSpecificImageUrl: undefined, 
             ...(data.category === 'Flower' 
                 ? { weightOptions: data.weightOptions, totalStockInGrams: data.totalStockInGrams } 
                 : { price: data.price, stock: data.stock }
             ),
         };
-
+        
+        console.log("[ManagerStockPage] Calling addProductByManager server action with:", 
+          JSON.stringify({productCoreData, managerStoreAvailabilityData, managerUserId: memoizedUser.id}, null, 2)
+        );
+        
         await addProductByManager(productCoreData, managerStoreAvailabilityData, memoizedUser.id);
         
+        console.log("[ManagerStockPage] addProductByManager successful.");
         toast({ title: "Product Created", description: `${data.name} has been added to your store.`});
         setIsAddProductModalOpen(false);
-        addProductForm.reset();
+        addProductForm.reset(); // Reset after successful submission
         setImageFileToUploadManager(null);
         setImagePreviewUrlManager(null);
         if (fileInputRefManager.current) fileInputRefManager.current.value = "";
-        // Note: AppContext will update allProducts, and this page will re-filter.
+        
     } catch (error: any) {
-        console.error("Failed to create product by manager:", error);
+        console.error("[ManagerStockPage] Failed to create product by manager:", error, error.stack);
         toast({ title: "Error Creating Product", description: error.message || "Failed to create product.", variant: "destructive"});
     } finally {
+        console.log("[ManagerStockPage] Setting isCreatingProduct to false in finally block.");
         setIsCreatingProduct(false);
     }
   };
@@ -515,7 +553,6 @@ export default function ManagerStockPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog for Editing Stock */}
       <Dialog open={isStockModalOpen} onOpenChange={setIsStockModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -549,7 +586,6 @@ export default function ManagerStockPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for Adding New Product by Manager */}
       <Dialog open={isAddProductModalOpen} onOpenChange={(isOpen) => {
           setIsAddProductModalOpen(isOpen);
           if (!isOpen) {
@@ -572,7 +608,7 @@ export default function ManagerStockPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...addProductForm}>
-            <form onSubmit={addProductForm.handleSubmit(handleCreateProductByManager)} className="space-y-6 py-4">
+            <form onSubmit={addProductForm.handleSubmit(handleCreateProductByManager, (errors) => console.error("[ManagerStockPage] Zod Validation Errors:", errors) )} className="space-y-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={addProductForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Product Name</FormLabel><FormControl><Input placeholder="e.g., Dodi Special Flower" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 
@@ -586,8 +622,11 @@ export default function ManagerStockPage() {
                       name="brand"
                       render={({ field }) => (
                         <Select
-                          onValueChange={(value) => field.onChange(value)}
-                          value={showManualBrandInputManager && field.value !== OTHER_BRAND_VALUE && !managerFormCategoryBrands.includes(field.value) ? OTHER_BRAND_VALUE : field.value || ''}
+                           onValueChange={(value) => {
+                                field.onChange(value);
+                                setShowManualBrandInputManager(value === OTHER_BRAND_VALUE);
+                            }}
+                           value={field.value || ''}
                         >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select brand or 'Other'" /></SelectTrigger></FormControl>
                           <SelectContent>
@@ -618,12 +657,14 @@ export default function ManagerStockPage() {
                       <Select
                         onValueChange={(value) => {
                             field.onChange(value);
-                            if (value === 'Flower') {
+                            const newCategory = value as ProductCategory;
+                            if (newCategory === 'Flower') {
                                 addProductForm.setValue('brand', 'Dodi Hemp'); 
                                 setShowManualBrandInputManager(false);
                             } else {
-                                const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
-                                addProductForm.setValue('brand', newCategoryBrands[0] || '');
+                                const newCategoryBrands = PREDEFINED_BRANDS[newCategory] || [];
+                                addProductForm.setValue('brand', newCategoryBrands[0] || OTHER_BRAND_VALUE);
+                                setShowManualBrandInputManager( (newCategoryBrands[0] || OTHER_BRAND_VALUE) === OTHER_BRAND_VALUE || !newCategoryBrands.includes(newCategoryBrands[0] || OTHER_BRAND_VALUE) );
                             }
                         }}
                         value={field.value}
@@ -675,7 +716,6 @@ export default function ManagerStockPage() {
                 </div>
               </Card>
 
-              {/* Availability Section for Manager's Store */}
               <Card className="p-4 space-y-3 shadow-sm border-primary">
                 <FormLabel className="text-md font-semibold text-primary flex items-center"><StoreIcon className="mr-2 h-5 w-5"/>Availability for {memoizedSelectedStore?.name}</FormLabel>
                  {watchedCategoryManager === 'Flower' ? (
@@ -706,7 +746,7 @@ export default function ManagerStockPage() {
               
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddProductModalOpen(false)} disabled={isCreatingProduct || isUploadingImageManager}>Cancel</Button>
-                <Button type="submit" disabled={isCreatingProduct || isUploadingImageManager} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button type="submit" disabled={isCreatingProduct || isUploadingImageManager || !addProductForm.formState.isValid} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   {(isCreatingProduct || isUploadingImageManager) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Product
                 </Button>

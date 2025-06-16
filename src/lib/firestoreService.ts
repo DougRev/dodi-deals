@@ -147,46 +147,57 @@ export async function addProduct(productData: Omit<Product, 'id'>): Promise<stri
 
 export async function addProductByManager(
   productCoreData: Pick<ProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'>,
-  managerStoreAvailabilityData: StoreAvailability, // This will contain the specific storeId of the manager already
+  managerStoreAvailabilityData: StoreAvailability, 
   managerUserId: string
 ): Promise<string> {
   const functionName = 'addProductByManager';
   ensureAdminDbInitialized(functionName);
-  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Manager: ${managerUserId}, Product: ${productCoreData.name}, Store Avail: ${JSON.stringify(managerStoreAvailabilityData)}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Start. Manager: ${managerUserId}, Product Name: ${productCoreData.name}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Received productCoreData:`, JSON.stringify(productCoreData, null, 2));
+  console.log(`[firestoreService][AdminSDK][${functionName}] Received managerStoreAvailabilityData:`, JSON.stringify(managerStoreAvailabilityData, null, 2));
+
 
   const managerUserRef = adminDb!.collection('users').doc(managerUserId);
   try {
     const managerDoc = await managerUserRef.get();
     if (!managerDoc.exists) {
+      console.error(`[firestoreService][AdminSDK][${functionName}] Error: Manager user ${managerUserId} does not exist.`);
       throw new Error("Manager user performing action does not exist.");
     }
     const managerData = managerDoc.data() as User;
+    console.log(`[firestoreService][AdminSDK][${functionName}] Manager data retrieved:`, JSON.stringify(managerData, null, 2));
+
     if (managerData.storeRole !== 'Manager' || !managerData.assignedStoreId) {
+      console.error(`[firestoreService][AdminSDK][${functionName}] Error: User ${managerUserId} is not a manager or not assigned to a store. Role: ${managerData.storeRole}, Store ID: ${managerData.assignedStoreId}`);
       throw new Error("User is not a manager or not assigned to a store.");
     }
     if (managerData.assignedStoreId !== managerStoreAvailabilityData.storeId) {
+      console.error(`[firestoreService][AdminSDK][${functionName}] Error: Manager ${managerUserId} attempting to add product to store ${managerStoreAvailabilityData.storeId} but is assigned to ${managerData.assignedStoreId}.`);
       throw new Error("Manager attempting to add product to a store they are not assigned to.");
     }
+    console.log(`[firestoreService][AdminSDK][${functionName}] Manager permission checks passed.`);
 
-    // Ensure brand for Flower is Dodi Hemp
-    if (productCoreData.category === 'Flower' && productCoreData.brand !== 'Dodi Hemp') {
-        productCoreData.brand = 'Dodi Hemp'; // Enforce
+    // Ensure brand for Flower is Dodi Hemp (already handled by client, but good to double-check or enforce server-side if necessary)
+    let finalProductCoreData = { ...productCoreData };
+    if (finalProductCoreData.category === 'Flower' && finalProductCoreData.brand !== 'Dodi Hemp') {
+        console.warn(`[firestoreService][AdminSDK][${functionName}] Overriding brand to 'Dodi Hemp' for Flower product.`);
+        finalProductCoreData.brand = 'Dodi Hemp';
     }
     
     const newProductData: Omit<Product, 'id'> = {
-      ...productCoreData,
-      isFeatured: false, // Managers cannot set as featured on creation
-      availability: [managerStoreAvailabilityData], // Only manager's store availability
+      ...finalProductCoreData,
+      isFeatured: false, 
+      availability: [managerStoreAvailabilityData], 
     };
+    console.log(`[firestoreService][AdminSDK][${functionName}] Final newProductData to be added:`, JSON.stringify(newProductData, null, 2));
 
     const productsColRef = adminDb!.collection('products');
     const docRef = await productsColRef.add(newProductData);
     console.log(`[firestoreService][AdminSDK][${functionName}] Product added successfully by manager ${managerUserId} with ID: ${docRef.id}`);
     return docRef.id;
-  } catch (error) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error adding product by manager:`, error);
-    throw error;
+  } catch (error: any) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error adding product by manager ${managerUserId} for product ${productCoreData.name}:`, error.message, error.stack);
+    throw error; // Re-throw to be caught by client
   }
 }
 
@@ -236,8 +247,8 @@ export async function getAllUsers(): Promise<User[]> {
         ...data,
         assignedStoreId: data.assignedStoreId || null,
         storeRole: data.storeRole || null,
-        noShowStrikes: data.noShowStrikes || 0, // Default if missing
-        isBanned: data.isBanned || false,       // Default if missing
+        noShowStrikes: data.noShowStrikes || 0, 
+        isBanned: data.isBanned || false,       
       } as User;
     });
   } catch (error) {
@@ -246,8 +257,6 @@ export async function getAllUsers(): Promise<User[]> {
   }
 }
 
-// Function to be called by an Admin to set any user's configuration
-// Or by a Manager to set a user to 'Employee' for their store.
 export async function updateUserConfiguration(
   targetUserId: string,
   updates: {
@@ -255,7 +264,7 @@ export async function updateUserConfiguration(
     assignedStoreId?: string | null;
     storeRole?: StoreRole | null;
   },
-  callingUserId: string // UID of the user initiating this action
+  callingUserId: string 
 ): Promise<void> {
   const functionName = 'updateUserConfiguration';
   ensureAdminDbInitialized(functionName);
@@ -280,31 +289,28 @@ export async function updateUserConfiguration(
   const updatePayload: { [key: string]: any } = {};
   let canProceed = false;
 
-  // Admin branch
   if (callingUserData.isAdmin) {
     canProceed = true;
     if (typeof updates.isAdmin === 'boolean') {
       updatePayload.isAdmin = updates.isAdmin;
-      if (updatePayload.isAdmin) { // If making admin, nullify store assignment
+      if (updatePayload.isAdmin) { 
         updatePayload.assignedStoreId = null;
         updatePayload.storeRole = null;
       }
     }
-    // If not explicitly setting isAdmin, or setting isAdmin to false, then process store assignment
     if (!updatePayload.isAdmin) {
       if (updates.assignedStoreId !== undefined) {
         updatePayload.assignedStoreId = updates.assignedStoreId;
       }
-      if (updatePayload.assignedStoreId === null) { // If unassigning store
+      if (updatePayload.assignedStoreId === null) { 
         updatePayload.storeRole = null;
-      } else if (updates.storeRole !== undefined) { // If store is assigned (or being assigned) and role is provided
+      } else if (updates.storeRole !== undefined) { 
         updatePayload.storeRole = updates.storeRole;
-      } else if (updatePayload.assignedStoreId && targetUserData.storeRole === null) { // Assigning to store, no role given, not previously employee
-        updatePayload.storeRole = 'Employee'; // Default to Employee
+      } else if (updatePayload.assignedStoreId && targetUserData.storeRole === null) { 
+        updatePayload.storeRole = 'Employee'; 
       }
     }
   }
-  // Manager branch
   else if (callingUserData.storeRole === 'Manager' && callingUserData.assignedStoreId) {
     if (targetUserData.isAdmin) {
       throw new Error("Managers cannot modify Admin users.");
@@ -316,19 +322,16 @@ export async function updateUserConfiguration(
       throw new Error("Managers can only assign the 'Employee' role.");
     }
 
-    // Manager can assign an 'Employee' to their own store.
-    // Target user must be unassigned OR already an employee of the manager's store.
     if (updates.assignedStoreId === callingUserData.assignedStoreId && updates.storeRole === 'Employee') {
       if (targetUserData.assignedStoreId === null || targetUserData.assignedStoreId === callingUserData.assignedStoreId) {
         canProceed = true;
         updatePayload.assignedStoreId = callingUserData.assignedStoreId;
         updatePayload.storeRole = 'Employee';
-        updatePayload.isAdmin = false; // Ensure isAdmin is not inadvertently set true
+        updatePayload.isAdmin = false; 
       } else {
         throw new Error("Managers can only assign employees to their own store if the user is unassigned or already part of their store.");
       }
     }
-    // Manager can remove an 'Employee' from their own store (by setting assignedStoreId to null).
     else if (updates.assignedStoreId === null && targetUserData.assignedStoreId === callingUserData.assignedStoreId && targetUserData.storeRole === 'Employee') {
         canProceed = true;
         updatePayload.assignedStoreId = null;
@@ -551,7 +554,6 @@ export async function updateOrderStatus(
 
   try {
     await adminDb!.runTransaction(async (transaction) => {
-      // --- PRE-READ PHASE ---
       const orderDoc = await transaction.get(orderRef);
       if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
       const orderData = orderDoc.data() as Order;
@@ -590,7 +592,6 @@ export async function updateOrderStatus(
         }
       }
 
-      // --- WRITE PHASE ---
       const orderUpdates: Partial<Order> = { status: newStatus };
 
       if (newStatus === "Completed") {
@@ -657,7 +658,6 @@ export async function updateOrderStatus(
       transaction.update(orderRef, orderUpdates);
     });
 
-    // Post-transaction actions (like token revocation if a user was just banned)
     if (newStatus === "Cancelled" && cancellationReason === "Customer No-Show") {
         const orderSnapshot = await orderRef.get();
         if (orderSnapshot.exists) {
@@ -691,8 +691,8 @@ export async function updateOrderStatus(
 export async function updateProductStockForStoreByManager(
   productId: string,
   storeId: string,
-  newStockData: { stock?: number; totalStockInGrams?: number }, // New structure for stock data
-  callingUserId: string // UID of the manager initiating this action
+  newStockData: { stock?: number; totalStockInGrams?: number }, 
+  callingUserId: string 
 ): Promise<void> {
   const functionName = 'updateProductStockForStoreByManager (Transactional)';
   ensureAdminDbInitialized(functionName);
@@ -704,7 +704,6 @@ export async function updateProductStockForStoreByManager(
 
   try {
     await adminDb!.runTransaction(async (transaction) => {
-      // --- PRE-READ PHASE ---
       const callingUserDoc = await transaction.get(callingUserRef);
       if (!callingUserDoc.exists) throw new Error("Calling manager user does not exist.");
       const callingUserData = callingUserDoc.data() as User;
@@ -717,7 +716,6 @@ export async function updateProductStockForStoreByManager(
       if (!productDoc.exists) throw new Error(`Product with ID ${productId} not found.`);
       const productData = productDoc.data() as Product;
 
-      // --- LOGIC & WRITE PHASE ---
       const currentAvailability = productData.availability.find(avail => avail.storeId === storeId);
       if (!currentAvailability) {
         throw new Error(`Product ${productId} is not configured for store ${storeId}.`);
@@ -730,15 +728,13 @@ export async function updateProductStockForStoreByManager(
           throw new Error("Invalid 'totalStockInGrams' provided for Flower product.");
         }
         updatedStoreAvailability.totalStockInGrams = newStockData.totalStockInGrams;
-        // Ensure price/stock for non-flower is not present
         delete updatedStoreAvailability.price;
         delete updatedStoreAvailability.stock;
-      } else { // Non-Flower product
+      } else { 
         if (newStockData.stock === undefined || newStockData.stock < 0) {
           throw new Error("Invalid 'stock' provided for non-Flower product.");
         }
         updatedStoreAvailability.stock = newStockData.stock;
-         // Ensure weightOptions/totalStockInGrams for flower is not present
         delete updatedStoreAvailability.weightOptions;
         delete updatedStoreAvailability.totalStockInGrams;
       }
