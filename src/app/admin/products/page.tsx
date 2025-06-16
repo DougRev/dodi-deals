@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -19,7 +19,7 @@ import { ProductSchema, type ProductFormData, type Product, type Store, productC
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag, Search as SearchIcon, Filter as FilterIcon } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
@@ -53,6 +53,12 @@ export default function AdminProductsPage() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [showManualBrandInput, setShowManualBrandInput] = useState(false);
+
+  // State for filtering
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<'All' | ProductCategory>('All');
+  const [brandFilter, setBrandFilter] = useState<'All' | string>('All');
+  const [featuredFilter, setFeaturedFilter] = useState<'All' | 'Featured' | 'Not Featured'>('All');
 
 
   const form = useForm<ProductFormData>({
@@ -88,7 +94,7 @@ export default function AdminProductsPage() {
 
       if (selectedBrandIsOther) {
         setShowManualBrandInput(true);
-      } else if (brandNotPredefined && isFormOpen) { // Only show manual if not in predefined for selected category when form is open
+      } else if (brandNotPredefined && isFormOpen) { 
         setShowManualBrandInput(true);
       } else {
         setShowManualBrandInput(false);
@@ -164,7 +170,7 @@ export default function AdminProductsPage() {
                 stock: undefined,
               };
             }
-            return { // For non-flower
+            return { 
               ...avail,
               price: Number(avail.price) || 0,
               stock: Number(avail.stock) || 0,
@@ -173,7 +179,7 @@ export default function AdminProductsPage() {
             };
           }) as StoreAvailability[],
         };
-      } else { // Adding new product
+      } else { 
         const defaultCat = productCategories[0] || 'Vape';
         initialValues = {
           name: '',
@@ -195,11 +201,11 @@ export default function AdminProductsPage() {
       } else {
         const resetBrand = form.getValues('brand');
         const resetCategoryBrands = PREDEFINED_BRANDS[resetCategory as ProductCategory] || [];
-        if (resetBrand === OTHER_BRAND_VALUE) { // If 'Other' was explicitly set from dropdown
+        if (resetBrand === OTHER_BRAND_VALUE) { 
             setShowManualBrandInput(true);
-        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) { // If brand exists but not in category's list
+        } else if (resetBrand && !resetCategoryBrands.includes(resetBrand)) { 
             setShowManualBrandInput(true);
-        } else { // Default or brand is in category's predefined list
+        } else { 
             setShowManualBrandInput(false);
         }
       }
@@ -261,10 +267,10 @@ export default function AdminProductsPage() {
     try {
       let finalBrand = data.brand;
       if (data.category === 'Flower') {
-        finalBrand = 'Dodi Hemp'; // Ensure Flower is always Dodi Hemp
-      } else if (data.brand === OTHER_BRAND_VALUE && data.category !== 'Flower') { // Check against category as well
-         const manualBrandInput = form.getValues('brand'); // Get from possibly updated field
-         finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; // If still 'Other', means manual entry was empty
+        finalBrand = 'Dodi Hemp'; 
+      } else if (data.brand === OTHER_BRAND_VALUE && data.category !== 'Flower') { 
+         const manualBrandInput = form.getValues('brand'); 
+         finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; 
       }
 
 
@@ -370,7 +376,31 @@ export default function AdminProductsPage() {
     }
   };
 
-  const categoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+  const formCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+
+  // Filter options
+  const uniqueCategoriesForFilter = useMemo(() => ['All', ...new Set(appProducts.map(p => p.category))].sort() as ('All' | ProductCategory)[], [appProducts]);
+  
+  const uniqueBrandsForFilter = useMemo(() => {
+    const relevantProducts = categoryFilter === 'All' ? appProducts : appProducts.filter(p => p.category === categoryFilter);
+    return ['All', ...new Set(relevantProducts.map(p => p.brand))].sort();
+  }, [appProducts, categoryFilter]);
+
+  // Filtered products for display
+  const filteredAdminProducts = useMemo(() => {
+    return appProducts.filter(product => {
+      const matchesSearch = searchTerm === '' ||
+        (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
+      const matchesBrand = brandFilter === 'All' || product.brand === brandFilter;
+      const matchesFeatured = featuredFilter === 'All' ||
+        (featuredFilter === 'Featured' && product.isFeatured) ||
+        (featuredFilter === 'Not Featured' && !product.isFeatured);
+      return matchesSearch && matchesCategory && matchesBrand && matchesFeatured;
+    });
+  }, [appProducts, searchTerm, categoryFilter, brandFilter, featuredFilter]);
+
 
   return (
     <div className="space-y-8">
@@ -410,7 +440,7 @@ export default function AdminProductsPage() {
                   <FormLabel className="flex items-center"><Tag className="mr-2 h-4 w-4 text-muted-foreground"/>Brand</FormLabel>
                   {watchedCategory === 'Flower' ? (
                      <Input value="Dodi Hemp" disabled className="mt-1 bg-muted/50" />
-                  ) : (categoryBrands.length > 0 || showManualBrandInput) ? (
+                  ) : (formCategoryBrands.length > 0 || showManualBrandInput) ? (
                     <FormField
                       control={form.control}
                       name="brand"
@@ -419,11 +449,11 @@ export default function AdminProductsPage() {
                           onValueChange={(value) => {
                             field.onChange(value);
                           }}
-                          value={showManualBrandInput && field.value !== OTHER_BRAND_VALUE && !categoryBrands.includes(field.value) ? OTHER_BRAND_VALUE : field.value || ''}
+                          value={showManualBrandInput && field.value !== OTHER_BRAND_VALUE && !formCategoryBrands.includes(field.value) ? OTHER_BRAND_VALUE : field.value || ''}
                         >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a brand or 'Other'" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            {categoryBrands.map(brandName => (<SelectItem key={brandName} value={brandName}>{brandName}</SelectItem>))}
+                            {formCategoryBrands.map(brandName => (<SelectItem key={brandName} value={brandName}>{brandName}</SelectItem>))}
                             <SelectItem value={OTHER_BRAND_VALUE}>Other...</SelectItem>
                           </SelectContent>
                         </Select>
@@ -439,14 +469,14 @@ export default function AdminProductsPage() {
                   {watchedCategory !== 'Flower' && showManualBrandInput && (
                     <FormField
                       control={form.control}
-                      name="brand" // This field will hold the manual brand input
+                      name="brand" 
                       render={({ field: manualField }) => (
                         <Input
                           placeholder="Enter brand name"
                           {...manualField}
-                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} // If 'Other' from select, clear for typing
+                          value={manualField.value === OTHER_BRAND_VALUE ? "" : manualField.value} 
                           onChange={(e) => {
-                             manualField.onChange(e.target.value); // Update the form's brand field directly
+                             manualField.onChange(e.target.value); 
                           }}
                           className="mt-2"
                         />
@@ -466,13 +496,11 @@ export default function AdminProductsPage() {
                         onValueChange={(value) => {
                             field.onChange(value);
                             if (value === 'Flower') {
-                                form.setValue('brand', 'Dodi Hemp'); // Set brand to Dodi Hemp
-                                setShowManualBrandInput(false); // Hide manual input
+                                form.setValue('brand', 'Dodi Hemp'); 
+                                setShowManualBrandInput(false); 
                             } else {
-                                // For other categories, set brand to first predefined or empty if none
                                 const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
                                 form.setValue('brand', newCategoryBrands[0] || '');
-                                // setShowManualBrandInput(!(newCategoryBrands.length > 0)); // Show manual if no predefined
                             }
                         }}
                         value={field.value}
@@ -631,7 +659,38 @@ export default function AdminProductsPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Product Definitions</CardTitle>
-          <CardDescription>Overview of all product definitions and their general availability.</CardDescription>
+          <CardDescription>Overview of all product definitions. Use filters to narrow down the list.</CardDescription>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+            <div className="relative">
+                 <SearchIcon className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search by name/desc..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 w-full"
+                />
+            </div>
+            <Select value={categoryFilter} onValueChange={(value) => {setCategoryFilter(value as 'All' | ProductCategory); setBrandFilter('All');}}>
+              <SelectTrigger><SelectValue placeholder="Filter by Category" /></SelectTrigger>
+              <SelectContent>
+                {uniqueCategoriesForFilter.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={brandFilter} onValueChange={(value) => setBrandFilter(value as 'All' | string)}>
+              <SelectTrigger><SelectValue placeholder="Filter by Brand" /></SelectTrigger>
+              <SelectContent>
+                {uniqueBrandsForFilter.map(brand => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={featuredFilter} onValueChange={(value) => setFeaturedFilter(value as 'All' | 'Featured' | 'Not Featured')}>
+              <SelectTrigger><SelectValue placeholder="Filter by Featured" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Statuses</SelectItem>
+                <SelectItem value="Featured">Featured Only</SelectItem>
+                <SelectItem value="Not Featured">Not Featured</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {loadingAppProducts || loadingStores ? (
@@ -641,6 +700,12 @@ export default function AdminProductsPage() {
               <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground text-lg">No products defined yet.</p>
               <p className="text-muted-foreground text-sm">Click "Add New Product" to get started.</p>
+            </div>
+          ) : filteredAdminProducts.length === 0 ? (
+             <div className="text-center py-10">
+              <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground text-lg">No products match your current filters.</p>
+              <p className="text-muted-foreground text-sm">Try adjusting your search or filter criteria.</p>
             </div>
           ) : (
             <Table>
@@ -656,7 +721,7 @@ export default function AdminProductsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {appProducts.map((product) => (
+                {filteredAdminProducts.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="w-16 h-16 rounded-md overflow-hidden border border-muted relative">
@@ -701,3 +766,5 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+
+    
