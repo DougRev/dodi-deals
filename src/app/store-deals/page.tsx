@@ -6,17 +6,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { daysOfWeek, type DayOfWeek, type CustomDealRule, type ProductCategory } from '@/lib/types';
-import { MapPin, Loader2, CalendarDays, Tag, Percent, Sparkles } from 'lucide-react';
+import { MapPin, Loader2, CalendarDays, Tag, Percent, Sparkles, Megaphone } from 'lucide-react'; // Added Megaphone
 import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+
+interface DisplayableDeal {
+  key: string;
+  title: string;
+  description: string;
+  type: 'site-wide' | 'store-specific';
+  category?: ProductCategory; // For store-specific
+  brand?: string; // For site-wide Dodi deal
+}
 
 export default function StoreDealsPage() {
   const { selectedStore, setStoreSelectorOpen, loadingStores } = useAppContext();
   const [currentDay, setCurrentDay] = useState<DayOfWeek | null>(null);
 
   useEffect(() => {
-    const todayIndex = new Date().getDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6
-    // Adjust to match daysOfWeek array: Monday = 0, ..., Sunday = 6
-    const adjustedTodayIndex = todayIndex === 0 ? 6 : todayIndex - 1;
+    const today = new Date();
+    // JavaScript's getDay(): Sunday = 0, Monday = 1, ..., Saturday = 6
+    // Our daysOfWeek array: Monday = 0, ..., Sunday = 6
+    const adjustedTodayIndex = today.getDay() === 0 ? 6 : today.getDay() - 1;
     setCurrentDay(daysOfWeek[adjustedTodayIndex]);
   }, []);
 
@@ -48,7 +59,7 @@ export default function StoreDealsPage() {
     );
   }
 
-  if (!currentDay) {
+  if (!currentDay && !loadingStores) { // Ensure currentDay is determined after stores are loaded
      return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
@@ -71,8 +82,52 @@ export default function StoreDealsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {daysOfWeek.map((day) => {
-          const dealsForThisDay = storeDealRules.filter(rule => rule.selectedDays.includes(day));
           const isToday = day === currentDay;
+          const displayableDeals: DisplayableDeal[] = [];
+
+          // Add site-wide deals
+          if (day === 'Tuesday') {
+            displayableDeals.push({
+              key: `sitewide-${day}-eliquid`,
+              title: "BOGO 50% Off",
+              description: "All E-Liquid products are Buy One Get One 50% Off!",
+              type: 'site-wide',
+              category: 'E-Liquid',
+            });
+          }
+          if (day === 'Wednesday') {
+            displayableDeals.push({
+              key: `sitewide-${day}-dodi`,
+              title: "15% Off Dodi Brands",
+              description: "Get 15% off all products from Dodi Hemp, Dodi Drinks, and Dodi Accessories.",
+              type: 'site-wide',
+              brand: 'Dodi',
+            });
+          }
+          if (day === 'Thursday') {
+            displayableDeals.push({
+              key: `sitewide-${day}-drinks`,
+              title: "20% Off Drinks",
+              description: "Enjoy 20% off all items in our Drinks category.",
+              type: 'site-wide',
+              category: 'Drinks',
+            });
+          }
+
+          // Add custom store-specific deals
+          const customDealsForThisDay = storeDealRules.filter(rule => rule.selectedDays.includes(day));
+          customDealsForThisDay.forEach((rule, index) => {
+            displayableDeals.push({
+              key: `${day}-custom-${index}`,
+              title: `${rule.discountPercentage}% Off ${rule.category}`,
+              description: `Store Special: ${rule.discountPercentage}% off all ${rule.category} products.`,
+              type: 'store-specific',
+              category: rule.category,
+            });
+          });
+          
+          // Ensure no duplicate display for a category if a site-wide and custom deal target the same category/brand
+          // For simplicity, we'll show both and let users be aware. More complex logic could merge/prioritize.
 
           return (
             <Card 
@@ -90,20 +145,24 @@ export default function StoreDealsPage() {
                 {isToday && <CardDescription className="text-primary font-semibold">Today's Deals!</CardDescription>}
               </CardHeader>
               <CardContent className="flex-grow space-y-3 pt-3">
-                {dealsForThisDay.length > 0 ? (
-                  dealsForThisDay.map((rule, index) => (
-                    <div key={`${day}-${index}`} className="p-3 rounded-md bg-muted/50 border border-muted">
+                {displayableDeals.length > 0 ? (
+                  displayableDeals.map((deal) => (
+                    <div key={deal.key} className="p-3 rounded-md bg-muted/50 border border-muted">
                       <div className="flex items-center text-lg font-semibold text-accent mb-1">
-                        <Percent className="mr-2 h-5 w-5" /> {rule.discountPercentage}% OFF
+                        {deal.title.includes("BOGO") ? <Megaphone className="mr-2 h-5 w-5"/> : <Percent className="mr-2 h-5 w-5" />} 
+                        {deal.title}
                       </div>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Tag className="mr-2 h-4 w-4" /> Category: {rule.category}
+                      <div className="text-sm text-muted-foreground">
+                         {deal.description}
                       </div>
+                       <Badge variant={deal.type === 'site-wide' ? "secondary" : "outline"} className="mt-1 text-xs">
+                        {deal.type === 'site-wide' ? "Site-Wide Deal" : "Store Special"}
+                      </Badge>
                     </div>
                   ))
                 ) : (
                   <p className="text-sm text-muted-foreground italic text-center py-4">
-                    No specific category deals scheduled for {day}.
+                    No specific deals scheduled for {day}.
                   </p>
                 )}
               </CardContent>
@@ -112,11 +171,9 @@ export default function StoreDealsPage() {
         })}
       </div>
        <p className="text-center text-sm text-muted-foreground mt-8">
-        Note: If multiple rules apply to the same category on the same day, the deal with the highest discount or the one listed first in the admin settings might take precedence for actual pricing. This page shows all scheduled rules.
+        Note: Actual pricing in your cart will reflect the best applicable discount. BOGO deals are applied at checkout.
       </p>
     </div>
   );
 }
 
-// Added useState and useEffect for currentDay initialization
-import { useState, useEffect } from 'react';
