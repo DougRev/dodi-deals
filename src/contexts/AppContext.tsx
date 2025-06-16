@@ -10,7 +10,7 @@ import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndP
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice } from '@/lib/types';
-import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams } from '@/lib/types';
+import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams, SUBCATEGORIES_MAP } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
 
@@ -55,7 +55,7 @@ interface AppContextType {
   fetchUserOrders: () => Promise<void>;
   toggleFavoriteProduct: (productId: string) => Promise<void>;
   isProductFavorited: (productId: string) => boolean;
-  resolvedFavoriteProducts: ResolvedProduct[]; // New for favorites display
+  resolvedFavoriteProducts: ResolvedProduct[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -179,7 +179,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { 
             id: docSnap.id, 
             ...data,
-            category: validCategory 
+            category: validCategory,
+            subcategory: data.subcategory || undefined, // Ensure subcategory is loaded
         } as Product;
     });
       setAllProducts(fetchedProducts);
@@ -853,12 +854,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Common properties for base product or variant
-        const baseResolvedInfo = {
+        const baseResolvedInfo: Omit<ResolvedProduct, 'price' | 'stock' | 'variantId' | 'originalPrice' | 'isBogoEligible' | 'availableWeights' | 'totalStockInGrams' | 'selectedWeight'> = {
           id: p.id,
           name: p.name,
           description: p.description,
           brand: p.brand,
           category: p.category,
+          subcategory: p.subcategory,
           dataAiHint: p.dataAiHint,
           isFeatured: p.isFeatured || false,
           storeId: _selectedStore.id,
@@ -1098,12 +1100,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
-        const baseResolvedInfo = {
+        const baseResolvedInfo: Omit<ResolvedProduct, 'price' | 'stock' | 'variantId' | 'originalPrice' | 'isBogoEligible' | 'availableWeights' | 'totalStockInGrams' | 'selectedWeight'> = {
           id: p.id,
           name: p.name,
           description: p.description,
           brand: p.brand,
           category: p.category,
+          subcategory: p.subcategory,
           dataAiHint: p.dataAiHint,
           isFeatured: p.isFeatured || false,
           storeId: _selectedStore.id,
@@ -1236,13 +1239,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetchUserOrders,
     toggleFavoriteProduct,
     isProductFavorited,
-    resolvedFavoriteProducts, // Added here
+    resolvedFavoriteProducts,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts // Added here
+    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;

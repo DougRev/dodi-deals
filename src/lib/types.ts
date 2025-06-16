@@ -13,6 +13,15 @@ export const ProductCategoryEnum = z.enum(productCategoriesList);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
 export const productCategories: ProductCategory[] = [...productCategoriesList];
 
+// Subcategory Mapping
+export const SUBCATEGORIES_MAP: Partial<Record<ProductCategory, readonly string[]>> = {
+  'Vape Hardware': ['Pod Systems', 'Mods', 'Kits', 'Tanks', 'Coils'] as const,
+  'Hemp Accessory': ['Glass', 'Paper', 'Grinder', 'Rolling Trays'] as const,
+  'Edible': ['Gummies', 'Chocolates', 'Baked Goods', 'Drinks', 'Other Edibles'] as const,
+  // Other categories like 'Vape', 'Flower', 'Pre-roll', 'Concentrate', 'E-Liquid', 'Drinks' currently have no subcategories defined
+  // If they need subcategories in the future, add them here.
+};
+
 
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
@@ -71,6 +80,7 @@ export interface Store {
 // Define standard flower weights
 export const flowerWeightsList: [FlowerWeight, ...FlowerWeight[]] = ["3.5g", "7g", "14g", "1oz"];
 export const FlowerWeightEnum = z.enum(flowerWeightsList);
+
 export type FlowerWeight = z.infer<typeof FlowerWeightEnum>;
 export const flowerWeights: FlowerWeight[] = [...flowerWeightsList];
 
@@ -117,6 +127,7 @@ export const ProductSchema = z.object({
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
+  subcategory: z.string().optional(), // New field for subcategory
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
@@ -132,6 +143,24 @@ export const ProductSchema = z.object({
       path: ['brand'],
     });
   }
+  // Validate subcategory based on parent category
+  const allowedSubcategories = SUBCATEGORIES_MAP[data.category as ProductCategory];
+  if (data.subcategory && (!allowedSubcategories || !allowedSubcategories.includes(data.subcategory))) {
+    ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Subcategory "${data.subcategory}" is not valid for category "${data.category}".`,
+        path: ['subcategory'],
+    });
+  }
+  if (!data.subcategory && allowedSubcategories && allowedSubcategories.length > 0) {
+    // If a category HAS subcategories, one SHOULD be selected.
+    // However, making it strictly required here can be tricky if the "None" option is desired.
+    // For now, the UI will guide this. If the form submits an empty subcategory for a category that expects one,
+    // it implies "None" or the first one should be defaulted if that's the desired behavior.
+    // Current schema allows `subcategory` to be `undefined`.
+  }
+
+
   data.availability.forEach((avail, index) => {
     if (data.category === 'Flower') {
       if (!avail.weightOptions || avail.weightOptions.length === 0) {
@@ -209,10 +238,11 @@ export const ProductSchema = z.object({
 export type ProductFormData = z.infer<typeof ProductSchema>;
 
 // Main Product interface for Firestore (matches structure of ProductSchema)
-export interface Product extends Omit<ProductFormData, 'availability' | 'category' | 'isFeatured'> {
+export interface Product extends Omit<ProductFormData, 'availability' | 'category' | 'isFeatured' | 'subcategory'> {
   id: string;
-  category: ProductCategory; // Ensure category is part of the base Product
-  isFeatured?: boolean; // Make isFeatured optional as managers won't set it
+  category: ProductCategory;
+  subcategory?: string; // New field
+  isFeatured?: boolean;
   availability: StoreAvailability[];
 }
 
@@ -225,6 +255,7 @@ export interface ResolvedProduct {
   description: string;
   brand: string;
   category: ProductCategory;
+  subcategory?: string; // New field
   dataAiHint?: string;
   isFeatured?: boolean;
   storeId: string;

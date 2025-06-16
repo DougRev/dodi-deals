@@ -15,11 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPrice, PREDEFINED_BRANDS, type ProductCategory } from '@/lib/types';
+import { ProductSchema, type ProductFormData, type Product, type Store, productCategories, type StoreAvailability, flowerWeights, type FlowerWeight, type FlowerWeightPrice, PREDEFINED_BRANDS, type ProductCategory, SUBCATEGORIES_MAP } from '@/lib/types';
 import { addProduct, updateProduct, deleteProduct } from '@/lib/firestoreService';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag, Search as SearchIcon, Filter as FilterIcon, UploadCloud, Image as ImageIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, StoreIcon, Star, Weight, PackagePlus, Tag, Search as SearchIcon, Filter as FilterIcon, UploadCloud, Image as ImageIcon, Layers } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +80,7 @@ export default function AdminProductsPage() {
       brand: '',
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: productCategories[0] || 'Vape',
+      subcategory: '',
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(productCategories[0] || 'Vape', stores),
@@ -113,6 +114,17 @@ export default function AdminProductsPage() {
         setShowManualBrandInput(false);
       }
     }
+    // Reset subcategory if category changes
+    const subcategoriesForSelectedCategory = SUBCATEGORIES_MAP[watchedCategory as ProductCategory] || [];
+    if (subcategoriesForSelectedCategory.length === 0) {
+        form.setValue('subcategory', '', { shouldValidate: true });
+    } else {
+        const currentSubcategory = form.getValues('subcategory');
+        if (currentSubcategory && !subcategoriesForSelectedCategory.includes(currentSubcategory)) {
+            form.setValue('subcategory', '', { shouldValidate: true }); // Reset if current subcategory not valid for new category
+        }
+    }
+
   }, [watchedBrandSelection, watchedCategory, isFormOpen, form]);
 
 
@@ -164,6 +176,7 @@ export default function AdminProductsPage() {
         initialValues = {
           ...currentProduct,
           category: currentProduct.category || (productCategories[0] || 'Vape'),
+          subcategory: currentProduct.subcategory || '',
           brand: currentProduct.brand,
           isFeatured: currentProduct.isFeatured || false,
           availability: currentProduct.availability.map(avail => {
@@ -200,6 +213,7 @@ export default function AdminProductsPage() {
           brand: defaultCat === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || ''),
           baseImageUrl: 'https://placehold.co/600x400.png',
           category: defaultCat,
+          subcategory: '',
           dataAiHint: '',
           isFeatured: false,
           availability: getDefaultAvailability(defaultCat, stores),
@@ -243,6 +257,7 @@ export default function AdminProductsPage() {
       brand: defaultCat === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCat as ProductCategory]?.[0] || ''),
       baseImageUrl: 'https://placehold.co/600x400.png',
       category: defaultCat,
+      subcategory: '',
       dataAiHint: '',
       isFeatured: false,
       availability: getDefaultAvailability(defaultCat, stores),
@@ -298,12 +313,13 @@ export default function AdminProductsPage() {
          finalBrand = manualBrandInput === OTHER_BRAND_VALUE ? '' : manualBrandInput; 
       }
 
-      const productDataPayload: Omit<Product, 'id'> = {
+      const productDataPayload: Omit<Product, 'id'> & { subcategory?: string } = {
         name: data.name,
         description: data.description,
         brand: finalBrand,
         baseImageUrl: data.baseImageUrl, 
         category: data.category,
+        subcategory: data.subcategory || undefined, // Ensure undefined if empty
         dataAiHint: data.dataAiHint,
         isFeatured: data.isFeatured || false,
         availability: data.availability.map(avail => {
@@ -332,7 +348,7 @@ export default function AdminProductsPage() {
         await updateProduct(currentProduct.id, productDataPayload);
         toast({ title: "Product Updated", description: "The product details have been successfully updated." });
       } else {
-        await addProduct(productDataPayload);
+        await addProduct(productDataPayload as Omit<Product, 'id'>);
         toast({ title: "Product Added", description: "The new product has been successfully created." });
       }
       setIsFormOpen(false);
@@ -460,6 +476,8 @@ export default function AdminProductsPage() {
   };
 
   const formCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
+  const formSubcategories = SUBCATEGORIES_MAP[watchedCategory as ProductCategory] || [];
+
 
   const uniqueCategoriesForFilter = useMemo(() => ['All', ...new Set(appProducts.map(p => p.category))].sort() as ('All' | ProductCategory)[], [appProducts]);
   
@@ -578,6 +596,7 @@ export default function AdminProductsPage() {
               </div>
 
               <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea placeholder="Detailed description of the product..." {...field} rows={3} /></FormControl><FormMessage /></FormItem>)}/>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField control={form.control} name="category" render={({ field }) => (
                     <FormItem>
@@ -592,6 +611,7 @@ export default function AdminProductsPage() {
                                 const newCategoryBrands = PREDEFINED_BRANDS[value as ProductCategory] || [];
                                 form.setValue('brand', newCategoryBrands[0] || '');
                             }
+                            form.setValue('subcategory', ''); // Reset subcategory when category changes
                         }}
                         value={field.value}
                         defaultValue={field.value}
@@ -605,8 +625,25 @@ export default function AdminProductsPage() {
                     </FormItem>
                   )}
                 />
-                <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
+                {formSubcategories.length > 0 && (
+                  <FormField control={form.control} name="subcategory" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center"><Layers className="mr-2 h-4 w-4 text-muted-foreground"/>Subcategory</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''} defaultValue={field.value || ''}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select subcategory" /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {formSubcategories.map(sub => (<SelectItem key={sub} value={sub}>{sub}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
+              
+              <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
               
               <Card className="p-4 space-y-3 shadow-sm">
                 <FormLabel className="text-md font-semibold text-primary flex items-center"><ImageIcon className="mr-2 h-5 w-5"/>Product Image</FormLabel>
@@ -858,7 +895,7 @@ export default function AdminProductsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Featured</TableHead>
                   <TableHead>Brand</TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead>Category / Sub</TableHead>
                   <TableHead>Availability / Pricing / Stock</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -876,7 +913,10 @@ export default function AdminProductsPage() {
                       {product.isFeatured ? <Star className="h-5 w-5 text-yellow-500 fill-yellow-400" /> : <Star className="h-5 w-5 text-muted-foreground/50" />}
                     </TableCell>
                     <TableCell>{product.brand}</TableCell>
-                    <TableCell>{product.category}</TableCell>
+                    <TableCell>
+                        {product.category}
+                        {product.subcategory && <span className="block text-xs text-muted-foreground">↳ {product.subcategory}</span>}
+                    </TableCell>
                     <TableCell>
                         {product.availability?.length > 0
                             ? product.category === 'Flower' && product.availability[0].weightOptions && product.availability[0].weightOptions.length > 0
