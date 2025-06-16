@@ -23,10 +23,10 @@ import { PlusCircle, Edit, Trash2, Loader2, Package, PackageSearch, XCircle, Sto
 import Link from 'next/link';
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress'; // For upload progress
+import { Progress } from '@/components/ui/progress'; 
 
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { app as firebaseApp } from '@/lib/firebase'; // Your Firebase app instance
+import { app as firebaseApp } from '@/lib/firebase'; 
 
 const storage = getStorage(firebaseApp);
 
@@ -60,13 +60,11 @@ export default function AdminProductsPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [showManualBrandInput, setShowManualBrandInput] = useState(false);
 
-  // State for filtering
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'All' | ProductCategory>('All');
   const [brandFilter, setBrandFilter] = useState<'All' | string>('All');
   const [featuredFilter, setFeaturedFilter] = useState<'All' | 'Featured' | 'Not Featured'>('All');
 
-  // State for image upload
   const [imageFileToUpload, setImageFileToUpload] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadImageProgress, setUploadImageProgress] = useState(0);
@@ -208,10 +206,13 @@ export default function AdminProductsPage() {
         };
       }
       form.reset(initialValues);
-      setImageFileToUpload(null); // Reset image upload state
+      setImageFileToUpload(null); 
       setImagePreviewUrl(null);
       setIsUploadingImage(false);
       setUploadImageProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""; 
+      }
 
       const resetCategory = form.getValues('category');
       if (resetCategory === 'Flower') {
@@ -248,6 +249,9 @@ export default function AdminProductsPage() {
     });
     setImageFileToUpload(null);
     setImagePreviewUrl(null);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
     if (defaultCat === 'Flower') {
       setShowManualBrandInput(false);
     } else {
@@ -298,7 +302,7 @@ export default function AdminProductsPage() {
         name: data.name,
         description: data.description,
         brand: finalBrand,
-        baseImageUrl: data.baseImageUrl, // This will be the URL from manual input or upload
+        baseImageUrl: data.baseImageUrl, 
         category: data.category,
         dataAiHint: data.dataAiHint,
         isFeatured: data.isFeatured || false,
@@ -336,6 +340,9 @@ export default function AdminProductsPage() {
       form.reset();
       setImageFileToUpload(null);
       setImagePreviewUrl(null);
+       if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (error: any) {
       console.error("Failed to save product:", error);
       toast({ title: "Error Saving Product", description: error.message || "Failed to save product.", variant: "destructive" });
@@ -349,30 +356,11 @@ export default function AdminProductsPage() {
       const file = event.target.files[0];
       setImageFileToUpload(file);
       setImagePreviewUrl(URL.createObjectURL(file));
-      form.setValue('baseImageUrl', '', {shouldValidate: false}); // Clear manual URL if file is chosen
+      form.setValue('baseImageUrl', '', {shouldValidate: false}); 
     }
   };
 
   const handleImageUpload = async () => {
-    // IMPORTANT: Firebase Storage Security Rules
-    // Ensure your Firebase Storage rules allow uploads to the `product_images/` path.
-    // Example for development (allows any authenticated user, refine for production):
-    //
-    // rules_version = '2';
-    // service firebase.storage {
-    //   match /b/{bucket}/o {
-    //     match /product_images/{allPaths=**} {
-    //       allow read; // Or more restrictive if needed
-    //       allow write: if request.auth != null; // Allows any authenticated user
-    //     }
-    //   }
-    // }
-    //
-    // For more secure rules, check for admin custom claims:
-    // allow write: if request.auth != null && request.auth.token.isAdmin == true;
-    // (This requires setting custom claims on your admin users via Firebase Admin SDK)
-    // You can configure these rules in your Firebase Project Console > Storage > Rules.
-    //
     if (!imageFileToUpload) {
       toast({ title: "No Image Selected", description: "Please choose an image file first.", variant: "destructive" });
       return;
@@ -391,8 +379,6 @@ export default function AdminProductsPage() {
       },
       (error) => {
         console.error("Image upload error:", error);
-        // Firebase Storage errors often include codes like 'storage/unauthorized' or 'storage/object-not-found'
-        // These are helpful for debugging, especially permission issues.
         let errorMessage = error.message || "Could not upload image.";
         if ((error as any).code === 'storage/unauthorized') {
           errorMessage = "Upload failed: You do not have permission. Please check Firebase Storage security rules.";
@@ -400,14 +386,20 @@ export default function AdminProductsPage() {
         toast({ title: "Image Upload Failed", description: errorMessage, variant: "destructive" });
         setIsUploadingImage(false);
         setUploadImageProgress(0);
+        if (fileInputRef.current) { // Reset file input on failure
+          fileInputRef.current.value = "";
+        }
       },
       () => {
         getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
           form.setValue('baseImageUrl', downloadURL, { shouldValidate: true, shouldDirty: true });
           toast({ title: "Image Uploaded", description: "Image uploaded and URL set. Save the product to finalize." });
           setIsUploadingImage(false);
-          setImageFileToUpload(null);
-          // Keep imagePreviewUrl as is, it will be replaced by watchedBaseImageUrl once form value updates
+          setImageFileToUpload(null); // Clear the selected file state
+          setImagePreviewUrl(null);   // Clear the local blob preview state
+          if (fileInputRef.current) { // Reset the actual file input element
+            fileInputRef.current.value = "";
+          }
         });
       }
     );
@@ -469,7 +461,6 @@ export default function AdminProductsPage() {
 
   const formCategoryBrands = PREDEFINED_BRANDS[watchedCategory as ProductCategory] || [];
 
-  // Filter options
   const uniqueCategoriesForFilter = useMemo(() => ['All', ...new Set(appProducts.map(p => p.category))].sort() as ('All' | ProductCategory)[], [appProducts]);
   
   const uniqueBrandsForFilter = useMemo(() => {
@@ -477,7 +468,6 @@ export default function AdminProductsPage() {
     return ['All', ...new Set(relevantProducts.map(p => p.brand))].sort();
   }, [appProducts, categoryFilter]);
 
-  // Filtered products for display
   const filteredAdminProducts = useMemo(() => {
     return appProducts.filter(product => {
       const matchesSearch = searchTerm === '' ||
@@ -519,6 +509,9 @@ export default function AdminProductsPage() {
             setImagePreviewUrl(null);
             setIsUploadingImage(false);
             setUploadImageProgress(0);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
           }
         }}>
         <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -615,7 +608,6 @@ export default function AdminProductsPage() {
                 <FormField control={form.control} name="dataAiHint" render={({ field }) => (<FormItem><FormLabel>Image AI Hint (Optional)</FormLabel><FormControl><Input placeholder="e.g., vape pen (max 2 words)" {...field} /></FormControl><FormDescription>Keywords for AI image search (max 2 words).</FormDescription><FormMessage /></FormItem>)}/>
               </div>
               
-              {/* Image Upload Section */}
               <Card className="p-4 space-y-3 shadow-sm">
                 <FormLabel className="text-md font-semibold text-primary flex items-center"><ImageIcon className="mr-2 h-5 w-5"/>Product Image</FormLabel>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -917,5 +909,3 @@ export default function AdminProductsPage() {
     </div>
   );
 }
-
-    
