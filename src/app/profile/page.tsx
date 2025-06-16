@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle } from 'lucide-react'; 
+import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
+import type { ResolvedProduct, FlowerWeight } from '@/lib/types';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star } from 'lucide-react'; 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -45,7 +47,12 @@ function ProfilePageInternal() {
     updateUserProfileDetails,
     userOrders,
     loadingUserOrders,
-    fetchUserOrders 
+    fetchUserOrders,
+    resolvedFavoriteProducts, // New from context
+    toggleFavoriteProduct,
+    addToCart,
+    selectedStore,
+    loadingProducts,
   } = useAppContext(); 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,6 +62,10 @@ function ProfilePageInternal() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
+  // State for FlowerWeightSelectorDialog
+  const [productForWeightSelection, setProductForWeightSelection] = useState<ResolvedProduct | null>(null);
+  const [isWeightSelectorOpen, setIsWeightSelectorOpen] = useState(false);
 
 
   useEffect(() => {
@@ -103,6 +114,15 @@ function ProfilePageInternal() {
     setIsUpdatingProfile(true);
     await updateUserProfileDetails(editedName);
     setIsUpdatingProfile(false);
+  };
+
+  const handleFavoriteAddToCart = (product: ResolvedProduct) => {
+    if (product.category === 'Flower') {
+      setProductForWeightSelection(product);
+      setIsWeightSelectorOpen(true);
+    } else {
+      addToCart(product, 1);
+    }
   };
 
   const combinedLoading = isUpdatingAvatar || isUpdatingProfile;
@@ -168,11 +188,87 @@ function ProfilePageInternal() {
 
         <div className="md:col-span-2 space-y-6">
           <PointsDisplay />
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-xl font-medium flex items-center">
+                <Star className="mr-3 h-6 w-6 text-yellow-500 fill-yellow-400" /> Your Favorites
+              </CardTitle>
+              <CardDescription>Quickly access your saved items.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingProducts ? (
+                <div className="flex justify-center items-center py-10"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>
+              ) : !selectedStore ? (
+                 <div className="text-center py-10">
+                    <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">Please select a store to view availability of your favorite items.</p>
+                  </div>
+              ) : resolvedFavoriteProducts.length === 0 ? (
+                <div className="text-center py-10">
+                  <Star className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">You haven't favorited any items yet.</p>
+                  <Button asChild variant="link" className="mt-2 text-accent">
+                    <Link href="/products">Start Browsing Products</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {resolvedFavoriteProducts.map((favProduct) => {
+                    const isOutOfStock = favProduct.category !== 'Flower' && favProduct.stock === 0;
+                    const isFlowerOutOfStock = favProduct.category === 'Flower' && (!favProduct.totalStockInGrams || favProduct.totalStockInGrams <= 0);
+                    const canAddToCart = selectedStore && !isOutOfStock && !isFlowerOutOfStock && !user.isBanned;
+
+                    return (
+                      <Card key={favProduct.variantId} className="flex flex-col sm:flex-row items-center p-3 gap-3 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden shrink-0">
+                          <Image src={favProduct.imageUrl} alt={favProduct.name} fill style={{objectFit: 'cover'}} sizes="96px" data-ai-hint={favProduct.dataAiHint || "product image"}/>
+                        </div>
+                        <div className="flex-grow text-center sm:text-left">
+                          <h4 className="font-semibold text-md text-primary">{favProduct.name}</h4>
+                          <p className="text-xs text-muted-foreground">{favProduct.brand} - {favProduct.category}</p>
+                          <p className="text-sm font-bold text-accent mt-0.5">
+                            {favProduct.category === 'Flower' ? `From $${favProduct.price.toFixed(2)}` : `$${favProduct.price.toFixed(2)}`}
+                            {favProduct.originalPrice && favProduct.originalPrice > favProduct.price && (
+                              <span className="text-xs line-through text-muted-foreground ml-1">${favProduct.originalPrice.toFixed(2)}</span>
+                            )}
+                          </p>
+                          {isOutOfStock || isFlowerOutOfStock ? (
+                            <Badge variant="destructive" className="mt-1 text-xs">Out of Stock at {selectedStore.name}</Badge>
+                          ) : favProduct.category !== 'Flower' && favProduct.stock < 5 ? (
+                             <Badge variant="outline" className="mt-1 text-xs border-yellow-500 text-yellow-600">Low Stock ({favProduct.stock})</Badge>
+                          ) : favProduct.category === 'Flower' && favProduct.totalStockInGrams && favProduct.totalStockInGrams < 10 ? (
+                             <Badge variant="outline" className="mt-1 text-xs border-yellow-500 text-yellow-600">Low Stock ({favProduct.totalStockInGrams}g)</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="mt-1 text-xs">In Stock at {selectedStore.name}</Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-center gap-2 mt-2 sm:mt-0 sm:ml-auto">
+                          <Button variant="ghost" size="icon" onClick={() => toggleFavoriteProduct(favProduct.id)} title="Remove from Favorites">
+                            <X className="h-5 w-5 text-destructive"/>
+                          </Button>
+                          {favProduct.category === 'Flower' ? (
+                            <Button onClick={() => handleFavoriteAddToCart(favProduct)} disabled={!canAddToCart} size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                              <Weight className="mr-1.5 h-4 w-4" /> Select Options
+                            </Button>
+                          ) : (
+                            <Button onClick={() => handleFavoriteAddToCart(favProduct)} disabled={!canAddToCart} size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                              <ShoppingCart className="mr-1.5 h-4 w-4" /> Add to Cart
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
           
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl font-medium flex items-center">
-                <ShoppingBag className="mr-3 h-6 w-6 text-primary" /> Order History
+                <ListChecks className="mr-3 h-6 w-6 text-primary" /> Order History
               </CardTitle>
               <CardDescription>Review your past in-store pickup orders.</CardDescription>
             </CardHeader>
@@ -345,6 +441,17 @@ function ProfilePageInternal() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {productForWeightSelection && (
+        <FlowerWeightSelectorDialog
+          product={productForWeightSelection}
+          isOpen={isWeightSelectorOpen}
+          onOpenChange={(open) => {
+            setIsWeightSelectorOpen(open);
+            if (!open) setProductForWeightSelection(null);
+          }}
+        />
+      )}
 
     </div>
   );

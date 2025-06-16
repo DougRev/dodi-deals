@@ -55,6 +55,7 @@ interface AppContextType {
   fetchUserOrders: () => Promise<void>;
   toggleFavoriteProduct: (productId: string) => Promise<void>;
   isProductFavorited: (productId: string) => boolean;
+  resolvedFavoriteProducts: ResolvedProduct[]; // New for favorites display
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -797,7 +798,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     
     const pointsCalculated = Math.floor(finalTotal * 1); 
 
-    const orderData: Omit<Order, 'id' | 'orderDate' | 'status' | 'pointsEarned'> = {
+    const orderData: Omit<Order, 'id' | 'orderDate' | 'status'> = {
       userId: user.id,
       userEmail: user.email,
       userName: user.name,
@@ -1072,6 +1073,129 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user?.favoriteProductIds]);
 
 
+  const resolvedFavoriteProducts = useMemo(() => {
+    if (!user?.favoriteProductIds || user.favoriteProductIds.length === 0 || !_selectedStore || loadingProducts) {
+      return [];
+    }
+
+    const today = new Date();
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+
+    return allProducts
+      .filter(p => user.favoriteProductIds!.includes(p.id))
+      .map(p => {
+        const availabilityForStore = p.availability.find(avail => avail.storeId === _selectedStore.id);
+        if (!availabilityForStore) return null; // Product not available at selected store
+
+        let currentImageUrl = p.baseImageUrl;
+         if (availabilityForStore.storeSpecificImageUrl && availabilityForStore.storeSpecificImageUrl.trim() !== '') {
+          currentImageUrl = availabilityForStore.storeSpecificImageUrl;
+        } else if (p.baseImageUrl && p.baseImageUrl.trim() !== '' && !p.baseImageUrl.startsWith('https://placehold.co')) {
+          currentImageUrl = p.baseImageUrl;
+        } else {
+          const categoryString = (typeof p.category === 'string' && p.category) ? p.category : 'default';
+          const categoryPath = categoryString.toLowerCase().replace(/\s+/g, '-');
+          currentImageUrl = `/images/categories/${categoryPath}.png`;
+        }
+
+        const baseResolvedInfo = {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          brand: p.brand,
+          category: p.category,
+          dataAiHint: p.dataAiHint,
+          isFeatured: p.isFeatured || false,
+          storeId: _selectedStore.id,
+          imageUrl: currentImageUrl,
+        };
+
+        if (p.category === 'Flower' && availabilityForStore.weightOptions && availabilityForStore.totalStockInGrams !== undefined) {
+           const validWeightOptions = availabilityForStore.weightOptions.filter(wo => {
+            const grams = flowerWeightToGrams(wo.weight);
+            return grams > 0 && (availabilityForStore.totalStockInGrams || 0) >= grams;
+          });
+          const prices = validWeightOptions.map(wo => wo.price);
+          const minPrice = prices.length > 0 ? Math.min(...prices) : 0; // Default to 0 if no valid weights
+
+          const smallestWeightOption = validWeightOptions.length > 0 ? validWeightOptions.reduce((smallest, current) => {
+              return flowerWeightToGrams(current.weight) < flowerWeightToGrams(smallest.weight) ? current : smallest;
+          }, validWeightOptions[0]) : null;
+          
+          const smallestWeightGrams = smallestWeightOption ? flowerWeightToGrams(smallestWeightOption.weight) : 0;
+          const stockForSmallestUnit = smallestWeightGrams > 0 ? Math.floor((availabilityForStore.totalStockInGrams || 0) / smallestWeightGrams) : 0;
+
+          let effectiveMinPrice = minPrice;
+          let originalMinPrice: number | undefined = minPrice;
+          let isProductOnDeal = false;
+          let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid');
+
+          if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
+            isProductOnDeal = true;
+            effectiveMinPrice = parseFloat((originalMinPrice * (1 - 0.15)).toFixed(2));
+          } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
+            isProductOnDeal = true;
+            effectiveMinPrice = parseFloat((originalMinPrice * (1 - 0.20)).toFixed(2));
+          }
+
+          if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+            for (const rule of _selectedStore.dailyDeals) {
+              if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
+                isProductOnDeal = true;
+                effectiveMinPrice = parseFloat((originalMinPrice * (1 - rule.discountPercentage / 100)).toFixed(2));
+                break;
+              }
+            }
+          }
+          
+          return {
+            ...baseResolvedInfo,
+            variantId: p.id,
+            price: effectiveMinPrice,
+            originalPrice: isProductOnDeal ? originalMinPrice : undefined,
+            stock: stockForSmallestUnit,
+            availableWeights: validWeightOptions,
+            totalStockInGrams: availabilityForStore.totalStockInGrams,
+            isBogoEligible: isBogoEligibleProduct,
+          } as ResolvedProduct;
+
+        } else if (p.category !== 'Flower' && availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
+           let effectivePrice = availabilityForStore.price;
+            let originalPriceValue: number | undefined = availabilityForStore.price;
+            let isProductOnDeal = false;
+            let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid');
+
+            if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
+                isProductOnDeal = true;
+                effectivePrice = parseFloat((originalPriceValue * (1 - 0.15)).toFixed(2));
+            } else if (currentDayName === 'Thursday' && p.category === 'Drinks') {
+                isProductOnDeal = true;
+                effectivePrice = parseFloat((originalPriceValue * (1 - 0.20)).toFixed(2));
+            }
+             if (!isProductOnDeal && !isBogoEligibleProduct && _selectedStore.dailyDeals && _selectedStore.dailyDeals.length > 0) {
+                for (const rule of _selectedStore.dailyDeals) {
+                    if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
+                        isProductOnDeal = true;
+                        effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
+                        break; 
+                    }
+                }
+            }
+          return {
+            ...baseResolvedInfo,
+            variantId: p.id,
+            price: effectivePrice,
+            originalPrice: isProductOnDeal ? originalPriceValue : undefined,
+            stock: availabilityForStore.stock,
+            isBogoEligible: isBogoEligibleProduct,
+          } as ResolvedProduct;
+        }
+        return null;
+      })
+      .filter(Boolean) as ResolvedProduct[];
+  }, [user?.favoriteProductIds, allProducts, _selectedStore, loadingProducts]);
+
+
   const contextValue = useMemo(() => ({
     isAuthenticated,
     user,
@@ -1112,12 +1236,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetchUserOrders,
     toggleFavoriteProduct,
     isProductFavorited,
+    resolvedFavoriteProducts, // Added here
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited
+    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts // Added here
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -1130,7 +1255,3 @@ export function useAppContext() {
   }
   return context;
 }
-
-    
-
-    
