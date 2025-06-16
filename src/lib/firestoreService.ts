@@ -2,13 +2,12 @@
 'use server';
 
 import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData } from '@/lib/types'; // Added FlowerWeight, CancellationReason
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData } from '@/lib/types'; 
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { flowerWeightToGrams, productCategories } from '@/lib/types';
 
 
-// Type for Firestore Transaction, assuming firebase-admin
 import type { FirebaseFirestore } from 'firebase-admin/firestore';
 
 
@@ -177,7 +176,6 @@ export async function addProductByManager(
     }
     console.log(`[firestoreService][AdminSDK][${functionName}] Manager permission checks passed.`);
 
-    // Ensure brand for Flower is Dodi Hemp (already handled by client, but good to double-check or enforce server-side if necessary)
     let finalProductCoreData = { ...productCoreData };
     if (finalProductCoreData.category === 'Flower' && finalProductCoreData.brand !== 'Dodi Hemp') {
         console.warn(`[firestoreService][AdminSDK][${functionName}] Overriding brand to 'Dodi Hemp' for Flower product.`);
@@ -197,7 +195,7 @@ export async function addProductByManager(
     return docRef.id;
   } catch (error: any) {
     console.error(`[firestoreService][AdminSDK][${functionName}] Error adding product by manager ${managerUserId} for product ${productCoreData.name}:`, error.message, error.stack);
-    throw error; // Re-throw to be caught by client
+    throw error; 
   }
 }
 
@@ -559,12 +557,13 @@ export async function updateOrderStatus(
     orderId: string,
     newStatus: OrderStatus,
     cancellationReason?: CancellationReason,
-    cancellationDescription?: string
+    cancellationDescription?: string,
+    callingUserId?: string // Added to verify customer cancellations
 ): Promise<void> {
   const functionName = 'updateOrderStatus (Transactional)';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Updating status for orderId: ${orderId} to: ${newStatus}. Reason: ${cancellationReason}, Desc: ${cancellationDescription}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Order: ${orderId}, NewStatus: ${newStatus}, Reason: ${cancellationReason}, Desc: ${cancellationDescription}, Caller: ${callingUserId}`);
 
   const orderRef = adminDb!.collection('orders').doc(orderId);
   const usersColRef = adminDb!.collection('users');
@@ -584,6 +583,12 @@ export async function updateOrderStatus(
       }> = [];
 
       if (newStatus === "Cancelled") {
+        if (cancellationReason === "Cancelled by Customer") {
+          if (!callingUserId) throw new Error("Calling user ID is required for customer cancellation.");
+          if (orderData.userId !== callingUserId) throw new Error("User is not authorized to cancel this order.");
+          if (orderData.status !== "Pending Confirmation") throw new Error("Order can no longer be cancelled by customer as it's past 'Pending Confirmation'.");
+        }
+
         const productReadPromises = orderData.items.map(async (item) => {
           if (!item.productId || typeof item.productId !== 'string' || item.productId.trim() === '') {
              console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: Invalid productId in order items. Product: ${item.productName}, ID: '${item.productId}'`);
@@ -769,7 +774,3 @@ export async function updateProductStockForStoreByManager(
     throw new Error(error.message || `Failed to update stock for product ${productId} due to an unexpected issue.`);
   }
 }
-
-
-
-    

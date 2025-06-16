@@ -10,16 +10,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
-import type { ResolvedProduct, FlowerWeight } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart } from 'lucide-react';
+import type { ResolvedProduct, FlowerWeight, Order } from '@/lib/types';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import type { Order } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 
@@ -54,6 +54,7 @@ function ProfilePageInternal() {
     addToCart,
     selectedStore,
     loadingProducts,
+    cancelMyOrder,
   } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,6 +67,10 @@ function ProfilePageInternal() {
 
   const [productForWeightSelection, setProductForWeightSelection] = useState<ResolvedProduct | null>(null);
   const [isWeightSelectorOpen, setIsWeightSelectorOpen] = useState(false);
+
+  const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
 
 
   useEffect(() => {
@@ -122,6 +127,22 @@ function ProfilePageInternal() {
       setIsWeightSelectorOpen(true);
     } else {
       addToCart(product, 1);
+    }
+  };
+
+  const openCustomerCancelDialog = (order: Order) => {
+    setOrderToCancel(order);
+    setIsCancelOrderDialogOpen(true);
+  };
+
+  const handleConfirmCustomerCancellation = async () => {
+    if (!orderToCancel) return;
+    setIsCancellingOrder(true);
+    const success = await cancelMyOrder(orderToCancel.id);
+    setIsCancellingOrder(false);
+    if (success) {
+      setIsCancelOrderDialogOpen(false);
+      setOrderToCancel(null);
     }
   };
 
@@ -359,6 +380,20 @@ function ProfilePageInternal() {
                                 )}
                             </div>
                          )}
+                        {order.status === "Pending Confirmation" && (
+                            <div className="mt-4">
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => openCustomerCancelDialog(order)}
+                                    disabled={isCancellingOrder}
+                                >
+                                    {isCancellingOrder && orderToCancel?.id === order.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Ban className="mr-2 h-4 w-4"/>}
+                                    Request to Cancel Order
+                                </Button>
+                            </div>
+                        )}
                       </AccordionContent>
                     </AccordionItem>
                   ))}
@@ -451,6 +486,30 @@ function ProfilePageInternal() {
             if (!open) setProductForWeightSelection(null);
           }}
         />
+      )}
+
+      {orderToCancel && (
+        <AlertDialog open={isCancelOrderDialogOpen} onOpenChange={setIsCancelOrderDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel Order: {orderToCancel.id.substring(0,8)}...?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Are you sure you want to cancel this order? This action cannot be undone if the order is still pending confirmation.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setOrderToCancel(null)} disabled={isCancellingOrder}>Back</AlertDialogCancel>
+                    <AlertDialogAction 
+                        onClick={handleConfirmCustomerCancellation} 
+                        disabled={isCancellingOrder}
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                    >
+                        {isCancellingOrder ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                        Yes, Cancel Order
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       )}
 
     </div>

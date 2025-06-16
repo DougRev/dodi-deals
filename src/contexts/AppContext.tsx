@@ -9,11 +9,10 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, type User as FirebaseUser, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 'firebase/firestore';
 
-import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice } from '@/lib/types';
+import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice, CancellationReason } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams, SUBCATEGORIES_MAP } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-// import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites, addProductByManager, updateProductStockForStoreByManager } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites, addProductByManager, updateProductStockForStoreByManager, updateOrderStatus as updateOrderStatusInFirestore } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -57,6 +56,7 @@ interface AppContextType {
   toggleFavoriteProduct: (productId: string) => Promise<void>;
   isProductFavorited: (productId: string) => boolean;
   resolvedFavoriteProducts: ResolvedProduct[];
+  cancelMyOrder: (orderId: string) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -978,7 +978,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dealType: 'bogo',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
-        product: undefined, // Explicitly undefined for category-wide
+        product: undefined, 
       });
     }
     if (currentDayName === 'Wednesday') {
@@ -991,7 +991,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dealType: 'percentage',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
-        product: undefined, // Explicitly undefined for brand-wide
+        product: undefined, 
       });
     }
     if (currentDayName === 'Thursday') {
@@ -1004,7 +1004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             dealType: 'percentage',
             expiresAt: endOfToday.toISOString(),
             storeId: _selectedStore.id,
-            product: undefined, // Explicitly undefined for category-wide
+            product: undefined, 
         });
     }
      if (_selectedStore.dailyDeals) {
@@ -1012,7 +1012,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (rule.selectedDays.includes(currentDayName)) {
                 generatedDeals.push({
                     id: `deal-store-${rule.category}-${rule.discountPercentage}-${_selectedStore.id}`,
-                    product: undefined, // This deal is for a category, not a specific product
+                    product: undefined, 
                     title: `${rule.discountPercentage}% Off ${rule.category}!`,
                     description: `Store Special: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
                     categoryOnDeal: rule.category,
@@ -1192,6 +1192,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .filter(Boolean) as ResolvedProduct[];
   }, [user?.favoriteProductIds, allProducts, _selectedStore, loadingProducts]);
 
+  const cancelMyOrder = useCallback(async (orderId: string): Promise<boolean> => {
+    if (!user || !isAuthenticated) {
+      toast({ title: "Not Authenticated", description: "You must be logged in to cancel an order.", variant: "destructive" });
+      return false;
+    }
+    try {
+      await updateOrderStatusInFirestore(orderId, "Cancelled", "Cancelled by Customer", undefined, user.id);
+      toast({ title: "Order Cancelled", description: `Your order #${orderId.substring(0,6)}... has been cancelled.` });
+      fetchUserOrders(); // Refresh order list
+      return true;
+    } catch (error: any) {
+      console.error("Error cancelling order:", error);
+      toast({ title: "Cancellation Failed", description: error.message || "Could not cancel your order.", variant: "destructive" });
+      return false;
+    }
+  }, [user, isAuthenticated, fetchUserOrders]);
+
 
   const contextValue = useMemo(() => ({
     isAuthenticated,
@@ -1234,12 +1251,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleFavoriteProduct,
     isProductFavorited,
     resolvedFavoriteProducts,
+    cancelMyOrder,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts
+    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts, cancelMyOrder
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -1252,4 +1270,3 @@ export function useAppContext() {
   }
   return context;
 }
-

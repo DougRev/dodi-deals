@@ -18,8 +18,6 @@ export const SUBCATEGORIES_MAP: Partial<Record<ProductCategory, readonly string[
   'Vape Hardware': ['Pod Systems', 'Mods', 'Kits', 'Tanks', 'Coils'] as const,
   'Hemp Accessory': ['Glass', 'Paper', 'Grinder', 'Rolling Trays'] as const,
   'Edible': ['Gummies', 'Chocolates', 'Baked Goods', 'Drinks', 'Other Edibles'] as const,
-  // Other categories like 'Vape', 'Flower', 'Pre-roll', 'Concentrate', 'E-Liquid', 'Drinks' currently have no subcategories defined
-  // If they need subcategories in the future, add them here.
 };
 
 
@@ -39,7 +37,7 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
 
 // Schema for a Custom Deal Rule
 export const CustomDealRuleSchema = z.object({
-  id: z.string().optional(), // For UI key management with useFieldArray
+  id: z.string().optional(), 
   selectedDays: z.array(DayOfWeekEnum)
     .min(1, "At least one day must be selected for the deal rule.")
     .refine(days => new Set(days).size === days.length, {
@@ -72,12 +70,11 @@ export interface Store {
   address: string;
   city: string;
   hours: string;
-  dailyDeals?: CustomDealRule[]; // Array of custom deal rules
+  dailyDeals?: CustomDealRule[]; 
 }
 
 // --- Product Related Schemas & Types ---
 
-// Define standard flower weights
 export const flowerWeightsList: [FlowerWeight, ...FlowerWeight[]] = ["3.5g", "7g", "14g", "1oz"];
 export const FlowerWeightEnum = z.enum(flowerWeightsList);
 
@@ -85,31 +82,26 @@ export type FlowerWeight = z.infer<typeof FlowerWeightEnum>;
 export const flowerWeights: FlowerWeight[] = [...flowerWeightsList];
 
 
-// Helper function to convert FlowerWeight string to grams
 export function flowerWeightToGrams(weight: FlowerWeight): number {
   switch (weight) {
     case "3.5g": return 3.5;
     case "7g": return 7;
     case "14g": return 14;
-    case "1oz": return 28; // Using common approximation
+    case "1oz": return 28; 
     default: throw new Error(`Unknown flower weight: ${weight}`);
   }
 }
 
-// Schema for a single weight option for flowers, including its price
 export const FlowerWeightPriceSchema = z.object({
   weight: FlowerWeightEnum,
   price: z.coerce.number().positive({ message: "Price for this weight must be a positive number." }),
 });
 export type FlowerWeightPrice = z.infer<typeof FlowerWeightPriceSchema>;
 
-// Schema for store-specific availability of a product
 export const StoreAvailabilitySchema = z.object({
   storeId: z.string().nonempty({ message: "A store must be selected." }),
-  // For non-Flower products
   price: z.coerce.number().positive({ message: "Price must be a positive number." }).optional(),
   stock: z.coerce.number().int().nonnegative({ message: "Stock must be a non-negative integer." }).optional(),
-  // For Flower products
   totalStockInGrams: z.coerce.number().nonnegative({ message: "Total stock in grams must be a non-negative number." }).optional(),
   weightOptions: z.array(FlowerWeightPriceSchema)
     .optional()
@@ -120,14 +112,13 @@ export const StoreAvailabilitySchema = z.object({
 });
 export type StoreAvailability = z.infer<typeof StoreAvailabilitySchema>;
 
-// Zod schema for product form validation (for Admin page)
 export const ProductSchema = z.object({
   name: z.string().min(3, { message: "Product name must be at least 3 characters." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
-  subcategory: z.string().optional(), // New field for subcategory
+  subcategory: z.string().optional(), 
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
@@ -143,7 +134,6 @@ export const ProductSchema = z.object({
       path: ['brand'],
     });
   }
-  // Validate subcategory based on parent category
   const allowedSubcategories = SUBCATEGORIES_MAP[data.category as ProductCategory];
   if (data.subcategory && (!allowedSubcategories || !allowedSubcategories.includes(data.subcategory))) {
     ctx.addIssue({
@@ -152,14 +142,6 @@ export const ProductSchema = z.object({
         path: ['subcategory'],
     });
   }
-  if (!data.subcategory && allowedSubcategories && allowedSubcategories.length > 0) {
-    // If a category HAS subcategories, one SHOULD be selected.
-    // However, making it strictly required here can be tricky if the "None" option is desired.
-    // For now, the UI will guide this. If the form submits an empty subcategory for a category that expects one,
-    // it implies "None" or the first one should be defaulted if that's the desired behavior.
-    // Current schema allows `subcategory` to be `undefined`.
-  }
-
 
   data.availability.forEach((avail, index) => {
     if (data.category === 'Flower') {
@@ -201,7 +183,7 @@ export const ProductSchema = z.object({
           path: [`availability`, index, `stock`],
         });
       }
-    } else { // Not a Flower product
+    } else { 
       if (avail.weightOptions && avail.weightOptions.length > 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -234,28 +216,24 @@ export const ProductSchema = z.object({
   });
 });
 
-// Type inferred from the Zod schema for product form data
 export type ProductFormData = z.infer<typeof ProductSchema>;
 
-// Main Product interface for Firestore (matches structure of ProductSchema)
 export interface Product extends Omit<ProductFormData, 'availability' | 'category' | 'isFeatured' | 'subcategory'> {
   id: string;
   category: ProductCategory;
-  subcategory?: string; // New field
+  subcategory?: string; 
   isFeatured?: boolean;
   availability: StoreAvailability[];
 }
 
-// This "resolved" type is used by AppContext to provide product info to UI components
-// based on the selected store.
 export interface ResolvedProduct {
   id: string;
-  variantId: string; // Unique identifier for product + weight combination
+  variantId: string; 
   name: string;
   description: string;
   brand: string;
   category: ProductCategory;
-  subcategory?: string; // New field
+  subcategory?: string; 
   dataAiHint?: string;
   isFeatured?: boolean;
   storeId: string;
@@ -266,22 +244,20 @@ export interface ResolvedProduct {
   originalPrice?: number;
   imageUrl: string;
   selectedWeight?: FlowerWeight;
-  isBogoEligible?: boolean; // New flag for Tuesday E-Liquid BOGO
+  isBogoEligible?: boolean; 
 }
 
-
-// This is for the "Hot Deals" / "Special Offers" displayed to the user.
 export interface Deal {
   id: string;
-  product?: ResolvedProduct; // Optional for general banner deals
-  discountPercentage?: number; // Optional for BOGO
+  product?: ResolvedProduct; 
+  discountPercentage?: number; 
   expiresAt: string;
   title: string;
   description?: string;
   storeId: string;
   categoryOnDeal?: ProductCategory;
-  brandOnDeal?: string; // For "Dodi brand" deals
-  dealType?: 'percentage' | 'bogo'; // To differentiate deal types
+  brandOnDeal?: string; 
+  dealType?: 'percentage' | 'bogo'; 
 }
 
 export const StoreRoleEnum = z.enum(['Manager', 'Employee']);
@@ -298,10 +274,10 @@ export interface User {
   isAdmin: boolean;
   assignedStoreId?: string | null;
   storeRole?: StoreRole | null;
-  noShowStrikes: number; // Added for 3-strike rule
-  isBanned: boolean;     // Added for 3-strike rule
-  createdAt: string;     // Ensure createdAt is part of the User type
-  favoriteProductIds?: string[]; // For user favorites
+  noShowStrikes: number; 
+  isBanned: boolean;     
+  createdAt: string;     
+  favoriteProductIds?: string[]; 
 }
 
 export interface CartItem {
@@ -310,14 +286,13 @@ export interface CartItem {
   selectedWeight?: FlowerWeight;
 }
 
-// Order related types
 export const OrderStatusEnum = z.enum(["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"]);
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
 export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"];
 
-export const CancellationReasonEnum = z.enum(["Inventory Issue", "Customer No-Show", "Customer Request", "Other"]);
+export const CancellationReasonEnum = z.enum(["Inventory Issue", "Customer No-Show", "Customer Request", "Cancelled by Customer", "Other"]);
 export type CancellationReason = z.infer<typeof CancellationReasonEnum>;
-export const cancellationReasons: CancellationReason[] = ["Inventory Issue", "Customer No-Show", "Customer Request", "Other"];
+export const cancellationReasons: CancellationReason[] = ["Inventory Issue", "Customer No-Show", "Customer Request", "Cancelled by Customer", "Other"];
 
 
 export interface OrderItem {
@@ -345,12 +320,11 @@ export interface Order {
   orderDate: string;
   status: OrderStatus;
   pickupInstructions?: string;
-  userStrikesAtOrderTime?: number; // Store user's strike count at the time of order
+  userStrikesAtOrderTime?: number; 
   cancellationReason?: CancellationReason;
   cancellationDescription?: string;
 }
 
-// For Points Redemption
 export interface RedemptionOption {
   id: string;
   pointsRequired: number;
