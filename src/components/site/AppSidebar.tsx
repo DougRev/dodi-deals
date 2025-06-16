@@ -19,13 +19,14 @@ import {
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays, Briefcase } from 'lucide-react'; // Added Briefcase
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays, Briefcase, PackagePlus, Users2, ListOrdered } from 'lucide-react';
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
   const { toggleSidebar, state, isMobile } = useSidebar(); 
 
-  const canManageStoreOrders = isAuthenticated && user?.assignedStoreId && (user.storeRole === 'Manager' || user.storeRole === 'Employee');
+  const isStoreStaff = isAuthenticated && user?.assignedStoreId && (user.storeRole === 'Manager' || user.storeRole === 'Employee');
+  const isStoreManager = isStoreStaff && user?.storeRole === 'Manager';
 
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
@@ -104,16 +105,38 @@ export function AppSidebar() {
             </SidebarMenuItem>
           )}
           
-          {canManageStoreOrders && (
+          {isStoreStaff && ( // For both Manager and Employee
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="Manage Store Orders" className="w-full justify-start">
                 <Link href="/manager/orders">
-                  <Briefcase />
+                  <ListOrdered />
                   <span>Manage Orders</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+          
+          {isStoreManager && ( // Only for Manager
+            <>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Manage Store Stock" className="w-full justify-start">
+                  <Link href="/manager/stock">
+                    <PackagePlus />
+                    <span>Manage Stock</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Manage Store Employees" className="w-full justify-start">
+                  <Link href="/manager/employees">
+                    <Users2 />
+                    <span>Manage Employees</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </>
+          )}
+
 
           {isAuthenticated && user?.isAdmin && (
             <SidebarMenuItem>
