@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { updateProductStockForStoreByManager, addProductByManager } from '@/lib/firestoreService';
 import type { Product, StoreAvailability, ProductCategory, FlowerWeightPrice, ProductFormData as AdminProductFormData, FlowerWeight, Store } from '@/lib/types'; // Use AdminProductFormData for existing schema structure
-import { ProductSchema, productCategories, flowerWeights, PREDEFINED_BRANDS, ProductCategoryEnum, FlowerWeightEnum } from '@/lib/types'; // Import ProductSchema for reuse if possible, or a new one
+import { ProductSchema, productCategories, flowerWeights, PREDEFINED_BRANDS, ProductCategoryEnum, FlowerWeightEnum, SUBCATEGORIES_MAP } from '@/lib/types'; // Import ProductSchema for reuse if possible, or a new one
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"; // Added DialogDescription
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { toast } from '@/hooks/use-toast';
-import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle } from 'lucide-react'; // Added PackageIcon
+import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle, Filter, Layers } from 'lucide-react'; // Added PackageIcon, Filter, Layers
 import Link from 'next/link';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,6 +29,7 @@ import { app as firebaseApp } from '@/lib/firebase';
 
 const storage = getStorage(firebaseApp);
 const OTHER_BRAND_VALUE = "Other";
+const SUBCATEGORY_NONE_VALUE = "_NONE_"; // Used for form where empty string not allowed for SelectItem value
 
 
 interface EditableProduct extends Product {
@@ -141,6 +142,8 @@ export default function ManagerStockPage() {
   const fileInputRefManager = useRef<HTMLInputElement>(null);
 
   const [categoryFilter, setCategoryFilter] = useState<'All' | ProductCategory>('All');
+  const [brandFilter, setBrandFilter] = useState<'All' | string>('All');
+  const [subcategoryFilter, setSubcategoryFilter] = useState<'All' | string>('All');
   
   const managerAssignedStore = useMemo(() => {
     if (!memoizedUser?.assignedStoreId || !stores || stores.length === 0) return null;
@@ -265,20 +268,6 @@ export default function ManagerStockPage() {
   }, [isAddProductModalOpen]);
 
 
-
-  const uniqueCategoriesForFilter = useMemo(() => {
-    const categories = new Set(storeProducts.map(p => p.category));
-    return ['All', ...Array.from(categories).sort()] as ('All' | ProductCategory)[];
-  }, [storeProducts]);
-
-  const filteredStoreProducts = useMemo(() => {
-    if (categoryFilter === 'All') {
-      return storeProducts;
-    }
-    return storeProducts.filter(p => p.category === categoryFilter);
-  }, [storeProducts, categoryFilter]);
-
-
   useEffect(() => {
     if (appContextLoadingProducts || loadingAuth) {
       setLoadingPageData(true);
@@ -302,6 +291,36 @@ export default function ManagerStockPage() {
     setLoadingPageData(false);
 
   }, [memoizedUser, allProducts, appContextLoadingProducts, loadingAuth]);
+
+
+  const uniqueCategoriesForFilterManager = useMemo(() => {
+    const categories = new Set(storeProducts.map(p => p.category));
+    return ['All', ...Array.from(categories).sort()] as ('All' | ProductCategory)[];
+  }, [storeProducts]);
+
+  const uniqueBrandsForFilterManager = useMemo(() => {
+    const relevantProducts = categoryFilter === 'All' 
+      ? storeProducts 
+      : storeProducts.filter(p => p.category === categoryFilter);
+    const brands = new Set(relevantProducts.map(p => p.brand));
+    return ['All', ...Array.from(brands).sort()];
+  }, [storeProducts, categoryFilter]);
+
+  const subcategoriesForSelectedCategoryFilter = useMemo(() => {
+    if (categoryFilter === 'All') return ['All'];
+    const subcats = SUBCATEGORIES_MAP[categoryFilter as ProductCategory] || [];
+    return ['All', ...subcats];
+  }, [categoryFilter]);
+
+
+  const filteredStoreProducts = useMemo(() => {
+    return storeProducts.filter(product => {
+      const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
+      const matchesBrand = brandFilter === 'All' || product.brand === brandFilter;
+      const matchesSubcategory = subcategoryFilter === 'All' || (product.subcategory || '') === subcategoryFilter;
+      return matchesCategory && matchesBrand && matchesSubcategory;
+    });
+  }, [storeProducts, categoryFilter, brandFilter, subcategoryFilter]);
 
 
   const handleOpenStockModal = (product: EditableProduct) => {
@@ -334,7 +353,7 @@ export default function ManagerStockPage() {
 
       await updateProductStockForStoreByManager(
         selectedProductForStockEdit.id,
-        memoizedUser.assignedStoreId, // Use manager's assigned store ID
+        memoizedUser.assignedStoreId,
         stockUpdatePayload,
         memoizedUser.id
       );
@@ -437,20 +456,21 @@ export default function ManagerStockPage() {
             finalBrand = 'Dodi Hemp';
         } else if (data.brand === OTHER_BRAND_VALUE) {
             console.warn(`[ManagerStockPage] Client: Brand was '${data.brand}' (OTHER_BRAND_VALUE). If a custom brand was expected but not typed, it will default.`);
-            finalBrand = data.brand.trim() === "" || data.brand === OTHER_BRAND_VALUE ? "Generic Brand" : data.brand; // Fallback if OTHER_BRAND_VALUE is still selected or empty custom
+            finalBrand = data.brand.trim() === "" || data.brand === OTHER_BRAND_VALUE ? "Generic Brand" : data.brand; 
         }
 
-        const productCoreData: Pick<AdminProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'> = {
+        const productCoreData: Pick<ProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint' | 'subcategory'> = {
             name: data.name,
             description: data.description,
             brand: finalBrand, 
             category: data.category,
+            subcategory: undefined, // Manager form doesn't set this, it's an admin concept
             baseImageUrl: data.baseImageUrl,
             dataAiHint: data.dataAiHint || '',
         };
         
         const managerStoreAvailabilityData: StoreAvailability = {
-            storeId: memoizedUser.assignedStoreId!, // Use manager's actual assignedStoreId
+            storeId: memoizedUser.assignedStoreId!,
             storeSpecificImageUrl: undefined, 
             ...(data.category === 'Flower' 
                 ? { weightOptions: data.weightOptions!, totalStockInGrams: data.totalStockInGrams! } 
@@ -542,18 +562,47 @@ export default function ManagerStockPage() {
                     View and update stock levels for products in your store: {managerAssignedStore.name}.
                 </CardDescription>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                 <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as 'All' | ProductCategory)}>
-                    <SelectTrigger className="w-full sm:w-[200px]">
+            <Button onClick={() => setIsAddProductModalOpen(true)} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                <PlusCircle className="mr-2 h-5 w-5" /> Add New Product
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t mt-4">
+            <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground flex items-center"><Filter className="mr-1 h-3 w-3"/>Category</Label>
+                <Select value={categoryFilter} onValueChange={(value) => {setCategoryFilter(value as 'All' | ProductCategory); setBrandFilter('All'); setSubcategoryFilter('All');}}>
+                    <SelectTrigger className="w-full h-9 text-sm">
                         <SelectValue placeholder="Filter by Category" />
                     </SelectTrigger>
                     <SelectContent>
-                        {uniqueCategoriesForFilter.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        {uniqueCategoriesForFilterManager.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                 <Button onClick={() => setIsAddProductModalOpen(true)} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
-                    <PlusCircle className="mr-2 h-5 w-5" /> Add New Product
-                </Button>
+            </div>
+             <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground flex items-center"><Tag className="mr-1 h-3 w-3"/>Brand</Label>
+                <Select value={brandFilter} onValueChange={(value) => setBrandFilter(value as 'All' | string)} disabled={categoryFilter === 'All' && uniqueBrandsForFilterManager.length <= 1}>
+                    <SelectTrigger className="w-full h-9 text-sm">
+                        <SelectValue placeholder="Filter by Brand" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {uniqueBrandsForFilterManager.map(brand => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground flex items-center"><Layers className="mr-1 h-3 w-3"/>Subcategory</Label>
+                <Select 
+                    value={subcategoryFilter} 
+                    onValueChange={(value) => setSubcategoryFilter(value as 'All' | string)}
+                    disabled={categoryFilter === 'All' || (subcategoriesForSelectedCategoryFilter.length <= 1 && subcategoriesForSelectedCategoryFilter[0] === 'All')}
+                >
+                    <SelectTrigger className="w-full h-9 text-sm">
+                        <SelectValue placeholder="Filter by Subcategory" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {subcategoriesForSelectedCategoryFilter.map(subcat => <SelectItem key={subcat} value={subcat}>{subcat}</SelectItem>)}
+                    </SelectContent>
+                </Select>
             </div>
           </div>
         </CardHeader>
@@ -569,8 +618,8 @@ export default function ManagerStockPage() {
           ) : filteredStoreProducts.length === 0 ? (
              <div className="text-center py-10">
               <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-lg">No products match the category '{categoryFilter}'.</p>
-              <p className="text-muted-foreground text-sm">Try selecting a different category or "All".</p>
+              <p className="text-muted-foreground text-lg">No products match the current filters.</p>
+              <p className="text-muted-foreground text-sm">Try adjusting your filter criteria.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -579,7 +628,8 @@ export default function ManagerStockPage() {
                   <TableRow>
                     <TableHead className="w-[60px]">Image</TableHead>
                     <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
+                    <TableHead>Category / Sub</TableHead>
+                    <TableHead>Brand</TableHead>
                     <TableHead>Current Stock</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -597,7 +647,11 @@ export default function ManagerStockPage() {
                           </div>
                         </TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>{product.category}</TableCell>
+                        <TableCell>
+                            {product.category}
+                            {product.subcategory && <span className="block text-xs text-muted-foreground">↳ {product.subcategory}</span>}
+                        </TableCell>
+                        <TableCell>{product.brand}</TableCell>
                         <TableCell>{stockDisplay}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="outline" size="sm" onClick={() => handleOpenStockModal(product)} className="text-accent border-accent hover:bg-accent/10">
