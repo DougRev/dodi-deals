@@ -11,6 +11,7 @@ import { ShoppingCart, Plus, Minus, Percent, Weight, AlertTriangle, Heart } from
 import { Badge } from '@/components/ui/badge';
 import { FlowerWeightSelectorDialog } from './FlowerWeightSelectorDialog';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast'; // Added for favorite login required
 
 interface ProductCardProps {
   product: ResolvedProduct;
@@ -105,7 +106,7 @@ export function ProductCard({ product }: ProductCardProps) {
                     className={cn(
                         "absolute top-2 left-2 rounded-full bg-background/70 hover:bg-background/90 text-destructive transition-all duration-200",
                         isFavorited ? "text-destructive fill-destructive" : "text-muted-foreground/70 hover:text-destructive",
-                        "group-hover:opacity-100 md:opacity-0 focus:opacity-100" // Show on group hover (card hover) or focus, always on mobile implicit hover
+                        "group-hover:opacity-100 md:opacity-0 focus:opacity-100" 
                     )}
                     onClick={handleToggleFavorite}
                     aria-label={isFavorited ? "Unfavorite product" : "Favorite product"}
@@ -114,23 +115,24 @@ export function ProductCard({ product }: ProductCardProps) {
                     <Heart className={cn("h-5 w-5", isFavorited ? "fill-destructive" : "")} />
                 </Button>
             )}
+            {/* Deal Badges */}
+            {product.isBogoEligible && (
+                <Badge
+                    variant="destructive"
+                    className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
+                >
+                    BOGO 50%
+                </Badge>
+            )}
+            {!product.isBogoEligible && isDeal && discountPercent > 0 && (
+                <Badge
+                    variant="destructive"
+                    className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
+                >
+                    <Percent className="h-3 w-3 mr-1" /> {discountPercent}% OFF
+                </Badge>
+            )}
           </div>
-          {isDeal && product.category !== 'Flower' && (
-            <Badge
-              variant="destructive"
-              className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
-            >
-              <Percent className="h-3 w-3 mr-1" /> {discountPercent}% OFF
-            </Badge>
-          )}
-          {product.isBogoEligible && (
-             <Badge
-              variant="destructive"
-              className="absolute top-2 right-2 text-xs px-2 py-1 flex items-center"
-            >
-              BOGO 50%
-            </Badge>
-          )}
         </CardHeader>
         <CardContent className="p-4 flex-grow">
           <CardTitle className="text-xl font-headline mb-1">{product.name}</CardTitle>
@@ -140,6 +142,9 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.category === 'Flower' ? (
             <p className="text-lg font-semibold text-primary">
               From ${product.price.toFixed(2)}
+              {isDeal && product.originalPrice && (
+                  <span className="text-sm line-through text-muted-foreground ml-2">${product.originalPrice.toFixed(2)}</span>
+              )}
             </p>
           ) : (
             <div className="flex items-baseline space-x-2 mb-1">
@@ -223,6 +228,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </>
   );
 }
-
-
-    
