@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { updateProductStockForStoreByManager, addProductByManager } from '@/lib/firestoreService';
 import type { Product, StoreAvailability, ProductCategory, FlowerWeightPrice, ProductFormData as AdminProductFormData, FlowerWeight } from '@/lib/types'; // Use AdminProductFormData for existing schema structure
-import { ProductSchema, productCategories, flowerWeights, PREDEFINED_BRANDS } from '@/lib/types'; // Import ProductSchema for reuse if possible, or a new one
+import { ProductSchema, productCategories, flowerWeights, PREDEFINED_BRANDS, ProductCategoryEnum, FlowerWeightEnum } from '@/lib/types'; // Import ProductSchema for reuse if possible, or a new one
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"; // Added DialogDescription
@@ -41,14 +41,14 @@ const ManagerAddProductFormSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
-  category: z.nativeEnum(productCategories),
+  category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   // Store-specific availability part
   price: z.coerce.number().positive({ message: "Price must be a positive number." }).optional(),
   stock: z.coerce.number().int().nonnegative({ message: "Stock must be a non-negative integer." }).optional(),
   totalStockInGrams: z.coerce.number().nonnegative({ message: "Total stock in grams must be non-negative." }).optional(),
   weightOptions: z.array(z.object({
-      weight: z.nativeEnum(flowerWeights),
+      weight: FlowerWeightEnum,
       price: z.coerce.number().positive({ message: "Price must be positive." })
   })).optional(),
 }).superRefine((data, ctx) => {
@@ -359,24 +359,24 @@ export default function ManagerStockPage() {
 
 
   const handleCreateProductByManager = async (data: ManagerAddProductFormData) => {
-    console.log("[ManagerStockPage] handleCreateProductByManager called with data:", JSON.stringify(data, null, 2));
+    console.log("[ManagerStockPage] Client: handleCreateProductByManager called with form data:", JSON.stringify(data, null, 2));
     if (!memoizedUser || !memoizedSelectedStore?.id) {
         toast({ title: "Error", description: "User or store information is missing.", variant: "destructive"});
-        console.error("[ManagerStockPage] User or selected store missing.");
+        console.error("[ManagerStockPage] Client: User or selected store missing.");
         return;
     }
-    console.log("[ManagerStockPage] Setting isCreatingProduct to true");
+    console.log("[ManagerStockPage] Client: Setting isCreatingProduct to true");
     setIsCreatingProduct(true);
 
     try {
         let finalBrand = data.brand;
         if (data.category === 'Flower') {
             finalBrand = 'Dodi Hemp';
-        } else if (data.brand === OTHER_BRAND_VALUE || data.brand.trim() === '') {
-            // This case should ideally be caught by Zod validation making manual brand input required if "Other" is selected.
-            // If it reaches here, it implies "Other" was selected and no manual brand was entered.
-            finalBrand = 'Generic Brand'; // Fallback, and log a warning.
-            console.warn(`[ManagerStockPage] Brand was '${data.brand}', falling back to 'Generic Brand'. Manual input might be missing or form logic needs review for 'Other' brand selection.`);
+        } else if (data.brand === OTHER_BRAND_VALUE) {
+            // If "Other" was selected but the manual input was empty (which it shouldn't be if validation is strict on min length)
+            // or if the form's brand field (the manual input one) is empty after "Other" selection.
+            finalBrand = 'Generic Brand'; // Fallback
+             console.warn(`[ManagerStockPage] Client: Brand was '${data.brand}' (likely 'Other' without manual input or empty manual input), falling back to 'Generic Brand'.`);
         }
 
 
@@ -393,18 +393,18 @@ export default function ManagerStockPage() {
             storeId: memoizedSelectedStore.id,
             storeSpecificImageUrl: undefined, 
             ...(data.category === 'Flower' 
-                ? { weightOptions: data.weightOptions, totalStockInGrams: data.totalStockInGrams } 
-                : { price: data.price, stock: data.stock }
+                ? { weightOptions: data.weightOptions!, totalStockInGrams: data.totalStockInGrams! } 
+                : { price: data.price!, stock: data.stock! }
             ),
         };
         
-        console.log("[ManagerStockPage] Calling addProductByManager server action with:", 
+        console.log("[ManagerStockPage] Client: Calling addProductByManager server action with:", 
           JSON.stringify({productCoreData, managerStoreAvailabilityData, managerUserId: memoizedUser.id}, null, 2)
         );
         
         await addProductByManager(productCoreData, managerStoreAvailabilityData, memoizedUser.id);
         
-        console.log("[ManagerStockPage] addProductByManager successful.");
+        console.log("[ManagerStockPage] Client: addProductByManager successful.");
         toast({ title: "Product Created", description: `${data.name} has been added to your store.`});
         setIsAddProductModalOpen(false);
         addProductForm.reset(); // Reset after successful submission
@@ -413,10 +413,10 @@ export default function ManagerStockPage() {
         if (fileInputRefManager.current) fileInputRefManager.current.value = "";
         
     } catch (error: any) {
-        console.error("[ManagerStockPage] Failed to create product by manager:", error, error.stack);
+        console.error("[ManagerStockPage] Client: Failed to create product by manager:", error, error.stack);
         toast({ title: "Error Creating Product", description: error.message || "Failed to create product.", variant: "destructive"});
     } finally {
-        console.log("[ManagerStockPage] Setting isCreatingProduct to false in finally block.");
+        console.log("[ManagerStockPage] Client: Setting isCreatingProduct to false in finally block.");
         setIsCreatingProduct(false);
     }
   };
@@ -720,14 +720,14 @@ export default function ManagerStockPage() {
                 <FormLabel className="text-md font-semibold text-primary flex items-center"><StoreIcon className="mr-2 h-5 w-5"/>Availability for {memoizedSelectedStore?.name}</FormLabel>
                  {watchedCategoryManager === 'Flower' ? (
                     <>
-                        <FormField control={addProductForm.control} name="totalStockInGrams" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><PackagePlus className="mr-2 h-4 w-4"/>Total Stock (grams)</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} step="0.1" /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={addProductForm.control} name="totalStockInGrams" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><PackagePlus className="mr-2 h-4 w-4"/>Total Stock (grams)</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value)} step="0.1" /></FormControl><FormMessage /></FormItem>)}/>
                         <div className="space-y-3 pt-2 border-t mt-3">
                             <FormLabel className="text-sm font-medium text-primary flex items-center"><Weight className="mr-2 h-4 w-4"/>Weight Option Prices</FormLabel>
                             {flowerWeights.map((fw, index) => (
                                 <Card key={fw} className="p-3 bg-muted/50">
                                     <FormLabel className="text-xs font-semibold">{fw}</FormLabel>
                                     <FormField control={addProductForm.control} name={`weightOptions.${index}.price`} render={({ field: weightPriceField }) => (
-                                        <FormItem><FormLabel className="text-xs">Price ($)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...weightPriceField} value={weightPriceField.value ?? ''} onChange={e => weightPriceField.onChange(parseFloat(e.target.value) || undefined)} step="0.01" /></FormControl><FormMessage /></FormItem>
+                                        <FormItem><FormLabel className="text-xs">Price ($)</FormLabel><FormControl><Input type="number" placeholder="0.00" {...weightPriceField} value={weightPriceField.value ?? ''} onChange={e => weightPriceField.onChange(e.target.value)} step="0.01" /></FormControl><FormMessage /></FormItem>
                                     )}/>
                                     <Controller name={`weightOptions.${index}.weight`} control={addProductForm.control} defaultValue={fw} render={({ field }) => <input type="hidden" {...field} />} />
                                 </Card>
@@ -738,8 +738,8 @@ export default function ManagerStockPage() {
                     </>
                  ) : (
                     <div className="grid grid-cols-2 gap-4">
-                        <FormField control={addProductForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Price ($)</FormLabel><FormControl><Input type="number" placeholder="29.99" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} step="0.01" /></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={addProductForm.control} name="stock" render={({ field }) => (<FormItem><FormLabel>Stock</FormLabel><FormControl><Input type="number" placeholder="50" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || undefined)} step="1" /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={addProductForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Price ($)</FormLabel><FormControl><Input type="number" placeholder="29.99" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value)} step="0.01" /></FormControl><FormMessage /></FormItem>)}/>
+                        <FormField control={addProductForm.control} name="stock" render={({ field }) => (<FormItem><FormLabel>Stock</FormLabel><FormControl><Input type="number" placeholder="50" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value)} step="1" /></FormControl><FormMessage /></FormItem>)}/>
                     </div>
                  )}
               </Card>

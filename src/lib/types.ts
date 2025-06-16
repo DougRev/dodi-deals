@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 
 // Zod schema for store form validation
@@ -9,9 +8,11 @@ export type DayOfWeek = z.infer<typeof DayOfWeekEnum>;
 export const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // Updated Product Categories
-export const ProductCategoryEnum = z.enum(['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks']);
+export const productCategoriesList: [string, ...string[]] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks'];
+export const ProductCategoryEnum = z.enum(productCategoriesList);
 export type ProductCategory = z.infer<typeof ProductCategoryEnum>;
-export const productCategories: ProductCategory[] = ['Vape', 'Flower', 'Pre-roll', 'Edible', 'Concentrate', 'Hemp Accessory', 'E-Liquid', 'Drinks'];
+export const productCategories: ProductCategory[] = [...productCategoriesList];
+
 
 // Predefined brands for product categories
 export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
@@ -25,15 +26,6 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Drinks': ["Generic Drink Brand", "Dodi Drinks"], // Added Drinks
 };
 
-
-// Business rules for fixed daily categories (used as fallback or informational) - REMOVED as new logic is more complex
-// export const fixedDailyCategories: Partial<Record<DayOfWeek, ProductCategory>> = {
-//   Monday: 'Flower',
-//   Tuesday: 'Vape',
-//   Wednesday: 'Pre-roll',
-//   Thursday: 'Hemp Accessory',
-//   Friday: 'Vape',
-// };
 
 // Schema for a Custom Deal Rule
 export const CustomDealRuleSchema = z.object({
@@ -76,9 +68,11 @@ export interface Store {
 // --- Product Related Schemas & Types ---
 
 // Define standard flower weights
-export const FlowerWeightEnum = z.nativeEnum(["3.5g", "7g", "14g", "1oz"]);
+export const flowerWeightsList: [FlowerWeight, ...FlowerWeight[]] = ["3.5g", "7g", "14g", "1oz"];
+export const FlowerWeightEnum = z.enum(flowerWeightsList);
 export type FlowerWeight = z.infer<typeof FlowerWeightEnum>;
-export const flowerWeights: FlowerWeight[] = ["3.5g", "7g", "14g", "1oz"];
+export const flowerWeights: FlowerWeight[] = [...flowerWeightsList];
+
 
 // Helper function to convert FlowerWeight string to grams
 export function flowerWeightToGrams(weight: FlowerWeight): number {
@@ -121,7 +115,7 @@ export const ProductSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
-  category: z.nativeEnum(productCategories),
+  category: ProductCategoryEnum,
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
@@ -339,4 +333,3 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
 ];
 
     
-
