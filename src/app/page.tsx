@@ -56,12 +56,11 @@ export default function HomePage() {
 
   return (
     <div className="space-y-12">
-      <section>
-        <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h1>
-        <p className="text-center text-muted-foreground mb-8">Don't miss out on these limited-time offers!</p>
-        {loadingProducts ? (
-           <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" /> <span className="ml-2">Loading deals...</span></div>
-        ) : deals.length > 0 ? (
+      {/* Deals Section - Conditionally Rendered */}
+      {!loadingProducts && deals.length > 0 && (
+        <section>
+          <h1 className="text-4xl font-bold font-headline text-center mb-2 text-primary">Today's Hottest Deals at {selectedStore.name}</h1>
+          <p className="text-center text-muted-foreground mb-8">Don't miss out on these limited-time offers!</p>
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {displayedDeals.map((deal) => (
@@ -94,14 +93,8 @@ export default function HomePage() {
               </div>
             )}
           </>
-        ) : (
-          <Card className="text-center py-12 shadow-lg">
-            <CardContent>
-              <p className="text-lg text-muted-foreground">No active deals at {selectedStore.name} right now. Check back soon!</p>
-            </CardContent>
-          </Card>
-        )}
-      </section>
+        </section>
+      )}
 
       <section>
         <div className="flex justify-between items-center mb-8">
