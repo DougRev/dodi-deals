@@ -3,11 +3,12 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Deal } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { ShoppingCart, TimerIcon, Percent, Tag } from 'lucide-react'; // Added Tag
+import { ShoppingCart, TimerIcon, Percent, Tag, ArrowRight } from 'lucide-react'; 
 
 interface DealCardProps {
   deal: Deal;
@@ -37,14 +38,24 @@ export function DealCard({ deal }: DealCardProps) {
   const { addToCart, isAuthenticated, selectedStore } = useAppContext();
   const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(deal.expiresAt));
   
-  // Safely initialize currentImgSrc
-  const initialImgSrc = deal.product?.imageUrl || '/images/categories/default.png';
+  let initialImgSrc = '/images/categories/default.png'; // Default fallback
+  if (deal.product?.imageUrl) {
+    initialImgSrc = deal.product.imageUrl;
+  } else if (deal.categoryOnDeal) {
+    initialImgSrc = `/images/categories/${deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-')}.png`;
+  }
+
   const [currentImgSrc, setCurrentImgSrc] = useState(initialImgSrc);
 
   useEffect(() => {
-    // Safely update currentImgSrc
-    setCurrentImgSrc(deal.product?.imageUrl || '/images/categories/default.png');
-  }, [deal.product?.imageUrl]);
+    let newImgSrc = '/images/categories/default.png';
+    if (deal.product?.imageUrl) {
+      newImgSrc = deal.product.imageUrl;
+    } else if (deal.categoryOnDeal) {
+      newImgSrc = `/images/categories/${deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-')}.png`;
+    }
+    setCurrentImgSrc(newImgSrc);
+  }, [deal.product?.imageUrl, deal.categoryOnDeal]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -55,7 +66,7 @@ export function DealCard({ deal }: DealCardProps) {
   });
 
   const handleAddToCart = () => {
-    if (!deal.product) return; // Should not happen if button is disabled
+    if (!deal.product) return; 
     if (!selectedStore) {
       alert("Please select a store first.");
       return;
@@ -74,6 +85,7 @@ export function DealCard({ deal }: DealCardProps) {
   timerComponents.push(`${timeLeft.seconds}s`);
 
   const isDealActive = +new Date(deal.expiresAt) - +new Date() > 0;
+  const isCategoryOrBrandDeal = !deal.product && (deal.categoryOnDeal || deal.brandOnDeal);
 
   return (
     <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 border-2 border-accent">
@@ -85,9 +97,9 @@ export function DealCard({ deal }: DealCardProps) {
             fill
             style={{ objectFit: 'cover' }}
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            data-ai-hint={deal.product?.dataAiHint || "special deal promotion"}
+            data-ai-hint={deal.product?.dataAiHint || deal.categoryOnDeal || deal.brandOnDeal || "special deal promotion"}
             onError={() => {
-              setCurrentImgSrc('/images/categories/default.png'); // Fallback if even initialImgSrc fails
+              setCurrentImgSrc('/images/categories/default.png'); 
             }}
           />
         </div>
@@ -124,7 +136,6 @@ export function DealCard({ deal }: DealCardProps) {
             </div>
           </>
         ) : (
-          // Display for general deals without a specific product
           <>
              <p className="text-sm text-muted-foreground mb-1">
               {deal.categoryOnDeal ? `Applies to: All ${deal.categoryOnDeal}` : (deal.brandOnDeal ? `Applies to: ${deal.brandOnDeal} Brand Items` : deal.dealType === 'bogo' ? 'Special Offer!' : 'Store-Wide Special')}
@@ -145,7 +156,18 @@ export function DealCard({ deal }: DealCardProps) {
         )}
       </CardContent>
       <CardFooter className="p-4">
-        {deal.product ? (
+        {isCategoryOrBrandDeal ? (
+           <Button
+            asChild
+            disabled={!isDealActive || !isAuthenticated}
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            <Link href={`/products?${deal.categoryOnDeal ? `category=${encodeURIComponent(deal.categoryOnDeal)}` : `brand=${encodeURIComponent(deal.brandOnDeal || '')}`}`}>
+                Shop {deal.categoryOnDeal || deal.brandOnDeal} Deals
+                <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        ) : deal.product ? (
           <Button
             onClick={handleAddToCart}
             disabled={!isDealActive || deal.product.stock === 0 || !isAuthenticated}
@@ -158,12 +180,18 @@ export function DealCard({ deal }: DealCardProps) {
           <Button
             disabled={!isDealActive || !isAuthenticated}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground opacity-70 cursor-not-allowed"
-            title="This is a general announcement. See qualifying products in store."
+            title="This is a general announcement. See qualifying products in store or view all products."
+            asChild={isAuthenticated && isDealActive} 
           >
-            View Products
+            {isAuthenticated && isDealActive ? (
+                <Link href="/products">View All Products</Link>
+            ) : (
+                <span>View Products</span> 
+            )}
           </Button>
         )}
       </CardFooter>
     </Card>
   );
 }
+

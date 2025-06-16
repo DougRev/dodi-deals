@@ -12,7 +12,8 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams, SUBCATEGORIES_MAP } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
+// import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites, addProductByManager, updateProductStockForStoreByManager } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -180,7 +181,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             id: docSnap.id, 
             ...data,
             category: validCategory,
-            subcategory: data.subcategory || undefined, // Ensure subcategory is loaded
+            subcategory: data.subcategory || undefined,
         } as Product;
     });
       setAllProducts(fetchedProducts);
@@ -549,8 +550,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     let productToAdd: ResolvedProduct = baseProduct;
-    let itemIdentifier = baseProduct.variantId; // For non-flower or base flower card
-    let finalSelectedWeight = baseProduct.selectedWeight; // Use product's own selectedWeight if already a variant
+    let itemIdentifier = baseProduct.variantId; 
+    let finalSelectedWeight = baseProduct.selectedWeight; 
 
     if (baseProduct.category === 'Flower' && selectedWeightParam) {
       finalSelectedWeight = selectedWeightParam;
@@ -573,7 +574,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (quantity === 0) return;
       }
       
-      // Apply daily deals to the specific weight option price
       let effectivePrice = weightOption.price;
       let originalPrice: number | undefined = weightOption.price;
       let isProductOnDeal = false;
@@ -582,7 +582,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const today = new Date();
       const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
 
-      if (currentDayName === 'Tuesday' && baseProduct.category === 'E-Liquid') { // This part won't apply to Flower, but kept for consistency
+      if (currentDayName === 'Tuesday' && baseProduct.category === 'E-Liquid') { 
         isBogoEligibleProduct = true;
       } else if (currentDayName === 'Wednesday' && baseProduct.brand.toLowerCase().startsWith('dodi')) {
         isProductOnDeal = true;
@@ -611,7 +611,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         selectedWeight: finalSelectedWeight,
         isBogoEligible: isBogoEligibleProduct,
       };
-    } else if (baseProduct.category !== 'Flower') { // For non-flower products, ensure stock check
+    } else if (baseProduct.category !== 'Flower') { 
        if (quantity > baseProduct.stock) {
         toast({ title: "Not Enough Stock", description: `Only ${baseProduct.stock} units of ${baseProduct.name} available.`, variant: "default" });
         quantity = baseProduct.stock;
@@ -626,7 +626,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (existingItemIndex > -1) {
         const updatedCart = [...prevCart];
         const newQuantity = Math.min(updatedCart[existingItemIndex].quantity + quantity, productToAdd.stock);
-        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity, product: productToAdd }; // Ensure product details are updated if price changed
+        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity, product: productToAdd }; 
         return updatedCart;
       }
       return [...prevCart, { product: productToAdd, quantity: Math.min(quantity, productToAdd.stock), selectedWeight: finalSelectedWeight }];
@@ -853,7 +853,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           currentImageUrl = `/images/categories/${categoryPath}.png`;
         }
 
-        // Common properties for base product or variant
         const baseResolvedInfo: Omit<ResolvedProduct, 'price' | 'stock' | 'variantId' | 'originalPrice' | 'isBogoEligible' | 'availableWeights' | 'totalStockInGrams' | 'selectedWeight'> = {
           id: p.id,
           name: p.name,
@@ -884,11 +883,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const smallestWeightGrams = flowerWeightToGrams(smallestWeightOption.weight);
             const stockForSmallestUnit = smallestWeightGrams > 0 ? Math.floor((availabilityForStore.totalStockInGrams || 0) / smallestWeightGrams) : 0;
 
-            // Apply daily deals to the base product's display price (minPrice)
             let effectiveMinPrice = minPrice;
             let originalMinPrice: number | undefined = minPrice;
             let isProductOnDeal = false;
-            // BOGO eligibility is handled by product type, not by changing price here
             let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid'); 
 
             if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
@@ -911,14 +908,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             resolved.push({
               ...baseResolvedInfo,
-              variantId: p.id, // Base flower product card uses product.id as variantId
+              variantId: p.id, 
               price: effectiveMinPrice,
               originalPrice: isProductOnDeal ? originalMinPrice : undefined,
-              stock: stockForSmallestUnit, // Represents availability of smallest unit
+              stock: stockForSmallestUnit, 
               availableWeights: validWeightOptions,
               totalStockInGrams: availabilityForStore.totalStockInGrams,
               isBogoEligible: isBogoEligibleProduct,
-              selectedWeight: undefined, // Not pre-selected for base card
+              selectedWeight: undefined, 
             });
           }
         } else if (p.category !== 'Flower' && availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
@@ -946,7 +943,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             resolved.push({
                 ...baseResolvedInfo,
-                variantId: p.id, // Non-flower products also use product.id as variantId for card
+                variantId: p.id, 
                 price: effectivePrice,
                 originalPrice: isProductOnDeal ? originalPriceValue : undefined,
                 stock: availabilityForStore.stock,
@@ -976,49 +973,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       generatedDeals.push({
         id: `deal-${currentDayName}-eliquid-bogo`,
         title: "BOGO 50% Off E-Liquids!",
-        description: "Buy one E-Liquid, get a second one 50% off (discount applies to item of equal or lesser value in cart).",
+        description: "Buy one E-Liquid, get a second one 50% off (discount applies to item of equal or lesser value in cart). Applies to all E-Liquid products.",
         categoryOnDeal: 'E-Liquid',
         dealType: 'bogo',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
+        product: undefined, // Explicitly undefined for category-wide
       });
     }
     if (currentDayName === 'Wednesday') {
       generatedDeals.push({
         id: `deal-${currentDayName}-dodi-brands`,
         title: "15% Off Dodi Brands!",
-        description: "Enjoy 15% off all products from Dodi Hemp, Dodi Accessories, etc.",
+        description: "Enjoy 15% off all products from Dodi Hemp, Dodi Accessories, Dodi Drinks etc.",
         brandOnDeal: 'Dodi', 
         discountPercentage: 15,
         dealType: 'percentage',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
+        product: undefined, // Explicitly undefined for brand-wide
       });
     }
     if (currentDayName === 'Thursday') {
          generatedDeals.push({
             id: `deal-${currentDayName}-drinks`,
             title: "20% Off All Drinks!",
-            description: "Quench your thirst with 20% off our new Drinks category.",
+            description: "Quench your thirst with 20% off our Drinks category.",
             categoryOnDeal: 'Drinks',
             discountPercentage: 20,
             dealType: 'percentage',
             expiresAt: endOfToday.toISOString(),
             storeId: _selectedStore.id,
+            product: undefined, // Explicitly undefined for category-wide
         });
     }
      if (_selectedStore.dailyDeals) {
         _selectedStore.dailyDeals.forEach(rule => {
             if (rule.selectedDays.includes(currentDayName)) {
-                // Find a sample product that this custom rule would apply to for display purposes
-                const sampleProductForDeal = products.find(p => 
-                    p.category === rule.category &&
-                    (!p.originalPrice || p.price === parseFloat((p.originalPrice * (1 - rule.discountPercentage / 100)).toFixed(2))) // Ensure this product IS affected by THIS rule
-                );
-
                 generatedDeals.push({
                     id: `deal-store-${rule.category}-${rule.discountPercentage}-${_selectedStore.id}`,
-                    product: sampleProductForDeal, // Can be undefined if no specific product matches for display
+                    product: undefined, // This deal is for a category, not a specific product
                     title: `${rule.discountPercentage}% Off ${rule.category}!`,
                     description: `Store Special: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
                     categoryOnDeal: rule.category,
@@ -1087,7 +1081,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .filter(p => user.favoriteProductIds!.includes(p.id))
       .map(p => {
         const availabilityForStore = p.availability.find(avail => avail.storeId === _selectedStore.id);
-        if (!availabilityForStore) return null; // Product not available at selected store
+        if (!availabilityForStore) return null; 
 
         let currentImageUrl = p.baseImageUrl;
          if (availabilityForStore.storeSpecificImageUrl && availabilityForStore.storeSpecificImageUrl.trim() !== '') {
@@ -1119,7 +1113,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return grams > 0 && (availabilityForStore.totalStockInGrams || 0) >= grams;
           });
           const prices = validWeightOptions.map(wo => wo.price);
-          const minPrice = prices.length > 0 ? Math.min(...prices) : 0; // Default to 0 if no valid weights
+          const minPrice = prices.length > 0 ? Math.min(...prices) : 0; 
 
           const smallestWeightOption = validWeightOptions.length > 0 ? validWeightOptions.reduce((smallest, current) => {
               return flowerWeightToGrams(current.weight) < flowerWeightToGrams(smallest.weight) ? current : smallest;
@@ -1258,3 +1252,4 @@ export function useAppContext() {
   }
   return context;
 }
+
