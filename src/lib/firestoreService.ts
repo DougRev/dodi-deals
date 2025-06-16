@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason } from '@/lib/types'; // Added FlowerWeight, CancellationReason
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData } from '@/lib/types'; // Added FlowerWeight, CancellationReason
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { flowerWeightToGrams, productCategories } from '@/lib/types';
@@ -144,6 +144,52 @@ export async function addProduct(productData: Omit<Product, 'id'>): Promise<stri
     throw error;
   }
 }
+
+export async function addProductByManager(
+  productCoreData: Pick<ProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'>,
+  managerStoreAvailabilityData: StoreAvailability, // This will contain the specific storeId of the manager already
+  managerUserId: string
+): Promise<string> {
+  const functionName = 'addProductByManager';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Manager: ${managerUserId}, Product: ${productCoreData.name}, Store Avail: ${JSON.stringify(managerStoreAvailabilityData)}`);
+
+  const managerUserRef = adminDb!.collection('users').doc(managerUserId);
+  try {
+    const managerDoc = await managerUserRef.get();
+    if (!managerDoc.exists) {
+      throw new Error("Manager user performing action does not exist.");
+    }
+    const managerData = managerDoc.data() as User;
+    if (managerData.storeRole !== 'Manager' || !managerData.assignedStoreId) {
+      throw new Error("User is not a manager or not assigned to a store.");
+    }
+    if (managerData.assignedStoreId !== managerStoreAvailabilityData.storeId) {
+      throw new Error("Manager attempting to add product to a store they are not assigned to.");
+    }
+
+    // Ensure brand for Flower is Dodi Hemp
+    if (productCoreData.category === 'Flower' && productCoreData.brand !== 'Dodi Hemp') {
+        productCoreData.brand = 'Dodi Hemp'; // Enforce
+    }
+    
+    const newProductData: Omit<Product, 'id'> = {
+      ...productCoreData,
+      isFeatured: false, // Managers cannot set as featured on creation
+      availability: [managerStoreAvailabilityData], // Only manager's store availability
+    };
+
+    const productsColRef = adminDb!.collection('products');
+    const docRef = await productsColRef.add(newProductData);
+    console.log(`[firestoreService][AdminSDK][${functionName}] Product added successfully by manager ${managerUserId} with ID: ${docRef.id}`);
+    return docRef.id;
+  } catch (error) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error adding product by manager:`, error);
+    throw error;
+  }
+}
+
 
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<void> {
   const functionName = 'updateProduct';

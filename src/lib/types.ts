@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 // Zod schema for store form validation
@@ -75,7 +76,7 @@ export interface Store {
 // --- Product Related Schemas & Types ---
 
 // Define standard flower weights
-export const FlowerWeightEnum = z.enum(["3.5g", "7g", "14g", "1oz"]);
+export const FlowerWeightEnum = z.nativeEnum(["3.5g", "7g", "14g", "1oz"]);
 export type FlowerWeight = z.infer<typeof FlowerWeightEnum>;
 export const flowerWeights: FlowerWeight[] = ["3.5g", "7g", "14g", "1oz"];
 
@@ -120,7 +121,7 @@ export const ProductSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
-  category: ProductCategoryEnum,
+  category: z.nativeEnum(productCategories),
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
@@ -213,10 +214,10 @@ export const ProductSchema = z.object({
 export type ProductFormData = z.infer<typeof ProductSchema>;
 
 // Main Product interface for Firestore (matches structure of ProductSchema)
-export interface Product extends Omit<ProductFormData, 'availability' | 'category'> {
+export interface Product extends Omit<ProductFormData, 'availability' | 'category' | 'isFeatured'> {
   id: string;
   category: ProductCategory; // Ensure category is part of the base Product
-  isFeatured?: boolean;
+  isFeatured?: boolean; // Make isFeatured optional as managers won't set it
   availability: StoreAvailability[];
 }
 
@@ -338,3 +339,4 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
 ];
 
     
+
