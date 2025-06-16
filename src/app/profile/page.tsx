@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
 import type { ResolvedProduct, FlowerWeight } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star } from 'lucide-react'; 
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { Order } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 
 const avatarOptions = [
   '/icons/profile-icons/avatar1.png',
@@ -38,22 +39,22 @@ function formatOrderDate(isoDate: string) {
 }
 
 function ProfilePageInternal() {
-  const { 
-    isAuthenticated, 
-    user, 
-    logout, 
-    loadingAuth, 
-    updateUserAvatar, 
+  const {
+    isAuthenticated,
+    user,
+    logout,
+    loadingAuth,
+    updateUserAvatar,
     updateUserProfileDetails,
     userOrders,
     loadingUserOrders,
     fetchUserOrders,
-    resolvedFavoriteProducts, // New from context
+    resolvedFavoriteProducts,
     toggleFavoriteProduct,
     addToCart,
     selectedStore,
     loadingProducts,
-  } = useAppContext(); 
+  } = useAppContext();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
@@ -63,7 +64,6 @@ function ProfilePageInternal() {
   const [editedName, setEditedName] = useState(user?.name || '');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  // State for FlowerWeightSelectorDialog
   const [productForWeightSelection, setProductForWeightSelection] = useState<ResolvedProduct | null>(null);
   const [isWeightSelectorOpen, setIsWeightSelectorOpen] = useState(false);
 
@@ -82,7 +82,7 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
 
-  if (loadingAuth || !isAuthenticated || !user) { 
+  if (loadingAuth || !isAuthenticated || !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
@@ -100,7 +100,7 @@ function ProfilePageInternal() {
 
   const handleOpenEditModal = () => {
     setEditedName(user?.name || '');
-    setSelectedAvatarUrl(user?.avatarUrl); 
+    setSelectedAvatarUrl(user?.avatarUrl);
     setIsEditModalOpen(true);
   };
 
@@ -131,8 +131,8 @@ function ProfilePageInternal() {
     switch (status) {
       case "Pending Confirmation": return "default";
       case "Preparing": return "secondary";
-      case "Ready for Pickup": return "outline"; 
-      case "Completed": return "default"; 
+      case "Ready for Pickup": return "outline";
+      case "Completed": return "default";
       case "Cancelled": return "destructive";
       default: return "secondary";
     }
@@ -157,7 +157,7 @@ function ProfilePageInternal() {
                       {user.name ? user.name.charAt(0).toUpperCase() : <UserCircle className="h-12 w-12"/>}
                   </AvatarFallback>
                 </Avatar>
-                {combinedLoading && ( 
+                {combinedLoading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full mb-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
@@ -170,13 +170,13 @@ function ProfilePageInternal() {
               <CardDescription>{user.email}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button 
-                variant="outline" 
-                className="w-full text-accent border-accent hover:bg-accent/10" 
+              <Button
+                variant="outline"
+                className="w-full text-accent border-accent hover:bg-accent/10"
                 onClick={handleOpenEditModal}
                 disabled={combinedLoading}
               >
-                <Edit3 className="mr-2 h-4 w-4" /> 
+                <Edit3 className="mr-2 h-4 w-4" />
                 {combinedLoading ? 'Updating...' : 'Edit Profile'}
               </Button>
             </CardContent>
@@ -264,7 +264,7 @@ function ProfilePageInternal() {
               )}
             </CardContent>
           </Card>
-          
+
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl font-medium flex items-center">
@@ -385,7 +385,7 @@ function ProfilePageInternal() {
               Update your display name or choose a new avatar. Avatar changes are applied immediately.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-3 py-3">
             <h3 className="text-md font-semibold text-muted-foreground">Choose Your Avatar</h3>
             <div className="grid grid-cols-3 gap-2">
@@ -397,8 +397,8 @@ function ProfilePageInternal() {
                   className={cn(
                     "relative rounded-md overflow-hidden border-2 transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                     user?.avatarUrl === path ? "border-primary ring-2 ring-primary" : "border-transparent hover:border-accent",
-                    combinedLoading ? "opacity-50 cursor-not-allowed" : "", 
-                    (isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path) ? "opacity-70" : "" 
+                    combinedLoading ? "opacity-50 cursor-not-allowed" : "",
+                    (isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path) ? "opacity-70" : ""
                   )}
                 >
                   <Image src={path} alt={`Avatar option`} width={80} height={80} className="aspect-square object-cover" data-ai-hint="profile avatar option"/>
@@ -407,7 +407,7 @@ function ProfilePageInternal() {
                       <CheckCircle className="h-6 w-6 text-primary-foreground" />
                     </div>
                   )}
-                   {isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path && ( 
+                   {isUpdatingAvatar && selectedAvatarUrl === path && user?.avatarUrl !== path && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                       <Loader2 className="h-5 w-5 animate-spin text-white" />
                     </div>
