@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { updateProductStockForStoreByManager, addProductByManager } from '@/lib/firestoreService';
-import type { Product, StoreAvailability, ProductCategory, FlowerWeightPrice, ProductFormData as AdminProductFormData, FlowerWeight } from '@/lib/types'; // Use AdminProductFormData for existing schema structure
+import type { Product, StoreAvailability, ProductCategory, FlowerWeightPrice, ProductFormData as AdminProductFormData, FlowerWeight, Store } from '@/lib/types'; // Use AdminProductFormData for existing schema structure
 import { ProductSchema, productCategories, flowerWeights, PREDEFINED_BRANDS, ProductCategoryEnum, FlowerWeightEnum } from '@/lib/types'; // Import ProductSchema for reuse if possible, or a new one
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -121,7 +121,7 @@ type ManagerAddProductFormData = z.infer<typeof ManagerAddProductFormSchema>;
 
 
 export default function ManagerStockPage() {
-  const { user: memoizedUser, selectedStore: memoizedSelectedStore, allProducts, loadingProducts: appContextLoadingProducts, loadingAuth, stores } = useAppContext();
+  const { user: memoizedUser, allProducts, loadingProducts: appContextLoadingProducts, loadingAuth, stores } = useAppContext();
   const [storeProducts, setStoreProducts] = useState<EditableProduct[]>([]);
   const [loadingPageData, setLoadingPageData] = useState(true);
   
@@ -141,6 +141,11 @@ export default function ManagerStockPage() {
   const fileInputRefManager = useRef<HTMLInputElement>(null);
 
   const [categoryFilter, setCategoryFilter] = useState<'All' | ProductCategory>('All');
+  
+  const managerAssignedStore = useMemo(() => {
+    if (!memoizedUser?.assignedStoreId || !stores || stores.length === 0) return null;
+    return stores.find(s => s.id === memoizedUser.assignedStoreId) || null;
+  }, [memoizedUser?.assignedStoreId, stores]);
   
   const defaultCategoryForForm = productCategories[0] as ProductCategory;
   const defaultBrandForForm = defaultCategoryForForm === 'Flower' ? 'Dodi Hemp' : (PREDEFINED_BRANDS[defaultCategoryForForm]?.[0] || OTHER_BRAND_VALUE);
@@ -167,7 +172,7 @@ export default function ManagerStockPage() {
 
   useEffect(() => {
     if (Object.keys(addProductForm.formState.errors).length > 0) {
-        console.log("[ManagerStockPage] Form Validation Errors:", JSON.stringify(addProductForm.formState.errors, null, 2));
+        console.log("[ManagerStockPage] Add Product Form Validation Errors:", JSON.stringify(addProductForm.formState.errors, null, 2));
     }
   }, [addProductForm.formState.errors]);
 
@@ -280,7 +285,7 @@ export default function ManagerStockPage() {
       return;
     }
 
-    if (memoizedUser?.storeRole !== 'Manager' || !memoizedSelectedStore?.id) {
+    if (memoizedUser?.storeRole !== 'Manager' || !memoizedUser?.assignedStoreId) {
       setStoreProducts([]);
       setLoadingPageData(false);
       return;
@@ -288,7 +293,7 @@ export default function ManagerStockPage() {
 
     const productsInManagerStore = allProducts
       .map(p => {
-        const currentStoreAvailability = p.availability.find(avail => avail.storeId === memoizedSelectedStore!.id);
+        const currentStoreAvailability = p.availability.find(avail => avail.storeId === memoizedUser!.assignedStoreId);
         return { ...p, currentStoreAvailability };
       })
       .filter(p => p.currentStoreAvailability !== undefined) as EditableProduct[];
@@ -296,7 +301,7 @@ export default function ManagerStockPage() {
     setStoreProducts(productsInManagerStore);
     setLoadingPageData(false);
 
-  }, [memoizedUser, memoizedSelectedStore, allProducts, appContextLoadingProducts, loadingAuth]);
+  }, [memoizedUser, allProducts, appContextLoadingProducts, loadingAuth]);
 
 
   const handleOpenStockModal = (product: EditableProduct) => {
@@ -310,7 +315,7 @@ export default function ManagerStockPage() {
   };
 
   const handleSaveStock = async () => {
-    if (!selectedProductForStockEdit || !memoizedUser || !memoizedSelectedStore?.id) {
+    if (!selectedProductForStockEdit || !memoizedUser || !memoizedUser.assignedStoreId) {
       toast({ title: "Error", description: "Missing product, user, or store information.", variant: "destructive" });
       return;
     }
@@ -329,7 +334,7 @@ export default function ManagerStockPage() {
 
       await updateProductStockForStoreByManager(
         selectedProductForStockEdit.id,
-        memoizedSelectedStore.id,
+        memoizedUser.assignedStoreId, // Use manager's assigned store ID
         stockUpdatePayload,
         memoizedUser.id
       );
@@ -414,15 +419,14 @@ export default function ManagerStockPage() {
 
   const handleCreateProductByManager = async (data: ManagerAddProductFormData) => {
     console.log("[ManagerStockPage] Client: Submit Handler - Form Data:", JSON.stringify(data, null, 2));
-    if (!memoizedUser || !memoizedSelectedStore?.id || !memoizedUser.assignedStoreId || memoizedUser.storeRole !== 'Manager') {
+    if (!memoizedUser || !memoizedUser.assignedStoreId || memoizedUser.storeRole !== 'Manager') {
         toast({ title: "Error", description: "User is not a manager, or store information is missing.", variant: "destructive"});
-        console.error("[ManagerStockPage] Client: User is not a manager or selected store/assigned store is missing for product creation.");
+        console.error("[ManagerStockPage] Client: User is not a manager or assigned store is missing for product creation.");
         setIsCreatingProduct(false);
         return;
     }
     
     console.log(`[ManagerStockPage] Client: Manager User ID: ${memoizedUser.id}, Manager Assigned Store ID: ${memoizedUser.assignedStoreId}`);
-    console.log(`[ManagerStockPage] Client: Selected Store ID (for UI context): ${memoizedSelectedStore.id}`);
 
     setIsCreatingProduct(true);
     console.log("[ManagerStockPage] Client: isCreatingProduct set to true.");
@@ -432,8 +436,8 @@ export default function ManagerStockPage() {
         if (data.category === 'Flower') {
             finalBrand = 'Dodi Hemp';
         } else if (data.brand === OTHER_BRAND_VALUE) {
-            console.warn(`[ManagerStockPage] Client: Brand was '${data.brand}'. This might indicate an issue if a custom brand was expected but not provided. Using default 'Generic Brand'.`);
-            finalBrand = "Generic Brand"; // Fallback if OTHER_BRAND_VALUE is still selected
+            console.warn(`[ManagerStockPage] Client: Brand was '${data.brand}' (OTHER_BRAND_VALUE). If a custom brand was expected but not typed, it will default.`);
+            finalBrand = data.brand.trim() === "" || data.brand === OTHER_BRAND_VALUE ? "Generic Brand" : data.brand; // Fallback if OTHER_BRAND_VALUE is still selected or empty custom
         }
 
         const productCoreData: Pick<AdminProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'> = {
@@ -446,7 +450,7 @@ export default function ManagerStockPage() {
         };
         
         const managerStoreAvailabilityData: StoreAvailability = {
-            storeId: memoizedUser.assignedStoreId, // CRITICAL FIX: Use manager's actual assignedStoreId
+            storeId: memoizedUser.assignedStoreId!, // Use manager's actual assignedStoreId
             storeSpecificImageUrl: undefined, 
             ...(data.category === 'Flower' 
                 ? { weightOptions: data.weightOptions!, totalStockInGrams: data.totalStockInGrams! } 
@@ -509,15 +513,15 @@ export default function ManagerStockPage() {
     );
   }
   
-  if (!memoizedSelectedStore) {
+  if (!managerAssignedStore) {
      return (
       <div className="text-center py-10">
         <Card className="max-w-md mx-auto p-6 shadow-xl">
           <CardHeader>
-            <CardTitle className="text-destructive">Store Not Selected</CardTitle>
+            <CardTitle className="text-destructive">Store Not Assigned</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">Your assigned store could not be determined. Please re-select your store or contact an admin.</p>
+            <p className="text-muted-foreground">You are not currently assigned to a store. Please contact an administrator.</p>
              <Button asChild className="mt-4">
                 <Link href="/">Go Home</Link>
             </Button>
@@ -535,7 +539,7 @@ export default function ManagerStockPage() {
             <div>
                 <CardTitle className="flex items-center text-primary"><PackagePlus className="mr-2 h-6 w-6" /> Manage Product Stock</CardTitle>
                 <CardDescription>
-                    View and update stock levels for products in your store: {memoizedSelectedStore.name}.
+                    View and update stock levels for products in your store: {managerAssignedStore.name}.
                 </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -559,7 +563,7 @@ export default function ManagerStockPage() {
           ) : storeProducts.length === 0 ? (
             <div className="text-center py-10">
               <PackageSearch className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-lg">No products found for your store: {memoizedSelectedStore.name}.</p>
+              <p className="text-muted-foreground text-lg">No products found for your store: {managerAssignedStore.name}.</p>
               <p className="text-muted-foreground text-sm">Admins can assign products to this store, or you can add a new product using the button above.</p>
             </div>
           ) : filteredStoreProducts.length === 0 ? (
@@ -655,7 +659,7 @@ export default function ManagerStockPage() {
                 <PackageIcon className="mr-2 h-7 w-7"/> Add New Product to Your Store
             </DialogTitle>
             <DialogDescription>
-              This product will initially only be available at {memoizedSelectedStore?.name}. An admin can make it available at other stores later.
+              This product will initially only be available at {managerAssignedStore?.name}. An admin can make it available at other stores later.
             </DialogDescription>
           </DialogHeader>
           <Form {...addProductForm}>
@@ -758,7 +762,7 @@ export default function ManagerStockPage() {
               </Card>
 
               <Card className="p-4 space-y-3 shadow-sm border-primary">
-                <FormLabel className="text-md font-semibold text-primary flex items-center"><StoreIcon className="mr-2 h-5 w-5"/>Availability for {memoizedSelectedStore?.name}</FormLabel>
+                <FormLabel className="text-md font-semibold text-primary flex items-center"><StoreIcon className="mr-2 h-5 w-5"/>Availability for {managerAssignedStore?.name}</FormLabel>
                  {watchedCategoryManager === 'Flower' ? (
                     <>
                         <FormField control={addProductForm.control} name="totalStockInGrams" render={({ field }) => (<FormItem><FormLabel className="flex items-center"><PackagePlus className="mr-2 h-4 w-4"/>Total Stock (grams)</FormLabel><FormControl><Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value)} step="0.1" /></FormControl><FormMessage /></FormItem>)}/>
@@ -806,3 +810,4 @@ export default function ManagerStockPage() {
     </div>
   );
 }
+
