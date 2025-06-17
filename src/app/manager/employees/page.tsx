@@ -12,7 +12,7 @@ import { getAllUsers, updateUserConfiguration } from '@/lib/firestoreService';
 import type { User, Store } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { toast } from "@/hooks/use-toast";
-import { Users2, UserPlus, UserMinus, Loader2, UserCircle, Search as SearchIcon, ShieldAlert, Briefcase } from 'lucide-react';
+import { Users2, UserPlus, UserMinus, Loader2, UserCircle, Search as SearchIcon, ShieldAlert, Briefcase, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 
 type UserFilterManager = "all" | "myStoreEmployees" | "potentialHires" | "otherStaff";
@@ -155,7 +155,7 @@ export default function ManagerEmployeesPage() {
           <CardContent>
             <p className="text-muted-foreground">You do not have permission to manage employees. This section is for Store Managers only.</p>
             <Button asChild className="mt-4">
-                <Link href="/manager/orders">Back to Orders</Link>
+                <Link href="/manager/dashboard">Back to Dashboard</Link>
             </Button>
           </CardContent>
         </Card>
@@ -323,10 +323,11 @@ export default function ManagerEmployeesPage() {
       </Card>
       <div className="mt-8 text-center">
         <Button variant="outline" asChild>
-          <Link href="/manager/orders">Back to Orders</Link>
+          <Link href="/manager/dashboard" className="flex items-center">
+            <LayoutDashboard className="mr-2 h-4 w-4"/> Back to Dashboard
+          </Link>
         </Button>
       </div>
     </div>
   );
 }
-

@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData } from '@/lib/types'; 
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData, ProductCategory, StoreSalesReport, SalesReportDataItem } from '@/lib/types'; 
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { flowerWeightToGrams, productCategories } from '@/lib/types';
@@ -532,7 +532,7 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
     const snapshot = await ordersColRef
       .where('storeId', '==', storeId)
       .where('status', 'in', statuses)
-      .orderBy('orderDate', 'asc')
+      .orderBy('orderDate', 'asc') // Changed to asc for typical dashboard view (oldest active first)
       .get();
 
     if (snapshot.empty) {
@@ -773,4 +773,93 @@ export async function updateProductStockForStoreByManager(
     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for stock update:`, error.message, error.stack);
     throw new Error(error.message || `Failed to update stock for product ${productId} due to an unexpected issue.`);
   }
+}
+
+export async function getStoreSalesReport(storeId: string): Promise<StoreSalesReport> {
+  const functionName = 'getStoreSalesReport';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Generating report for storeId: ${storeId}`);
+
+  let storeName = 'Unknown Store';
+  try {
+    const storeDoc = await adminDb!.collection('stores').doc(storeId).get();
+    if (storeDoc.exists) {
+      storeName = (storeDoc.data() as StoreFormData).name;
+    }
+  } catch (e) {
+    console.warn(`[firestoreService][AdminSDK][${functionName}] Could not fetch store name for ${storeId}:`, e);
+  }
+
+
+  const productsSnapshot = await adminDb!.collection('products').get();
+  const productDetailsMap = new Map<string, { name: string, category: ProductCategory }>();
+  productsSnapshot.forEach(doc => {
+    const data = doc.data() as Product;
+    productDetailsMap.set(doc.id, { name: data.name, category: data.category });
+  });
+
+  const ordersColRef = adminDb!.collection('orders');
+  const completedOrdersSnapshot = await ordersColRef
+    .where('storeId', '==', storeId)
+    .where('status', '==', 'Completed')
+    .get();
+
+  let totalRevenue = 0;
+  let totalItemsSold = 0;
+  const totalOrdersProcessed = completedOrdersSnapshot.size;
+
+  const productSalesData: Record<string, SalesReportDataItem & { category: ProductCategory }> = {};
+  const categorySalesData: Record<string, SalesReportDataItem> = {};
+
+  completedOrdersSnapshot.forEach(doc => {
+    const order = doc.data() as Order;
+    totalRevenue += order.finalTotal;
+
+    order.items.forEach(item => {
+      totalItemsSold += item.quantity;
+      const itemRevenue = item.pricePerItem * item.quantity;
+      const productInfo = productDetailsMap.get(item.productId);
+      const productName = productInfo?.name || item.productName || 'Unknown Product';
+      const category = productInfo?.category || 'Unknown' as ProductCategory;
+
+      // Aggregate product sales
+      if (!productSalesData[item.productId]) {
+        productSalesData[item.productId] = { id: item.productId, name: productName, quantitySold: 0, revenueGenerated: 0, category: category };
+      }
+      productSalesData[item.productId].quantitySold += item.quantity;
+      productSalesData[item.productId].revenueGenerated += itemRevenue;
+
+      // Aggregate category sales
+      if (category !== 'Unknown') {
+        if (!categorySalesData[category]) {
+          categorySalesData[category] = { id: category, name: category, quantitySold: 0, revenueGenerated: 0 };
+        }
+        categorySalesData[category].quantitySold += item.quantity;
+        categorySalesData[category].revenueGenerated += itemRevenue;
+      }
+    });
+  });
+
+  const topSellingProducts = Object.values(productSalesData)
+    .sort((a, b) => b.revenueGenerated - a.revenueGenerated) // Sort by revenue
+    .slice(0, 10); // Top 10
+
+  const topSellingCategories = Object.values(categorySalesData)
+    .sort((a, b) => b.revenueGenerated - a.revenueGenerated) // Sort by revenue
+    .slice(0, 5); // Top 5
+
+  const report: StoreSalesReport = {
+    storeId,
+    storeName,
+    totalRevenue,
+    totalItemsSold,
+    totalOrdersProcessed,
+    topSellingProducts,
+    topSellingCategories,
+    reportGeneratedAt: new Date().toISOString(),
+  };
+
+  console.log(`[firestoreService][AdminSDK][${functionName}] Report generated successfully for store ${storeId}. Orders processed: ${totalOrdersProcessed}`);
+  return report;
 }

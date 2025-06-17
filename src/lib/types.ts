@@ -29,7 +29,7 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Vape': ["Geek Bar", "Mr. Fog", "Fifty Bar", "Dodi Hemp"],
   'Flower': ["Dodi Hemp"],
   'Pre-roll': ["Dodi Hemp"],
-  'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp"],
+  'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp", "Generic Edible Brand"],
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
   'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
   'E-Liquid': ["Juice Head", "Twist", "Squeeze"],
@@ -344,3 +344,24 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
   { id: 'redeem_25_500', pointsRequired: 500, discountAmount: 25, description: '$25 Off (500 Points)' },
 ];
 
+// Types for Sales Report
+export interface SalesReportDataItem {
+  id: string; // Product ID or category name
+  name: string;
+  quantitySold: number;
+  revenueGenerated: number;
+}
+
+export interface StoreSalesReport {
+  storeId: string;
+  storeName: string;
+  totalRevenue: number;
+  totalItemsSold: number;
+  totalOrdersProcessed: number;
+  topSellingProducts: SalesReportDataItem[];
+  topSellingCategories: SalesReportDataItem[];
+  reportGeneratedAt: string; // ISO string for when the report was generated
+  // Optional: if we add date range filtering in the future
+  // dataStartDate?: string;
+  // dataEndDate?: string;
+}

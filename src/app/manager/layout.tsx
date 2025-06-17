@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAppContext } from '@/hooks/useAppContext';
-import { Loader2, ShieldAlert, Briefcase, PackagePlus, Users2, ListOrdered } from 'lucide-react';
+import { Loader2, ShieldAlert, Briefcase, PackagePlus, Users2, ListOrdered, LayoutDashboard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -83,6 +83,15 @@ export default function ManagerLayout({
             </div>
              <nav className="mt-2 sm:mt-0">
                 <ul className="flex space-x-2 sm:space-x-3">
+                    {isManager && (
+                         <li>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href="/manager/dashboard" className="flex items-center">
+                                    <LayoutDashboard className="mr-1 h-4 w-4" /> Dashboard
+                                </Link>
+                            </Button>
+                        </li>
+                    )}
                     <li>
                         <Button variant="outline" size="sm" asChild>
                             <Link href="/manager/orders" className="flex items-center">

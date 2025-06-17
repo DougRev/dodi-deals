@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { toast } from '@/hooks/use-toast';
-import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle, Filter, Layers } from 'lucide-react'; // Added PackageIcon, Filter, Layers
+import { Loader2, PackagePlus, Edit, AlertTriangle, Construction, PackageSearch, PlusCircle, StoreIcon, Star, Weight, Tag, UploadCloud, Image as ImageIcon, PackageIcon, XCircle, Filter, Layers, LayoutDashboard } from 'lucide-react'; // Added PackageIcon, Filter, Layers
 import Link from 'next/link';
 import Image from 'next/image';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -524,7 +524,7 @@ export default function ManagerStockPage() {
           <CardContent>
             <p className="text-muted-foreground">You do not have permission to manage stock or add products. This section is for Store Managers only.</p>
             <Button asChild className="mt-4">
-              <Link href="/manager/orders">Back to Orders</Link>
+              <Link href="/manager/dashboard">Back to Dashboard</Link>
             </Button>
           </CardContent>
         </Card>
@@ -857,7 +857,9 @@ export default function ManagerStockPage() {
 
       <div className="mt-8 text-center">
         <Button variant="outline" asChild>
-          <Link href="/manager/orders">Back to Orders</Link>
+            <Link href="/manager/dashboard" className="flex items-center">
+                <LayoutDashboard className="mr-2 h-4 w-4"/> Back to Dashboard
+            </Link>
         </Button>
       </div>
     </div>
