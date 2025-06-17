@@ -72,15 +72,18 @@ export default function WhatIsThcaPage() {
           <p className="mt-4">
             Decarboxylation is the process by which THCa becomes THC. This occurs through smoking, vaping, baking, or even extended drying/curing.
           </p>
-          <div className="relative aspect-video w-full md:w-2/3 mx-auto rounded-lg overflow-hidden shadow-md mt-4">
-             <Image
+          <div className="mt-6 mb-2 flex justify-center">
+            <div className="relative w-full max-w-2xl rounded-lg overflow-hidden shadow-md bg-muted/20 p-2">
+              <Image
                 src="/images/info/molecules.png"
                 alt="THCa to THC Conversion Diagram: THCa molecule in raw cannabis, heat icon, transforming to THC molecule, labeled Decarboxylation"
-                fill
-                style={{ objectFit: 'cover' }}
+                width={724} 
+                height={272} 
+                layout="responsive"
+                objectFit="contain"
                 data-ai-hint="molecule diagram"
-                sizes="(max-width: 768px) 100vw, 66vw"
               />
+            </div>
           </div>
         </CardContent>
       </Card>
