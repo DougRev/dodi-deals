@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   title: 'Dodi Deals - Indiana\'s Choice for Vapes & THCa',
   applicationName: 'Dodi Deals', // Short name for PWA context
   description: 'Discover daily deals on vapes, THCa flower, edibles, and more at Dodi Deals. Order online for convenient in-store pickup across Indiana.',
+  manifest: '/manifest.json', // Link to the manifest file
   appleWebApp: {
     capable: true,
     title: 'Dodi Deals', // Title for "Add to Home Screen" on iOS
@@ -53,4 +54,3 @@ export default function RootLayout({
     </html>
   );
 }
-

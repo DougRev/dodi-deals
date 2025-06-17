@@ -34,7 +34,7 @@ interface AppContextType {
   allProducts: Product[];
   deals: Deal[];
   getCartSubtotal: () => number;
-  getCartTotal: () => number; 
+  getCartTotal: () => number;
   getCartTotalSavings: () => number;
   getPotentialPointsForCart: () => number;
   stores: Store[]; // All stores, including hidden ones for admins
@@ -58,6 +58,8 @@ interface AppContextType {
   isProductFavorited: (productId: string) => boolean;
   resolvedFavoriteProducts: ResolvedProduct[];
   cancelMyOrder: (orderId: string) => Promise<boolean>;
+  canInstallPWA: boolean;
+  promptPWAInstall: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -66,6 +68,15 @@ const DODI_CART_KEY_PREFIX = 'dodiCart_';
 const DODI_SELECTED_STORE_KEY = 'dodiSelectedStoreId';
 const ADMIN_EMAIL = 'admin@test.com';
 const MINIMUM_PURCHASE_AMOUNT = 15;
+
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: Array<string>;
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+}
 
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -79,15 +90,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  const [_selectedStore, _setSelectedStoreState] = useState<Store | null>(null); 
+  const [_selectedStore, _setSelectedStoreState] = useState<Store | null>(null);
   const [isStoreSelectorOpen, setStoreSelectorOpen] = useState(false);
 
   const [appliedRedemption, setAppliedRedemption] = useState<RedemptionOption | null>(null);
 
   const [userOrders, setUserOrders] = useState<Order[]>([]);
-  const [loadingUserOrders, setLoadingUserOrders] = useState<boolean>(true); 
+  const [loadingUserOrders, setLoadingUserOrders] = useState<boolean>(true);
+
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [canInstallPWA, setCanInstallPWA] = useState(false);
 
   const router = useRouter();
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event as BeforeInstallPromptEvent);
+      setCanInstallPWA(true);
+      console.log('[AppContext] beforeinstallprompt event captured.');
+    };
+
+    const handleAppInstalled = () => {
+      setCanInstallPWA(false);
+      setDeferredInstallPrompt(null);
+      console.log('[AppContext] PWA installed successfully.');
+      toast({ title: "App Installed!", description: "Dodi Deals has been added to your home screen." });
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const promptPWAInstall = useCallback(async () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        console.log('User accepted the A2HS prompt');
+      } else {
+        console.log('User dismissed the A2HS prompt');
+      }
+      // We can only use the deferred prompt once.
+      setDeferredInstallPrompt(null);
+      setCanInstallPWA(false);
+    } else {
+      console.warn('[AppContext] promptPWAInstall called but no deferredInstallPrompt available.');
+      toast({ title: "Installation Not Available", description: "The app cannot be installed at this moment. Try adding it via browser menu.", variant: "default" });
+    }
+  }, [deferredInstallPrompt]);
 
   useEffect(() => {
     const doSeed = async () => {
@@ -154,12 +210,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setStoreSelectorOpen(true);
         }
       }
-      
+
       if (storeToSelectInitially) {
         _setSelectedStoreState(storeToSelectInitially);
         setStoreSelectorOpen(false);
       }
-      
+
       setLoadingStores(false);
     }, (error) => {
       console.error("Error fetching stores: ", error);
@@ -191,8 +247,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const fetchedProducts = snapshot.docs.map(docSnap => {
         const data = docSnap.data() as Omit<Product, 'id'>;
         const validCategory = productCategories.includes(data.category as ProductCategory) ? data.category : productCategories[0];
-        return { 
-            id: docSnap.id, 
+        return {
+            id: docSnap.id,
             ...data,
             category: validCategory,
             subcategory: data.subcategory || undefined,
@@ -214,7 +270,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setLoadingUserOrders(false);
       return;
     }
-  
+
     setLoadingUserOrders(true);
     try {
       const orders = await getUserOrders(user.id);
@@ -234,7 +290,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetchUserOrders();
     } else {
       setUserOrders([]);
-      if (!loadingAuth) { 
+      if (!loadingAuth) {
         setLoadingUserOrders(false);
       }
     }
@@ -262,7 +318,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const determinedStoreRole = existingData?.storeRole || null;
 
     const profileDataToSet: User = {
-        id: firebaseUser.uid, 
+        id: firebaseUser.uid,
         email: firebaseUser.email!,
         name: displayName,
         points: existingData?.points ?? 0,
@@ -278,13 +334,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (!userSnap.exists()) {
       try {
-        const dataToSetForNewUser: any = { 
+        const dataToSetForNewUser: any = {
             email: profileDataToSet.email,
             name: profileDataToSet.name,
             points: profileDataToSet.points,
             isAdmin: profileDataToSet.isAdmin,
             createdAt: profileDataToSet.createdAt,
-            avatarUrl: profileDataToSet.avatarUrl, 
+            avatarUrl: profileDataToSet.avatarUrl,
             assignedStoreId: profileDataToSet.assignedStoreId,
             storeRole: profileDataToSet.storeRole,
             noShowStrikes: profileDataToSet.noShowStrikes,
@@ -303,13 +359,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
         return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false, favoriteProductIds: [] };
       }
-    } else { 
+    } else {
       const updates: Partial<User> = {};
       if (isTheAdminEmail && !existingData?.isAdmin) {
         updates.isAdmin = true;
         updates.assignedStoreId = null;
         updates.storeRole = null;
-        profileDataToSet.isAdmin = true; 
+        profileDataToSet.isAdmin = true;
         profileDataToSet.assignedStoreId = null;
         profileDataToSet.storeRole = null;
       }
@@ -317,8 +373,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updates.name = displayName;
         profileDataToSet.name = displayName;
       }
-      if (determinedAvatarUrl !== existingData?.avatarUrl) { 
-         updates.avatarUrl = determinedAvatarUrl; 
+      if (determinedAvatarUrl !== existingData?.avatarUrl) {
+         updates.avatarUrl = determinedAvatarUrl;
          profileDataToSet.avatarUrl = determinedAvatarUrl;
       }
       if (existingData.noShowStrikes === undefined) {
@@ -333,7 +389,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updates.favoriteProductIds = [];
         profileDataToSet.favoriteProductIds = [];
       }
-      
+
       if (updates.isAdmin) {
         updates.assignedStoreId = null;
         updates.storeRole = null;
@@ -371,7 +427,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             setUser(null);
             setIsAuthenticated(false);
-            if (typeof window !== 'undefined') await firebaseSignOut(auth); 
+            if (typeof window !== 'undefined') await firebaseSignOut(auth);
           }
         } else {
           setUser(null);
@@ -459,7 +515,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const userSnap = await getDoc(userRef);
       if (userSnap.exists() && (userSnap.data() as User).isBanned) {
         toast({ title: "Account Suspended", description: "This account has been suspended and cannot log in.", variant: "destructive", duration: 10000 });
-        await firebaseSignOut(auth); 
+        await firebaseSignOut(auth);
         setLoadingAuth(false);
         return false;
       }
@@ -570,8 +626,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     let productToAdd: ResolvedProduct = baseProduct;
-    let itemIdentifier = baseProduct.variantId; 
-    let finalSelectedWeight = baseProduct.selectedWeight; 
+    let itemIdentifier = baseProduct.variantId;
+    let finalSelectedWeight = baseProduct.selectedWeight;
 
     if (baseProduct.category === 'Flower' && selectedWeightParam) {
       finalSelectedWeight = selectedWeightParam;
@@ -593,7 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         quantity = stockForSelectedWeight;
         if (quantity === 0) return;
       }
-      
+
       let effectivePrice = weightOption.price;
       let originalPrice: number | undefined = weightOption.price;
       let isProductOnDeal = false;
@@ -602,7 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const today = new Date();
       const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
 
-      if (currentDayName === 'Tuesday' && baseProduct.category === 'E-Liquid') { 
+      if (currentDayName === 'Tuesday' && baseProduct.category === 'E-Liquid') {
         isBogoEligibleProduct = true;
       } else if (currentDayName === 'Wednesday' && baseProduct.brand.toLowerCase().startsWith('dodi')) {
         isProductOnDeal = true;
@@ -621,7 +677,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
-      
+
       productToAdd = {
         ...baseProduct,
         variantId: itemIdentifier,
@@ -631,7 +687,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         selectedWeight: finalSelectedWeight,
         isBogoEligible: isBogoEligibleProduct,
       };
-    } else if (baseProduct.category !== 'Flower') { 
+    } else if (baseProduct.category !== 'Flower') {
        if (quantity > baseProduct.stock) {
         toast({ title: "Not Enough Stock", description: `Only ${baseProduct.stock} units of ${baseProduct.name} available.`, variant: "default" });
         quantity = baseProduct.stock;
@@ -646,7 +702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (existingItemIndex > -1) {
         const updatedCart = [...prevCart];
         const newQuantity = Math.min(updatedCart[existingItemIndex].quantity + quantity, productToAdd.stock);
-        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity, product: productToAdd }; 
+        updatedCart[existingItemIndex] = { ...updatedCart[existingItemIndex], quantity: newQuantity, product: productToAdd };
         return updatedCart;
       }
       return [...prevCart, { product: productToAdd, quantity: Math.min(quantity, productToAdd.stock), selectedWeight: finalSelectedWeight }];
@@ -670,7 +726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ).filter(item => item.quantity > 0)
     );
   }, []);
-  
+
   const getCartItemQuantity = useCallback((productId: string, selectedWeight?: FlowerWeight): number => {
     if (!_selectedStore) return 0;
     const variantIdToFind = selectedWeight ? `${productId}-${selectedWeight}` : productId;
@@ -691,7 +747,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getCartSubtotal = useCallback(() => {
     let subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-    
+
     const today = new Date();
     const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
     if (currentDayName === 'Tuesday') {
@@ -709,20 +765,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             for (let i = 0; i < Math.floor(individualELiquidUnits.length / 2); i++) {
                 bogoDiscount += individualELiquidUnits[i * 2].price * 0.5;
             }
-            subtotal -= bogoDiscount; 
+            subtotal -= bogoDiscount;
         }
     }
     return subtotal;
   }, [cart]);
 
   const getCartTotal = useCallback(() => {
-    const subtotal = getCartSubtotal(); 
+    const subtotal = getCartSubtotal();
     return appliedRedemption ? Math.max(0, subtotal - appliedRedemption.discountAmount) : subtotal;
   }, [getCartSubtotal, appliedRedemption]);
 
   const getPotentialPointsForCart = useCallback(() => {
     const finalTotalAfterPotentialRedemption = getCartTotal();
-    return Math.floor(finalTotalAfterPotentialRedemption * 1); 
+    return Math.floor(finalTotalAfterPotentialRedemption * 1);
   }, [getCartTotal]);
 
   const getCartTotalSavings = useCallback(() => {
@@ -751,7 +807,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
         }
     }
-    
+
     if (appliedRedemption) {
       savings += appliedRedemption.discountAmount;
     }
@@ -771,7 +827,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Enough Points", description: `You need ${option.pointsRequired} points for this reward. You have ${user.points}.`, variant: "destructive" });
       return;
     }
-    const subtotal = getCartSubtotal(); 
+    const subtotal = getCartSubtotal();
     if (subtotal < option.discountAmount) {
       toast({ title: "Cart Total Too Low", description: `Your cart total must be at least $${option.discountAmount.toFixed(2)} to apply this discount (after BOGO if applicable).`, variant: "destructive" });
       return;
@@ -795,7 +851,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const currentCartSubtotal = getCartSubtotal(); 
+    const currentCartSubtotal = getCartSubtotal();
     if (currentCartSubtotal < MINIMUM_PURCHASE_AMOUNT) {
       toast({
         title: "Minimum Purchase Not Met",
@@ -806,18 +862,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const orderItems: OrderItem[] = cart.map(item => ({
-      productId: item.product.id, 
+      productId: item.product.id,
       productName: item.product.name,
       selectedWeight: item.product.selectedWeight,
       quantity: item.quantity,
-      pricePerItem: item.product.price, 
+      pricePerItem: item.product.price,
       originalPricePerItem: item.product.originalPrice,
     }));
 
-    const subtotalBeforeRedemption = getCartSubtotal(); 
+    const subtotalBeforeRedemption = getCartSubtotal();
     const finalTotal = appliedRedemption ? Math.max(0, subtotalBeforeRedemption - appliedRedemption.discountAmount) : subtotalBeforeRedemption;
-    
-    const pointsCalculated = Math.floor(finalTotal * 1); 
+
+    const pointsCalculated = Math.floor(finalTotal * 1);
 
     const orderData: Omit<Order, 'id' | 'orderDate' | 'status'> = {
       userId: user.id,
@@ -826,20 +882,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       storeId: _selectedStore.id,
       storeName: _selectedStore.name,
       items: orderItems,
-      subtotal: subtotalBeforeRedemption, 
+      subtotal: subtotalBeforeRedemption,
       discountApplied: appliedRedemption?.discountAmount,
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
-      userStrikesAtOrderTime: user.noShowStrikes || 0, 
+      userStrikesAtOrderTime: user.noShowStrikes || 0,
     };
 
     try {
-      const { orderId } = await createOrderInFirestore({ ...orderData, pointsEarned: pointsCalculated }); 
-            
-      if (user) fetchUserOrders(); 
-      toast({ 
-        title: "Order Submitted!", 
+      const { orderId } = await createOrderInFirestore({ ...orderData, pointsEarned: pointsCalculated });
+
+      if (user) fetchUserOrders();
+      toast({
+        title: "Order Submitted!",
         description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Points will be applied by the store upon order completion.`
       });
       clearCart();
@@ -858,8 +914,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
     const today = new Date();
-    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1]; 
-    
+    const currentDayName = daysOfWeek[today.getDay() === 0 ? 6 : today.getDay() - 1];
+
     const resolved: ResolvedProduct[] = [];
     allProducts.forEach(p => {
       if (!p.availability) return;
@@ -898,18 +954,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (validWeightOptions.length > 0) {
             const prices = validWeightOptions.map(wo => wo.price);
             const minPrice = Math.min(...prices);
-            
+
             const smallestWeightOption = validWeightOptions.reduce((smallest, current) => {
                 return flowerWeightToGrams(current.weight) < flowerWeightToGrams(smallest.weight) ? current : smallest;
             }, validWeightOptions[0]);
-            
+
             const smallestWeightGrams = flowerWeightToGrams(smallestWeightOption.weight);
             const stockForSmallestUnit = smallestWeightGrams > 0 ? Math.floor((availabilityForStore.totalStockInGrams || 0) / smallestWeightGrams) : 0;
 
             let effectiveMinPrice = minPrice;
             let originalMinPrice: number | undefined = minPrice;
             let isProductOnDeal = false;
-            let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid'); 
+            let isBogoEligibleProduct = (currentDayName === 'Tuesday' && p.category === 'E-Liquid');
 
             if (currentDayName === 'Wednesday' && p.brand.toLowerCase().startsWith('dodi')) {
               isProductOnDeal = true;
@@ -931,14 +987,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             resolved.push({
               ...baseResolvedInfo,
-              variantId: p.id, 
+              variantId: p.id,
               price: effectiveMinPrice,
               originalPrice: isProductOnDeal ? originalMinPrice : undefined,
-              stock: stockForSmallestUnit, 
+              stock: stockForSmallestUnit,
               availableWeights: validWeightOptions,
               totalStockInGrams: availabilityForStore.totalStockInGrams,
               isBogoEligible: isBogoEligibleProduct,
-              selectedWeight: undefined, 
+              selectedWeight: undefined,
             });
           }
         } else if (p.category !== 'Flower' && availabilityForStore.price !== undefined && availabilityForStore.stock !== undefined) {
@@ -959,19 +1015,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
                         isProductOnDeal = true;
                         effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
-                        break; 
+                        break;
                     }
                 }
             }
 
             resolved.push({
                 ...baseResolvedInfo,
-                variantId: p.id, 
+                variantId: p.id,
                 price: effectivePrice,
                 originalPrice: isProductOnDeal ? originalPriceValue : undefined,
                 stock: availabilityForStore.stock,
                 isBogoEligible: isBogoEligibleProduct,
-                selectedWeight: undefined, 
+                selectedWeight: undefined,
             });
         }
       }
@@ -981,7 +1037,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
 
   const deals: Deal[] = useMemo(() => {
-    if (!_selectedStore || loadingProducts) { 
+    if (!_selectedStore || loadingProducts) {
       return [];
     }
     // If a store is selected but it's hidden and the user is not an admin, show no deals
@@ -1003,7 +1059,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dealType: 'bogo',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
-        product: undefined, 
+        product: undefined,
       });
     }
     if (currentDayName === 'Wednesday') {
@@ -1011,12 +1067,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id: `deal-${currentDayName}-dodi-brands`,
         title: "15% Off Dodi Brands!",
         description: "Enjoy 15% off all products from Dodi Hemp, Dodi Accessories, Dodi Drinks etc.",
-        brandOnDeal: 'Dodi', 
+        brandOnDeal: 'Dodi',
         discountPercentage: 15,
         dealType: 'percentage',
         expiresAt: endOfToday.toISOString(),
         storeId: _selectedStore.id,
-        product: undefined, 
+        product: undefined,
       });
     }
     if (currentDayName === 'Thursday') {
@@ -1029,7 +1085,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             dealType: 'percentage',
             expiresAt: endOfToday.toISOString(),
             storeId: _selectedStore.id,
-            product: undefined, 
+            product: undefined,
         });
     }
      if (_selectedStore.dailyDeals) {
@@ -1037,7 +1093,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (rule.selectedDays.includes(currentDayName)) {
                 generatedDeals.push({
                     id: `deal-store-${rule.category}-${rule.discountPercentage}-${_selectedStore.id}`,
-                    product: undefined, 
+                    product: undefined,
                     title: `${rule.discountPercentage}% Off ${rule.category}!`,
                     description: `Store Special: ${rule.discountPercentage}% off all ${rule.category} products today at ${_selectedStore.name}.`,
                     categoryOnDeal: rule.category,
@@ -1049,7 +1105,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
         });
     }
-    
+
     const uniqueDealsMap = new Map<string, Deal>();
     for (const deal of generatedDeals) {
         const key = `${deal.dealType}-${deal.categoryOnDeal || 'nonecat'}-${deal.brandOnDeal || 'nonebrand'}-${deal.discountPercentage || 0}-${deal.product?.id || 'general'}`;
@@ -1066,7 +1122,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Login Required", description: "Please log in to favorite products.", variant: "destructive" });
       return;
     }
-    
+
     const currentFavorites = user.favoriteProductIds || [];
     let updatedFavorites: string[];
     let isNowFavorited: boolean;
@@ -1108,7 +1164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .filter(p => user.favoriteProductIds!.includes(p.id))
       .map(p => {
         const availabilityForStore = p.availability.find(avail => avail.storeId === _selectedStore.id);
-        if (!availabilityForStore) return null; 
+        if (!availabilityForStore) return null;
 
         let currentImageUrl = p.baseImageUrl;
          if (availabilityForStore.storeSpecificImageUrl && availabilityForStore.storeSpecificImageUrl.trim() !== '') {
@@ -1140,12 +1196,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return grams > 0 && (availabilityForStore.totalStockInGrams || 0) >= grams;
           });
           const prices = validWeightOptions.map(wo => wo.price);
-          const minPrice = prices.length > 0 ? Math.min(...prices) : 0; 
+          const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
 
           const smallestWeightOption = validWeightOptions.length > 0 ? validWeightOptions.reduce((smallest, current) => {
               return flowerWeightToGrams(current.weight) < flowerWeightToGrams(smallest.weight) ? current : smallest;
           }, validWeightOptions[0]) : null;
-          
+
           const smallestWeightGrams = smallestWeightOption ? flowerWeightToGrams(smallestWeightOption.weight) : 0;
           const stockForSmallestUnit = smallestWeightGrams > 0 ? Math.floor((availabilityForStore.totalStockInGrams || 0) / smallestWeightGrams) : 0;
 
@@ -1171,7 +1227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             }
           }
-          
+
           return {
             ...baseResolvedInfo,
             variantId: p.id,
@@ -1201,7 +1257,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     if (rule.selectedDays.includes(currentDayName) && rule.category === p.category) {
                         isProductOnDeal = true;
                         effectivePrice = parseFloat((originalPriceValue * (1 - rule.discountPercentage / 100)).toFixed(2));
-                        break; 
+                        break;
                     }
                 }
             }
@@ -1261,7 +1317,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     getPotentialPointsForCart,
     stores,
     displayableStores,
-    selectedStore: _selectedStore, 
+    selectedStore: _selectedStore,
     selectStore,
     isStoreSelectorOpen,
     setStoreSelectorOpen,
@@ -1280,12 +1336,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isProductFavorited,
     resolvedFavoriteProducts,
     cancelMyOrder,
+    canInstallPWA,
+    promptPWAInstall,
   }), [
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores, displayableStores,
-    _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen, 
+    _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
     loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
-    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts, cancelMyOrder
+    userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts, cancelMyOrder,
+    canInstallPWA, promptPWAInstall
   ]);
 
   return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
@@ -1298,4 +1357,3 @@ export function useAppContext() {
   }
   return context;
 }
-
