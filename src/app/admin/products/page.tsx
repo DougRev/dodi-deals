@@ -26,9 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { app as firebaseApp } from '@/lib/firebase';
-
-const storage = getStorage(firebaseApp);
+import { storage as firebaseClientStorage } from '@/lib/firebase'; // Use client-side storage
 
 const OTHER_BRAND_VALUE = "Other";
 const SUBCATEGORY_NONE_VALUE = "_NONE_";
@@ -386,7 +384,7 @@ export default function AdminProductsPage() {
     setUploadImageProgress(0);
 
     const imageFileName = `${imageFileToUpload.name}_${Date.now()}`;
-    const sRef = storageRef(storage, `product_images/${imageFileName}`);
+    const sRef = storageRef(firebaseClientStorage, `product_images/${imageFileName}`); // Use imported storage
     const uploadTask = uploadBytesResumable(sRef, imageFileToUpload);
 
     uploadTask.on('state_changed',

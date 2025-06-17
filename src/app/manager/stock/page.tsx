@@ -25,9 +25,8 @@ import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { app as firebaseApp } from '@/lib/firebase'; 
+import { storage as firebaseClientStorage } from '@/lib/firebase';  // Use client-side storage
 
-const storage = getStorage(firebaseApp);
 const OTHER_BRAND_VALUE = "Other";
 const SUBCATEGORY_NONE_VALUE = "_NONE_"; // Used for form where empty string not allowed for SelectItem value
 
@@ -403,7 +402,7 @@ export default function ManagerStockPage() {
     setUploadImageProgressManager(0);
 
     const imageFileName = `${imageFileToUploadManager.name}_${Date.now()}`;
-    const sRef = storageRef(storage, `product_images/${imageFileName}`);
+    const sRef = storageRef(firebaseClientStorage, `product_images/${imageFileName}`); // Use imported storage
     const uploadTask = uploadBytesResumable(sRef, imageFileToUploadManager);
 
     uploadTask.on('state_changed',
@@ -459,7 +458,7 @@ export default function ManagerStockPage() {
             finalBrand = data.brand.trim() === "" || data.brand === OTHER_BRAND_VALUE ? "Generic Brand" : data.brand; 
         }
 
-        const productCoreData: Pick<ProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint' | 'subcategory'> = {
+        const productCoreData: Pick<AdminProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint' | 'subcategory'> = { // Changed to AdminProductFormData type
             name: data.name,
             description: data.description,
             brand: finalBrand, 
@@ -864,4 +863,3 @@ export default function ManagerStockPage() {
     </div>
   );
 }
-
