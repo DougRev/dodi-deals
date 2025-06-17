@@ -6,12 +6,12 @@ import { getFirestore, type Firestore } from "firebase/firestore"; // Import Fir
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAoFFCt31k-BYlUylepvd3sYPySbuWOLVk",
-  authDomain: "dodi-deals.firebaseapp.com",
-  projectId: "dodi-deals",
-  storageBucket: "dodi-deals.firebasestorage.app",
-  messagingSenderId: "791765566766",
-  appId: "1:791765566766:web:8f3e3620fe2d07edbe26bf"
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID
 };
 
 // Initialize Firebase
