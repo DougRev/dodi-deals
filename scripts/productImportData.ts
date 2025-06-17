@@ -165,7 +165,7 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "vape disposable",
     isFeatured: false,
   },
-  
+
   // === E-Liquid ===
   {
     name: "Juice Head E-Liquid - Peach Pear (100ml)",
@@ -207,8 +207,16 @@ export const productsToImport: ProductImportEntry[] = [
     description: "Each gummy contains 10mg Live Resin D9, 10mg CBG, and 5mg THCV for an uplifting experience.",
     category: "Edible",
     brand: "Dodi Hemp",
-    dataAiHint: "edible gummy rise", // Changed to two words
+    dataAiHint: "edible gummy rise",
     isFeatured: false,
+  },
+  {
+    name: "Dodi Hemp Sleepy Time CBN Gummies (10 Ct)",
+    description: "Formulated with CBN and a touch of melatonin to promote restful sleep. Berry flavor.",
+    category: "Edible",
+    brand: "Dodi Hemp",
+    dataAiHint: "cbn gummy",
+    isFeatured: true,
   },
   // CannaElite Edibles
   {
@@ -216,7 +224,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "Delicious strawberry-flavored gummies infused with premium Delta-9 THC by CannaElite.",
     category: "Edible",
     brand: "CannaElite",
-    dataAiHint: "edible gummy delta9", // Changed to two words
+    dataAiHint: "edible gummy delta9",
     isFeatured: true,
   },
   {
@@ -233,7 +241,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "A vibrant mix of rainbow belt flavored gummies from Hidden Hills, known for their potent blends.",
     category: "Edible",
     brand: "Hidden Hills",
-    dataAiHint: "edible gummy rainbow", // Changed to two words
+    dataAiHint: "edible gummy rainbow",
     isFeatured: false,
   },
   {
@@ -241,7 +249,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "A unique edible bar from Hidden Hills combining liquid diamonds with peach mango flavor.",
     category: "Edible",
     brand: "Hidden Hills",
-    dataAiHint: "edible bar diamond", // Changed to two words
+    dataAiHint: "edible bar diamond",
     isFeatured: false,
   },
 
@@ -251,7 +259,7 @@ export const productsToImport: ProductImportEntry[] = [
     description: "High-purity THCa diamonds suspended in rich terpene sauce. Black Lime strain for a zesty profile.",
     category: "Concentrate",
     brand: "Dodi Hemp",
-    dataAiHint: "concentrate diamond sauce", // Changed to two words
+    dataAiHint: "concentrate diamond sauce",
     isFeatured: true,
   },
   {
@@ -292,7 +300,7 @@ export const productsToImport: ProductImportEntry[] = [
     name: "Artistic Design Rolling Tray - Galaxy Medium",
     description: "Medium sized rolling tray with a unique galaxy artistic design. Metal construction.",
     category: "Hemp Accessory",
-    brand: "Dodi Accessories", 
+    brand: "Dodi Accessories",
     dataAiHint: "rolling tray",
     isFeatured: false,
   },
@@ -304,6 +312,23 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "gold papers",
     isFeatured: false,
   },
+  {
+    name: "Glass Hand Pipe - Spiral Design",
+    description: "Colorful glass hand pipe with a unique spiral design. Compact and easy to use.",
+    category: "Hemp Accessory",
+    brand: "Generic Glass",
+    dataAiHint: "glass pipe",
+    isFeatured: false,
+  },
+  {
+    name: "Zig-Zag Rolling Papers - Orange 1 1/4",
+    description: "Classic Orange 1 1/4 size rolling papers by Zig-Zag. Slow burning and reliable.",
+    category: "Hemp Accessory",
+    brand: "Zig-Zag",
+    dataAiHint: "rolling papers",
+    isFeatured: false,
+  },
+
 
   // === Drinks ===
   {
@@ -330,4 +355,39 @@ export const productsToImport: ProductImportEntry[] = [
     dataAiHint: "energy drink",
     isFeatured: false,
   },
+  {
+    name: "Dodi Spark THC Seltzer - Lime Twist",
+    description: "Crisp and refreshing lime-flavored THC seltzer for a light buzz. Low calorie.",
+    category: "Drinks",
+    brand: "Dodi Drinks",
+    dataAiHint: "thc seltzer",
+    isFeatured: false,
+  },
+
+  // === Vape Hardware ===
+  {
+    name: "SMOK Nord 5 Pod Kit",
+    description: "Versatile pod system by SMOK, offering up to 80W output and a 2000mAh battery. Perfect for both MTL and DTL vaping.",
+    category: "Vape Hardware",
+    brand: "SMOK",
+    dataAiHint: "vape kit",
+    isFeatured: true,
+  },
+  {
+    name: "GeekVape Z Max Tank",
+    description: "High-performance sub-ohm tank from GeekVape, featuring top airflow and compatibility with M Series coils for massive clouds and flavor.",
+    category: "Vape Hardware",
+    brand: "GeekVape",
+    dataAiHint: "vape tank",
+    isFeatured: false,
+  },
+  {
+    name: "Vaporesso XROS 3 Replacement Coils (4-Pack)",
+    description: "Pack of 4 replacement coils for the Vaporesso XROS 3 series, available in various resistances.",
+    category: "Vape Hardware",
+    brand: "Vaporesso",
+    dataAiHint: "vape coils",
+    isFeatured: false,
+  },
 ];
+

@@ -16,8 +16,11 @@ export const productCategories: ProductCategory[] = [...productCategoriesList];
 // Subcategory Mapping
 export const SUBCATEGORIES_MAP: Partial<Record<ProductCategory, readonly string[]>> = {
   'Vape Hardware': ['Pod Systems', 'Mods', 'Kits', 'Tanks', 'Coils'] as const,
-  'Hemp Accessory': ['Glass', 'Paper', 'Grinder', 'Rolling Trays'] as const,
+  'Hemp Accessory': ['Glass', 'Paper', 'Grinder', 'Rolling Trays', 'Storage'] as const,
   'Edible': ['Gummies', 'Chocolates', 'Baked Goods', 'Drinks', 'Other Edibles'] as const,
+  'Vape': ['Disposables', 'Cartridges', 'E-Liquid Pods'] as const,
+  'Flower': ['Indica', 'Sativa', 'Hybrid'] as const,
+  'Concentrate': ['Diamonds', 'Sauce', 'Wax', 'Shatter'] as const,
 };
 
 
@@ -37,7 +40,7 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
 
 // Schema for a Custom Deal Rule
 export const CustomDealRuleSchema = z.object({
-  id: z.string().optional(), 
+  id: z.string().optional(),
   selectedDays: z.array(DayOfWeekEnum)
     .min(1, "At least one day must be selected for the deal rule.")
     .refine(days => new Set(days).size === days.length, {
@@ -71,7 +74,7 @@ export interface Store {
   address: string;
   city: string;
   hours: string;
-  dailyDeals?: CustomDealRule[]; 
+  dailyDeals?: CustomDealRule[];
   isHidden?: boolean;
 }
 
@@ -89,7 +92,7 @@ export function flowerWeightToGrams(weight: FlowerWeight): number {
     case "3.5g": return 3.5;
     case "7g": return 7;
     case "14g": return 14;
-    case "1oz": return 28; 
+    case "1oz": return 28;
     default: throw new Error(`Unknown flower weight: ${weight}`);
   }
 }
@@ -120,7 +123,7 @@ export const ProductSchema = z.object({
   brand: z.string().min(2, { message: "Brand must be at least 2 characters." }).default('Other'),
   baseImageUrl: z.string().url({ message: "Please enter a valid base image URL." }).default('https://placehold.co/600x400.png'),
   category: ProductCategoryEnum,
-  subcategory: z.string().optional(), 
+  subcategory: z.string().optional(),
   dataAiHint: z.string().max(50, {message: "AI Hint should be max 50 chars"}).optional().default(''),
   isFeatured: z.boolean().optional().default(false),
   availability: z.array(StoreAvailabilitySchema)
@@ -185,7 +188,7 @@ export const ProductSchema = z.object({
           path: [`availability`, index, `stock`],
         });
       }
-    } else { 
+    } else {
       if (avail.weightOptions && avail.weightOptions.length > 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -223,19 +226,19 @@ export type ProductFormData = z.infer<typeof ProductSchema>;
 export interface Product extends Omit<ProductFormData, 'availability' | 'category' | 'isFeatured' | 'subcategory'> {
   id: string;
   category: ProductCategory;
-  subcategory?: string; 
+  subcategory?: string;
   isFeatured?: boolean;
   availability: StoreAvailability[];
 }
 
 export interface ResolvedProduct {
   id: string;
-  variantId: string; 
+  variantId: string;
   name: string;
   description: string;
   brand: string;
   category: ProductCategory;
-  subcategory?: string; 
+  subcategory?: string;
   dataAiHint?: string;
   isFeatured?: boolean;
   storeId: string;
@@ -246,20 +249,20 @@ export interface ResolvedProduct {
   originalPrice?: number;
   imageUrl: string;
   selectedWeight?: FlowerWeight;
-  isBogoEligible?: boolean; 
+  isBogoEligible?: boolean;
 }
 
 export interface Deal {
   id: string;
-  product?: ResolvedProduct; 
-  discountPercentage?: number; 
+  product?: ResolvedProduct;
+  discountPercentage?: number;
   expiresAt: string;
   title: string;
   description?: string;
   storeId: string;
   categoryOnDeal?: ProductCategory;
-  brandOnDeal?: string; 
-  dealType?: 'percentage' | 'bogo'; 
+  brandOnDeal?: string;
+  dealType?: 'percentage' | 'bogo';
 }
 
 export const StoreRoleEnum = z.enum(['Manager', 'Employee']);
@@ -276,10 +279,10 @@ export interface User {
   isAdmin: boolean;
   assignedStoreId?: string | null;
   storeRole?: StoreRole | null;
-  noShowStrikes: number; 
-  isBanned: boolean;     
-  createdAt: string;     
-  favoriteProductIds?: string[]; 
+  noShowStrikes: number;
+  isBanned: boolean;
+  createdAt: string;
+  favoriteProductIds?: string[];
 }
 
 export interface CartItem {
@@ -322,7 +325,7 @@ export interface Order {
   orderDate: string;
   status: OrderStatus;
   pickupInstructions?: string;
-  userStrikesAtOrderTime?: number; 
+  userStrikesAtOrderTime?: number;
   cancellationReason?: CancellationReason;
   cancellationDescription?: string;
 }
