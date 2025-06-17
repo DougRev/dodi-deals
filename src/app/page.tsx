@@ -14,7 +14,7 @@ import type { ProductCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const DEALS_PER_PAGE = 2;
-const FEATURED_PRODUCTS_PER_PAGE = 3; // Define how many featured products per page
+const FEATURED_PRODUCTS_PER_PAGE = 3; 
 
 interface CategorySpotlightItem {
   name: string;
@@ -36,7 +36,7 @@ const categorySpotlights: CategorySpotlightItem[] = [
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [currentDealsPage, setCurrentDealsPage] = useState(1);
-  const [currentFeaturedPage, setCurrentFeaturedPage] = useState(1); // State for featured products pagination
+  const [currentFeaturedPage, setCurrentFeaturedPage] = useState(1);
 
   const featuredProducts = products.filter(p => p.isFeatured);
 
@@ -206,7 +206,7 @@ export default function HomePage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {displayedFeaturedProducts.map((product) => (
-                 <div key={product.variantId} className="p-1 h-full">
+                 <div key={product.variantId} className="h-full"> {/* Ensure wrapper takes full height */}
                     <ProductCard product={product} />
                   </div>
               ))}
