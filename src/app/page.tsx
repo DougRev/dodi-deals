@@ -106,6 +106,42 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* Category Spotlights Section - Only if store is selected */}
+      {selectedStore && (
+        <section>
+          <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6"> {/* Changed to 3 columns for medium for better fit */}
+            {categorySpotlights.map((category) => (
+              <Link href={category.href} key={category.name} passHref>
+                <Card className={cn(
+                  "group hover:shadow-xl transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center",
+                  category.isSpecial 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary hover:border-primary/90" 
+                    : "bg-card text-card-foreground hover:border-accent"
+                )}>
+                  <CardHeader className="p-2">
+                    <category.icon className={cn(
+                      "h-12 w-12 group-hover:text-accent transition-colors mx-auto mb-2",
+                      category.isSpecial 
+                        ? "text-primary-foreground group-hover:text-primary-foreground/80" 
+                        : "text-primary group-hover:text-accent"
+                    )} />
+                    <CardTitle className={cn(
+                      "text-lg font-semibold group-hover:text-accent transition-colors",
+                      category.isSpecial 
+                        ? "text-primary-foreground group-hover:text-primary-foreground/90" 
+                        : "text-foreground group-hover:text-accent"
+                    )}>
+                      {category.name}
+                    </CardTitle>
+                  </CardHeader>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Deals Section - Conditionally Rendered */}
       {!loadingProducts && deals.length > 0 && (
         <section>
@@ -175,42 +211,6 @@ export default function HomePage() {
           </Card>
         )}
       </section>
-
-      {/* Category Spotlights Section - Only if store is selected */}
-      {selectedStore && (
-        <section>
-          <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6"> {/* Changed to 3 columns for medium for better fit */}
-            {categorySpotlights.map((category) => (
-              <Link href={category.href} key={category.name} passHref>
-                <Card className={cn(
-                  "group hover:shadow-xl transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center",
-                  category.isSpecial 
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary hover:border-primary/90" 
-                    : "bg-card text-card-foreground hover:border-accent"
-                )}>
-                  <CardHeader className="p-2">
-                    <category.icon className={cn(
-                      "h-12 w-12 group-hover:text-accent transition-colors mx-auto mb-2",
-                      category.isSpecial 
-                        ? "text-primary-foreground group-hover:text-primary-foreground/80" 
-                        : "text-primary group-hover:text-accent"
-                    )} />
-                    <CardTitle className={cn(
-                      "text-lg font-semibold group-hover:text-accent transition-colors",
-                      category.isSpecial 
-                        ? "text-primary-foreground group-hover:text-primary-foreground/90" 
-                        : "text-foreground group-hover:text-accent"
-                    )}>
-                      {category.name}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
