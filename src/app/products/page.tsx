@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react'; // Added useEffect
+import { useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { ProductCard } from '@/components/site/ProductCard';
 import { useAppContext } from '@/hooks/useAppContext';
 import type { ResolvedProduct, ProductCategory } from '@/lib/types';
@@ -12,10 +13,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function ProductsPage() {
-  const { products, allProducts, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
+  const { products: storeProducts, allProducts, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | ProductCategory>('All');
   const [selectedBrand, setSelectedBrand] = useState<'All' | string>('All');
+  const searchParams = useSearchParams();
 
   const categories = useMemo(() => {
     if (loadingProducts || !allProducts) return ['All'];
@@ -33,10 +35,36 @@ export default function ProductsPage() {
     return ['All', ...Array.from(uniqueBrands)].sort();
   }, [allProducts, selectedCategory, loadingProducts]);
 
+  useEffect(() => {
+    if (loadingProducts) return; // Don't run if categories/brands aren't ready
+
+    const categoryQuery = searchParams.get('category') as ProductCategory | null;
+    const brandQuery = searchParams.get('brand') as string | null;
+
+    let categoryChangedByQuery = false;
+
+    if (categoryQuery && categories.includes(categoryQuery)) {
+      setSelectedCategory(categoryQuery);
+      categoryChangedByQuery = true;
+    }
+
+    if (brandQuery && brands.includes(brandQuery)) {
+      setSelectedBrand(brandQuery);
+      // If brand is set from query, and category wasn't (or was invalid), set category to 'All'
+      if (!categoryChangedByQuery) {
+        setSelectedCategory('All');
+      }
+    } else if (categoryChangedByQuery) {
+      // If category was set by query, but brand from query is invalid or not present, default brand to 'All'
+      setSelectedBrand('All');
+    }
+    // If neither param is valid, filters remain as they are (initially 'All', or user's manual selection)
+  }, [searchParams, loadingProducts, categories, brands]);
+
+
   const filteredProductsForDisplay = useMemo(() => {
     if (!selectedStore) return [];
-    // 'products' from context is now the list of base products (one card per flower)
-    return products.filter(product => {
+    return storeProducts.filter(product => {
       const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
       const matchesBrand = selectedBrand === 'All' || product.brand === selectedBrand;
       const matchesSearchTerm =
@@ -44,7 +72,7 @@ export default function ProductsPage() {
         (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       return matchesCategory && matchesBrand && matchesSearchTerm;
     });
-  }, [products, searchTerm, selectedCategory, selectedBrand, selectedStore]);
+  }, [storeProducts, searchTerm, selectedCategory, selectedBrand, selectedStore]);
 
   if (loadingStores || (!selectedStore && !loadingStores)) {
      if (!selectedStore && !loadingStores) {

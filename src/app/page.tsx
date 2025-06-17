@@ -8,25 +8,29 @@ import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingBag, Leaf, CakeSlice, Briefcase, Cigarette } from 'lucide-react'; 
+import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingBag, Leaf, CakeSlice, Briefcase, Settings, Cigarette } from 'lucide-react'; 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ProductCategory } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const MAX_FEATURED_PRODUCTS_ON_HOMEPAGE = 3;
 const DEALS_PER_PAGE = 2; 
 
 interface CategorySpotlightItem {
-  name: ProductCategory;
+  name: string; // Can be ProductCategory or a custom name like "Dodi Exclusives"
   href: string;
   icon: React.ElementType;
   dataAiHint: string;
+  isSpecial?: boolean; // For Dodi card styling
 }
 
 const categorySpotlights: CategorySpotlightItem[] = [
   { name: "Vape", href: "/products?category=Vape", icon: Cigarette, dataAiHint: "vape device" },
   { name: "Flower", href: "/products?category=Flower", icon: Leaf, dataAiHint: "cannabis flower" },
+  { name: "Dodi Exclusives", href: "/products?brand=Dodi%20Hemp", icon: Star, dataAiHint: "exclusive deal", isSpecial: true },
   { name: "Edible", href: "/products?category=Edible", icon: CakeSlice, dataAiHint: "cannabis edible" },
   { name: "Hemp Accessory", href: "/products?category=Hemp%20Accessory", icon: Briefcase, dataAiHint: "hemp accessory" },
+  { name: "Vape Hardware", href: "/products?category=Vape%20Hardware", icon: Settings, dataAiHint: "vape mod" },
 ];
 
 export default function HomePage() {
@@ -176,13 +180,28 @@ export default function HomePage() {
       {selectedStore && (
         <section>
           <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6"> {/* Changed to 3 columns for medium for better fit */}
             {categorySpotlights.map((category) => (
               <Link href={category.href} key={category.name} passHref>
-                <Card className="group hover:shadow-xl hover:border-accent transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center">
+                <Card className={cn(
+                  "group hover:shadow-xl transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center",
+                  category.isSpecial 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary hover:border-primary/90" 
+                    : "bg-card text-card-foreground hover:border-accent"
+                )}>
                   <CardHeader className="p-2">
-                    <category.icon className="h-12 w-12 text-primary group-hover:text-accent transition-colors mx-auto mb-2" />
-                    <CardTitle className="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">
+                    <category.icon className={cn(
+                      "h-12 w-12 group-hover:text-accent transition-colors mx-auto mb-2",
+                      category.isSpecial 
+                        ? "text-primary-foreground group-hover:text-primary-foreground/80" 
+                        : "text-primary group-hover:text-accent"
+                    )} />
+                    <CardTitle className={cn(
+                      "text-lg font-semibold group-hover:text-accent transition-colors",
+                      category.isSpecial 
+                        ? "text-primary-foreground group-hover:text-primary-foreground/90" 
+                        : "text-foreground group-hover:text-accent"
+                    )}>
                       {category.name}
                     </CardTitle>
                   </CardHeader>
