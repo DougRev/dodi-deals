@@ -41,16 +41,13 @@ export function DealCard({ deal }: DealCardProps) {
   const [currentImgSrc, setCurrentImgSrc] = useState('/images/categories/default.png');
 
   useEffect(() => {
-    let newImgSrc = '/images/categories/default.png'; // Default fallback
+    let newImgSrc = '/images/categories/default.png'; 
     if (deal.product?.imageUrl) {
       newImgSrc = deal.product.imageUrl;
     } else if (deal.categoryOnDeal) {
-      // Standard category image path logic.
-      // If categoryOnDeal is 'E-Liquid', this will become '/images/categories/e-liquid.png'
-      newImgSrc = `/images/categories/${deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-')}.png`;
+      const categoryPath = deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-');
+      newImgSrc = `/images/categories/${categoryPath}.png`;
     }
-    // If brandOnDeal and no category or product image, you might want to add logic here too
-    // For now, it defaults to default.png if no product image and no categoryOnDeal
     setCurrentImgSrc(newImgSrc);
   }, [deal.product?.imageUrl, deal.categoryOnDeal, deal.brandOnDeal]);
 
@@ -122,7 +119,7 @@ export function DealCard({ deal }: DealCardProps) {
               {deal.categoryOnDeal ? `On ${deal.categoryOnDeal}` : (deal.brandOnDeal ? `On ${deal.brandOnDeal} brand` : `Specific Product Deal`)}
             </p>
             <p className="text-xs text-muted-foreground mb-1">{deal.product.brand}</p>
-            <CardDescription className="text-sm text-muted-foreground mb-2 h-12 overflow-y-auto">
+            <CardDescription className="text-sm text-muted-foreground mb-2 h-20 overflow-y-auto">
               {deal.description || deal.product.description}
             </CardDescription>
             <div className="flex items-baseline space-x-2 mb-2">
@@ -137,7 +134,7 @@ export function DealCard({ deal }: DealCardProps) {
              <p className="text-sm text-muted-foreground mb-1">
               {deal.categoryOnDeal ? `Applies to: All ${deal.categoryOnDeal}` : (deal.brandOnDeal ? `Applies to: ${deal.brandOnDeal} Brand Items` : deal.dealType === 'bogo' ? 'Special Offer!' : 'Store-Wide Special')}
             </p>
-            <CardDescription className="text-sm text-muted-foreground mb-2 min-h-[4rem]">
+            <CardDescription className="text-sm text-muted-foreground mb-2 h-20 overflow-y-auto">
               {deal.description || "Check in-store or qualifying products for details."}
             </CardDescription>
           </>
