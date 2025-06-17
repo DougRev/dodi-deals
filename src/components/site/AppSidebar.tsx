@@ -19,7 +19,7 @@ import {
 import DodiLogo from '@/components/icons/DodiLogo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays, Briefcase, PackagePlus, Users2, ListOrdered } from 'lucide-react';
+import { Home, List, ShoppingCart, UserCircle, ShieldCheck, LogOut, Settings, PanelLeft, PanelRight, CalendarDays, Briefcase, PackagePlus, Users2, ListOrdered, Info } from 'lucide-react'; // Added Info icon
 
 export function AppSidebar() {
   const { isAuthenticated, user, logout, selectedStore, setStoreSelectorOpen } = useAppContext();
@@ -82,6 +82,14 @@ export function AppSidebar() {
               <Link href="/store-deals">
                 <CalendarDays />
                 <span>Store Deals</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+           <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="What is THCa?" className="w-full justify-start">
+              <Link href="/what-is-thca">
+                <Info />
+                <span>What is THCa?</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
