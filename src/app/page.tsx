@@ -12,22 +12,16 @@ import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingB
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ProductCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel"; // Import Carousel components
 
 const DEALS_PER_PAGE = 2;
+const FEATURED_PRODUCTS_PER_PAGE = 3; // Define how many featured products per page
 
 interface CategorySpotlightItem {
-  name: string; 
+  name: string;
   href: string;
   icon: React.ElementType;
   dataAiHint: string;
-  isSpecial?: boolean; 
+  isSpecial?: boolean;
 }
 
 const categorySpotlights: CategorySpotlightItem[] = [
@@ -42,13 +36,21 @@ const categorySpotlights: CategorySpotlightItem[] = [
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [currentDealsPage, setCurrentDealsPage] = useState(1);
+  const [currentFeaturedPage, setCurrentFeaturedPage] = useState(1); // State for featured products pagination
 
   const featuredProducts = products.filter(p => p.isFeatured);
 
+  // Deals Pagination
   const totalDealsPages = Math.ceil(deals.length / DEALS_PER_PAGE);
   const dealsStartIndex = (currentDealsPage - 1) * DEALS_PER_PAGE;
   const dealsEndIndex = dealsStartIndex + DEALS_PER_PAGE;
   const displayedDeals = deals.slice(dealsStartIndex, dealsEndIndex);
+
+  // Featured Products Pagination
+  const totalFeaturedPages = Math.ceil(featuredProducts.length / FEATURED_PRODUCTS_PER_PAGE);
+  const featuredStartIndex = (currentFeaturedPage - 1) * FEATURED_PRODUCTS_PER_PAGE;
+  const featuredEndIndex = featuredStartIndex + FEATURED_PRODUCTS_PER_PAGE;
+  const displayedFeaturedProducts = featuredProducts.slice(featuredStartIndex, featuredEndIndex);
 
   if (loadingStores || (!selectedStore && !loadingStores)) {
     if (!selectedStore && !loadingStores) {
@@ -201,29 +203,40 @@ export default function HomePage() {
         {loadingProducts ? (
           <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" />  <span className="ml-2">Loading products...</span></div>
         ) : featuredProducts.length > 0 ? (
-          <Carousel
-            opts={{
-              align: "start",
-              loop: featuredProducts.length > 3, // Loop only if more items than can be shown
-            }}
-            className="w-full"
-          >
-            <CarouselContent>
-              {featuredProducts.map((product) => (
-                <CarouselItem key={product.variantId} className="basis-full sm:basis-1/2 lg:basis-1/3">
-                  <div className="p-1 h-full"> {/* Added padding for spacing and h-full for card height consistency */}
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {displayedFeaturedProducts.map((product) => (
+                 <div key={product.variantId} className="p-1 h-full">
                     <ProductCard product={product} />
                   </div>
-                </CarouselItem>
               ))}
-            </CarouselContent>
-            {featuredProducts.length > 1 && ( // Show controls only if more than one item
-              <>
-                <CarouselPrevious className="hidden md:flex" /> {/* Hide on small screens if too cluttered */}
-                <CarouselNext className="hidden md:flex" />
-              </>
+            </div>
+            {totalFeaturedPages > 1 && (
+              <div className="flex justify-center items-center mt-8 space-x-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentFeaturedPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentFeaturedPage === 1}
+                  aria-label="Previous featured products page"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentFeaturedPage} of {totalFeaturedPages}
+                </span>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentFeaturedPage(prev => Math.min(totalFeaturedPages, prev + 1))}
+                  disabled={currentFeaturedPage === totalFeaturedPages}
+                  aria-label="Next featured products page"
+                >
+                  Next
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </div>
             )}
-          </Carousel>
+          </>
         ) : (
            <Card className="text-center py-12 shadow-lg">
             <CardContent>
@@ -236,4 +249,3 @@ export default function HomePage() {
     </div>
   );
 }
-
