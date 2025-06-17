@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
-import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData, ProductCategory, StoreSalesReport, SalesReportDataItem } from '@/lib/types'; 
+import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData, ProductCategory, StoreSalesReport, SalesReportDataItem, GlobalSalesReport, Store } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
 import { flowerWeightToGrams, productCategories } from '@/lib/types';
@@ -861,5 +861,103 @@ export async function getStoreSalesReport(storeId: string): Promise<StoreSalesRe
   };
 
   console.log(`[firestoreService][AdminSDK][${functionName}] Report generated successfully for store ${storeId}. Orders processed: ${totalOrdersProcessed}`);
+  return report;
+}
+
+export async function getGlobalSalesReport(): Promise<GlobalSalesReport> {
+  const functionName = 'getGlobalSalesReport';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Generating global sales report.`);
+
+  const productsSnapshot = await adminDb!.collection('products').get();
+  const productDetailsMap = new Map<string, { name: string, category: ProductCategory }>();
+  productsSnapshot.forEach(doc => {
+    const data = doc.data() as Product;
+    productDetailsMap.set(doc.id, { name: data.name, category: data.category });
+  });
+
+  const storesSnapshot = await adminDb!.collection('stores').get();
+  const storeDetailsMap = new Map<string, { name: string }>();
+  storesSnapshot.forEach(doc => {
+    const data = doc.data() as Store;
+    storeDetailsMap.set(doc.id, { name: data.name });
+  });
+
+  const ordersColRef = adminDb!.collection('orders');
+  const completedOrdersSnapshot = await ordersColRef
+    .where('status', '==', 'Completed')
+    .get();
+
+  let globalTotalRevenue = 0;
+  let globalTotalItemsSold = 0;
+  const globalTotalOrdersProcessed = completedOrdersSnapshot.size;
+
+  const globalProductSalesData: Record<string, SalesReportDataItem & { category: ProductCategory }> = {};
+  const globalCategorySalesData: Record<string, SalesReportDataItem> = {};
+  const storePerformanceData: Record<string, SalesReportDataItem & { ordersProcessed: number }> = {};
+
+  completedOrdersSnapshot.forEach(doc => {
+    const order = doc.data() as Order;
+    globalTotalRevenue += order.finalTotal;
+
+    // Aggregate store performance
+    if (!storePerformanceData[order.storeId]) {
+      const storeName = storeDetailsMap.get(order.storeId)?.name || order.storeName || 'Unknown Store';
+      storePerformanceData[order.storeId] = { id: order.storeId, name: storeName, quantitySold: 0, revenueGenerated: 0, ordersProcessed: 0 };
+    }
+    storePerformanceData[order.storeId].revenueGenerated += order.finalTotal;
+    storePerformanceData[order.storeId].ordersProcessed! += 1;
+
+
+    order.items.forEach(item => {
+      globalTotalItemsSold += item.quantity;
+      const itemRevenue = item.pricePerItem * item.quantity;
+      const productInfo = productDetailsMap.get(item.productId);
+      const productName = productInfo?.name || item.productName || 'Unknown Product';
+      const category = productInfo?.category || 'Unknown' as ProductCategory;
+
+      // Aggregate global product sales
+      if (!globalProductSalesData[item.productId]) {
+        globalProductSalesData[item.productId] = { id: item.productId, name: productName, quantitySold: 0, revenueGenerated: 0, category: category };
+      }
+      globalProductSalesData[item.productId].quantitySold += item.quantity;
+      globalProductSalesData[item.productId].revenueGenerated += itemRevenue;
+
+      // Aggregate global category sales
+      if (category !== 'Unknown') {
+        if (!globalCategorySalesData[category]) {
+          globalCategorySalesData[category] = { id: category, name: category, quantitySold: 0, revenueGenerated: 0 };
+        }
+        globalCategorySalesData[category].quantitySold += item.quantity;
+        globalCategorySalesData[category].revenueGenerated += itemRevenue;
+      }
+    });
+  });
+
+  const globalTopSellingProducts = Object.values(globalProductSalesData)
+    .sort((a, b) => b.revenueGenerated - a.revenueGenerated)
+    .slice(0, 10);
+
+  const globalTopSellingCategories = Object.values(globalCategorySalesData)
+    .sort((a, b) => b.revenueGenerated - a.revenueGenerated)
+    .slice(0, 5);
+  
+  const topPerformingStores = Object.values(storePerformanceData)
+    .sort((a,b) => b.revenueGenerated - a.revenueGenerated)
+    .slice(0, 5);
+
+
+  const report: GlobalSalesReport = {
+    totalRevenue: globalTotalRevenue,
+    totalItemsSold: globalTotalItemsSold,
+    totalOrdersProcessed: globalTotalOrdersProcessed,
+    globalTopSellingProducts,
+    globalTopSellingCategories,
+    topPerformingStores,
+    reportGeneratedAt: new Date().toISOString(),
+  };
+
+  console.log(`[firestoreService][AdminSDK][${functionName}] Global report generated successfully. Total orders processed: ${globalTotalOrdersProcessed}`);
   return report;
 }

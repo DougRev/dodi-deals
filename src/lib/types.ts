@@ -31,7 +31,7 @@ export const PREDEFINED_BRANDS: Partial<Record<ProductCategory, string[]>> = {
   'Pre-roll': ["Dodi Hemp"],
   'Edible': ["CannaElite", "Hidden Hills", "Dodi Hemp", "Generic Edible Brand"],
   'Concentrate': ["Dodi Hemp", "Indy Concentrates"],
-  'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Papers", "Generic Grinder"],
+  'Hemp Accessory': ["Dodi Accessories", "RAW", "Zig-Zag", "Grav Labs", "Shine Papers", "Generic Glass", "Generic Grinder"],
   'E-Liquid': ["Juice Head", "Twist", "Squeeze"],
   'Drinks': ["Generic Drink Brand", "Dodi Drinks"],
   'Vape Hardware': ["SMOK", "GeekVape", "Vaporesso", "Uwell", "Voopoo"],
@@ -346,10 +346,11 @@ export const REDEMPTION_OPTIONS: RedemptionOption[] = [
 
 // Types for Sales Report
 export interface SalesReportDataItem {
-  id: string; // Product ID or category name
-  name: string;
-  quantitySold: number;
-  revenueGenerated: number;
+  id: string; // Product ID, category name, or store ID
+  name: string; // Product name, category name, or store name
+  quantitySold: number; // For products/categories
+  revenueGenerated: number; // For products/categories/stores
+  ordersProcessed?: number; // For stores
 }
 
 export interface StoreSalesReport {
@@ -361,7 +362,14 @@ export interface StoreSalesReport {
   topSellingProducts: SalesReportDataItem[];
   topSellingCategories: SalesReportDataItem[];
   reportGeneratedAt: string; // ISO string for when the report was generated
-  // Optional: if we add date range filtering in the future
-  // dataStartDate?: string;
-  // dataEndDate?: string;
+}
+
+export interface GlobalSalesReport {
+  totalRevenue: number;
+  totalItemsSold: number;
+  totalOrdersProcessed: number;
+  globalTopSellingProducts: SalesReportDataItem[];
+  globalTopSellingCategories: SalesReportDataItem[];
+  topPerformingStores: SalesReportDataItem[]; // id = storeId, name = storeName, revenueGenerated = store's total revenue
+  reportGeneratedAt: string;
 }

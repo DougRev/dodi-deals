@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Building, Package, Users, LayoutDashboard } from "lucide-react";
+import { Building, Package, Users, LayoutDashboard, BarChartBig } from "lucide-react"; // Added BarChartBig
 
 export default function AdminDashboardPage() {
   return (
@@ -54,8 +54,20 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
         </Link>
+
+        <Link href="/admin/reports" passHref>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer md:col-span-2 lg:col-span-1">
+            <CardHeader>
+              <BarChartBig className="h-10 w-10 mb-2 text-accent" />
+              <CardTitle>Global Sales Reports</CardTitle>
+              <CardDescription>View aggregated sales data across all stores.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full">View Reports</Button>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );
 }
-
