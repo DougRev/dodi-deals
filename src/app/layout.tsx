@@ -11,7 +11,13 @@ import { AppSidebar } from '@/components/site/AppSidebar';
 
 export const metadata: Metadata = {
   title: 'Dodi Deals - Indiana\'s Choice for Vapes & THCa',
+  applicationName: 'Dodi Deals', // Short name for PWA context
   description: 'Discover daily deals on vapes, THCa flower, edibles, and more at Dodi Deals. Order online for convenient in-store pickup across Indiana.',
+  appleWebApp: {
+    capable: true,
+    title: 'Dodi Deals', // Title for "Add to Home Screen" on iOS
+    statusBarStyle: 'default',
+  },
 };
 
 export default function RootLayout({
