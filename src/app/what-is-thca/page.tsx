@@ -74,7 +74,7 @@ export default function WhatIsThcaPage() {
           </p>
           <div className="relative aspect-video w-full md:w-2/3 mx-auto rounded-lg overflow-hidden shadow-md mt-4">
              <Image
-                src="https://placehold.co/600x300.png"
+                src="/images/info/molecules.png"
                 alt="THCa to THC Conversion Diagram: THCa molecule in raw cannabis, heat icon, transforming to THC molecule, labeled Decarboxylation"
                 fill
                 style={{ objectFit: 'cover' }}
@@ -105,7 +105,7 @@ export default function WhatIsThcaPage() {
 
           <div className="relative aspect-[4/3] w-full md:w-3/4 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
              <Image
-                src="https://placehold.co/600x450.png"
+                src="/images/info/health.png"
                 alt="Benefits of THCa Infographic: Anti-inflammatory (joint icon), Neuroprotective (brain shield), Anti-emetic (settled stomach), Anti-proliferative (cells with stop sign)."
                 fill
                 style={{ objectFit: 'contain', padding: '1rem' }} 
