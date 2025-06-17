@@ -1,20 +1,19 @@
 
 "use client";
 
-import { useState } from 'react'; 
+import { useState } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { DealCard } from '@/components/site/DealCard';
 import { ProductCard } from '@/components/site/ProductCard';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingBag, Leaf, CakeSlice, Briefcase, Settings, Cigarette } from 'lucide-react'; 
+import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingBag, Leaf, CakeSlice, Briefcase, Settings, Cigarette } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ProductCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-const MAX_FEATURED_PRODUCTS_ON_HOMEPAGE = 3;
-const DEALS_PER_PAGE = 2; 
+const DEALS_PER_PAGE = 2;
 
 interface CategorySpotlightItem {
   name: string; // Can be ProductCategory or a custom name like "Dodi Exclusives"
@@ -36,16 +35,14 @@ export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [currentDealsPage, setCurrentDealsPage] = useState(1);
 
-  const featuredProducts = products
-    .filter(p => p.isFeatured)
-    .slice(0, MAX_FEATURED_PRODUCTS_ON_HOMEPAGE);
+  const featuredProducts = products.filter(p => p.isFeatured);
 
   const totalDealsPages = Math.ceil(deals.length / DEALS_PER_PAGE);
   const dealsStartIndex = (currentDealsPage - 1) * DEALS_PER_PAGE;
   const dealsEndIndex = dealsStartIndex + DEALS_PER_PAGE;
   const displayedDeals = deals.slice(dealsStartIndex, dealsEndIndex);
 
-  if (loadingStores || (!selectedStore && !loadingStores)) { 
+  if (loadingStores || (!selectedStore && !loadingStores)) {
     if (!selectedStore && !loadingStores) {
       return (
         <div className="flex flex-col items-center justify-center text-center py-10 min-h-[60vh]">
@@ -79,7 +76,7 @@ export default function HomePage() {
         <section className="relative py-16 md:py-24 rounded-lg overflow-hidden shadow-xl bg-gradient-to-br from-primary/80 via-primary/60 to-accent/70">
           <div className="absolute inset-0">
             <Image
-              src="/images/banner.png" 
+              src="/images/banner.png"
               alt="Dodi Deals background"
               fill
               style={{ objectFit: 'cover' }}
@@ -93,7 +90,7 @@ export default function HomePage() {
               Dodi Deals at {selectedStore.name}
             </h1>
             <p className="text-lg md:text-xl text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
-              Your premium destination for the finest selection of vapes, THCa, edibles, and accessories. 
+              Your premium destination for the finest selection of vapes, THCa, edibles, and accessories.
               Order online for convenient in-store pickup!
             </p>
             <Button asChild size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground shadow-md hover:shadow-lg transition-shadow">
@@ -109,26 +106,26 @@ export default function HomePage() {
       {selectedStore && (
         <section>
           <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6"> {/* Adjusted to 5 columns on lg for better fit if needed */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
             {categorySpotlights.map((category) => (
               <Link href={category.href} key={category.name} passHref>
                 <Card className={cn(
                   "group hover:shadow-xl transition-all duration-300 cursor-pointer text-center p-4 h-full flex flex-col items-center justify-center",
-                  category.isSpecial 
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary hover:border-primary/90" 
+                  category.isSpecial
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 border-primary hover:border-primary/90"
                     : "bg-card text-card-foreground hover:border-accent"
                 )}>
                   <CardHeader className="p-2">
                     <category.icon className={cn(
                       "h-12 w-12 group-hover:text-accent transition-colors mx-auto mb-2",
-                      category.isSpecial 
-                        ? "text-primary-foreground group-hover:text-primary-foreground/80" 
+                      category.isSpecial
+                        ? "text-primary-foreground group-hover:text-primary-foreground/80"
                         : "text-primary group-hover:text-accent"
                     )} />
                     <CardTitle className={cn(
                       "text-lg font-semibold group-hover:text-accent transition-colors",
-                      category.isSpecial 
-                        ? "text-primary-foreground group-hover:text-primary-foreground/90" 
+                      category.isSpecial
+                        ? "text-primary-foreground group-hover:text-primary-foreground/90"
                         : "text-foreground group-hover:text-accent"
                     )}>
                       {category.name}
