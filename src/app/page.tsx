@@ -26,8 +26,7 @@ interface CategorySpotlightItem {
 
 const categorySpotlights: CategorySpotlightItem[] = [
   { name: "Vape", href: "/products?category=Vape", icon: Cigarette, dataAiHint: "vape device" },
-  { name: "Flower", href: "/products?category=Flower", icon: Leaf, dataAiHint: "cannabis flower" },
-  { name: "Dodi Exclusives", href: "/products?brand=Dodi%20Hemp", icon: Star, dataAiHint: "exclusive deal", isSpecial: true },
+  { name: "Dodi Exclusives", href: "/products?brand=Dodi%20Hemp", icon: Leaf, dataAiHint: "cannabis leaf", isSpecial: true },
   { name: "Edible", href: "/products?category=Edible", icon: CakeSlice, dataAiHint: "cannabis edible" },
   { name: "Hemp Accessory", href: "/products?category=Hemp%20Accessory", icon: Briefcase, dataAiHint: "hemp accessory" },
   { name: "Vape Hardware", href: "/products?category=Vape%20Hardware", icon: Settings, dataAiHint: "vape mod" },
@@ -110,7 +109,7 @@ export default function HomePage() {
       {selectedStore && (
         <section>
           <h2 className="text-3xl font-bold font-headline text-center mb-8 text-primary">Explore Our Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6"> {/* Changed to 3 columns for medium for better fit */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6"> {/* Adjusted to 5 columns on lg for better fit if needed */}
             {categorySpotlights.map((category) => (
               <Link href={category.href} key={category.name} passHref>
                 <Card className={cn(
