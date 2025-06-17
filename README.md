@@ -9,6 +9,28 @@ This project was bootstrapped with Firebase Studio and demonstrates a modern web
 *   **Framework**: [Next.js](https://nextjs.org/) (App Router)
 *   **UI Library**: [React](https://reactjs.org/)
 *   **Component Library**: [ShadCN UI](https://ui.shadcn.com/)
+*   **Styling**: [Tailwind CSS](https://tailwindcss.tailwindcss.com/)
+*   **Generative AI**: [Genkit](https://firebase.google.com/docs/genkit) (for AI-powered features)
+*   **Backend & Database**: Firebase (Firestore, Authentication)
+
+## Getting Started
+
+To get started with developing this application:
+
+1.  **Clone the repository (if you haven't already).**
+2.  **Install dependencies:**
+
+# Dodi Deals - Firebase Studio App
+
+Welcome to Dodi Deals! This application is a Next.js-based platform designed to showcase products, daily deals, and allow users to manage their accounts for in-store pickups, reflecting features similar to dodihemp.com.
+
+This project was bootstrapped with Firebase Studio and demonstrates a modern web application setup.
+
+## Tech Stack
+
+*   **Framework**: [Next.js](https://nextjs.org/) (App Router)
+*   **UI Library**: [React](https://reactjs.org/)
+*   **Component Library**: [ShadCN UI](https://ui.shadcn.com/)
 *   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 *   **Generative AI**: [Genkit](https://firebase.google.com/docs/genkit) (for AI-powered features)
 *   **Backend & Database**: Firebase (Firestore, Authentication)
