@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ResolvedProduct, FlowerWeight } from '@/lib/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { ShoppingCart, Plus, Minus, Percent, Weight, AlertTriangle, Heart } from 'lucide-react'; 
+import { ShoppingCart, Plus, Minus, Percent, Weight, AlertTriangle, Heart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { FlowerWeightSelectorDialog } from './FlowerWeightSelectorDialog';
 import { cn } from '@/lib/utils';
@@ -20,11 +20,11 @@ interface ProductCardProps {
 const FLOWER_LOW_STOCK_THRESHOLD_GRAMS = 10; // If total grams are less than this, show low stock warning
 
 export function ProductCard({ product }: ProductCardProps) {
-  const { 
-    addToCart, 
-    isAuthenticated, 
-    selectedStore, 
-    getCartItemQuantity, 
+  const {
+    addToCart,
+    isAuthenticated,
+    selectedStore,
+    getCartItemQuantity,
     updateCartQuantity,
     toggleFavoriteProduct,
     isProductFavorited,
@@ -52,14 +52,14 @@ export function ProductCard({ product }: ProductCardProps) {
       updateCartQuantity(product.id, currentQuantityInCart - 1, product.selectedWeight);
     }
   };
-  
+
   const handleBaseAddToCart = () => {
     if (!selectedStore) {
         alert("Please select a store first.");
         return;
     }
     if (isAuthenticated) {
-      addToCart(product, 1); 
+      addToCart(product, 1);
     } else {
       alert("Please log in to add items to your cart.");
     }
@@ -85,7 +85,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <>
-      <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 group">
+      <Card className="flex flex-col h-full overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 group">
         <CardHeader className="p-0 relative">
           <div className="aspect-video relative w-full">
             <Image
@@ -106,7 +106,7 @@ export function ProductCard({ product }: ProductCardProps) {
                     className={cn(
                         "absolute top-2 left-2 rounded-full bg-background/70 hover:bg-background/90 text-destructive transition-all duration-200",
                         isFavorited ? "text-destructive fill-destructive" : "text-muted-foreground/70 hover:text-destructive",
-                        "group-hover:opacity-100 md:opacity-0 focus:opacity-100" 
+                        "group-hover:opacity-100 md:opacity-0 focus:opacity-100"
                     )}
                     onClick={handleToggleFavorite}
                     aria-label={isFavorited ? "Unfavorite product" : "Favorite product"}
@@ -138,7 +138,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <CardTitle className="text-xl font-headline mb-1">{product.name}</CardTitle>
           <p className="text-xs text-muted-foreground mb-1">{product.brand}</p>
           <CardDescription className="text-sm text-muted-foreground mb-2 h-20 overflow-y-auto">{product.description}</CardDescription>
-          
+
           {product.category === 'Flower' ? (
             <p className="text-lg font-semibold text-primary">
               From ${product.price.toFixed(2)}
@@ -160,29 +160,33 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
 
           <p className="text-xs text-muted-foreground">Category: {product.category}</p>
-          
-          {product.category === 'Flower' ? (
-            isFlowerProductWithNoStock ? (
-              <p className="text-xs text-destructive font-semibold">Out of Stock</p>
-            ) : isFlowerLowStock ? (
-              <p className="text-xs text-destructive font-semibold flex items-center">
-                <AlertTriangle className="h-3 w-3 mr-1"/> Low Stock!
-              </p>
-            ) : (
-              <p className="text-xs text-green-600">Available in various weights</p>
-            )
-          ) : (
-            <>
-              {product.stock < 10 && product.stock > 0 && !isOutOfStock && (
-                <p className="text-xs text-destructive flex items-center">
-                    <AlertTriangle className="h-3 w-3 mr-1"/>Only {product.stock} left in stock!
-                </p>
-              )}
-              {isOutOfStock && (
+
+          {/* Wrapper for stock/availability messages to ensure consistent height */}
+          <div className="min-h-[1.25rem] mt-1"> {/* min-h-[1.25rem] is approx 20px, for one line of text-xs */}
+            {product.category === 'Flower' ? (
+              isFlowerProductWithNoStock ? (
                 <p className="text-xs text-destructive font-semibold">Out of Stock</p>
-              )}
-            </>
-          )}
+              ) : isFlowerLowStock ? (
+                <p className="text-xs text-destructive font-semibold flex items-center">
+                  <AlertTriangle className="h-3 w-3 mr-1"/> Low Stock!
+                </p>
+              ) : (
+                <p className="text-xs text-green-600">Available in various weights</p>
+              )
+            ) : (
+              <>
+                {product.stock < 10 && product.stock > 0 && !isOutOfStock && (
+                  <p className="text-xs text-destructive flex items-center">
+                      <AlertTriangle className="h-3 w-3 mr-1"/>Only {product.stock} left in stock!
+                  </p>
+                )}
+                {isOutOfStock && (
+                  <p className="text-xs text-destructive font-semibold">Out of Stock</p>
+                )}
+                {/* If non-flower and in stock (and not low), this results in an empty div which still takes up min-height */}
+              </>
+            )}
+          </div>
         </CardContent>
         <CardFooter className="p-4">
           {!isAuthenticated ? (
