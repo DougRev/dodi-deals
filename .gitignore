@@ -38,6 +38,11 @@ next-env.d.ts
 .env.test.local
 .env.production.local
 
+# admin sdk
+
+dodi-deals-firebase-adminsdk.json
+.dodi-deals-firebase-adminsdk.json
+
 # Local Firebaser Emulator Data
 .firebase/emulators/
 firebase-debug.log
