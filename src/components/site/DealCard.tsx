@@ -38,7 +38,6 @@ export function DealCard({ deal }: DealCardProps) {
   const { addToCart, isAuthenticated, selectedStore } = useAppContext();
   const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(deal.expiresAt));
   
-  // Initial image source determination will be handled in useEffect
   const [currentImgSrc, setCurrentImgSrc] = useState('/images/categories/default.png');
 
   useEffect(() => {
@@ -46,16 +45,14 @@ export function DealCard({ deal }: DealCardProps) {
     if (deal.product?.imageUrl) {
       newImgSrc = deal.product.imageUrl;
     } else if (deal.categoryOnDeal) {
-      if (deal.categoryOnDeal === 'E-Liquid') { // Special case for E-Liquid
-        newImgSrc = '/images/eliquid.png'; 
-      } else {
-        newImgSrc = `/images/categories/${deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-')}.png`;
-      }
+      // Standard category image path logic.
+      // If categoryOnDeal is 'E-Liquid', this will become '/images/categories/e-liquid.png'
+      newImgSrc = `/images/categories/${deal.categoryOnDeal.toLowerCase().replace(/\s+/g, '-')}.png`;
     }
     // If brandOnDeal and no category or product image, you might want to add logic here too
     // For now, it defaults to default.png if no product image and no categoryOnDeal
     setCurrentImgSrc(newImgSrc);
-  }, [deal.product?.imageUrl, deal.categoryOnDeal, deal.brandOnDeal]); // Added brandOnDeal to deps for completeness
+  }, [deal.product?.imageUrl, deal.categoryOnDeal, deal.brandOnDeal]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -194,4 +191,3 @@ export function DealCard({ deal }: DealCardProps) {
     </Card>
   );
 }
-
