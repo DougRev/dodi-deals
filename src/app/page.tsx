@@ -12,15 +12,22 @@ import { ArrowRight, MapPin, Loader2, Star, ChevronLeft, ChevronRight, ShoppingB
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ProductCategory } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"; // Import Carousel components
 
 const DEALS_PER_PAGE = 2;
 
 interface CategorySpotlightItem {
-  name: string; // Can be ProductCategory or a custom name like "Dodi Exclusives"
+  name: string; 
   href: string;
   icon: React.ElementType;
   dataAiHint: string;
-  isSpecial?: boolean; // For Dodi card styling
+  isSpecial?: boolean; 
 }
 
 const categorySpotlights: CategorySpotlightItem[] = [
@@ -30,6 +37,7 @@ const categorySpotlights: CategorySpotlightItem[] = [
   { name: "Hemp Accessory", href: "/products?category=Hemp%20Accessory", icon: Briefcase, dataAiHint: "hemp accessory" },
   { name: "Vape Hardware", href: "/products?category=Vape%20Hardware", icon: Settings, dataAiHint: "vape mod" },
 ];
+
 
 export default function HomePage() {
   const { deals, products, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
@@ -193,11 +201,29 @@ export default function HomePage() {
         {loadingProducts ? (
           <div className="flex justify-center items-center h-40"><Loader2 className="h-12 w-12 animate-spin text-primary" />  <span className="ml-2">Loading products...</span></div>
         ) : featuredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredProducts.map((product) => (
-              <ProductCard key={product.variantId} product={product} />
-            ))}
-          </div>
+          <Carousel
+            opts={{
+              align: "start",
+              loop: featuredProducts.length > 3, // Loop only if more items than can be shown
+            }}
+            className="w-full"
+          >
+            <CarouselContent>
+              {featuredProducts.map((product) => (
+                <CarouselItem key={product.variantId} className="basis-full sm:basis-1/2 lg:basis-1/3">
+                  <div className="p-1 h-full"> {/* Added padding for spacing and h-full for card height consistency */}
+                    <ProductCard product={product} />
+                  </div>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            {featuredProducts.length > 1 && ( // Show controls only if more than one item
+              <>
+                <CarouselPrevious className="hidden md:flex" /> {/* Hide on small screens if too cluttered */}
+                <CarouselNext className="hidden md:flex" />
+              </>
+            )}
+          </Carousel>
         ) : (
            <Card className="text-center py-12 shadow-lg">
             <CardContent>
@@ -210,3 +236,4 @@ export default function HomePage() {
     </div>
   );
 }
+
