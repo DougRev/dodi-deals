@@ -96,22 +96,25 @@ export default function WhatIsThcaPage() {
             Though more research is needed, early studies and anecdotal evidence suggest THCa may provide several therapeutic benefits—all without the high of THC:
           </p>
           
-          <div className="space-y-3">
-            <p><span className="text-xl mr-2">🧬</span> <strong>Anti-Inflammatory:</strong> May help reduce inflammation in conditions like arthritis, lupus, and other autoimmune disorders.</p>
-            <p><span className="text-xl mr-2">🧠</span> <strong>Neuroprotective:</strong> Shown to possibly protect brain cells and slow progression of neurodegenerative diseases like Parkinson’s or Alzheimer’s.</p>
-            <p><span className="text-xl mr-2">🤢</span> <strong>Anti-Emetic:</strong> May ease nausea and vomiting, offering a potential benefit for chemotherapy patients or those with digestive issues.</p>
-            <p><span className="text-xl mr-2">🛡️</span> <strong>Anti-Proliferative:</strong> Preliminary studies suggest THCa could inhibit the growth of certain cancer cells, though more clinical research is necessary.</p>
-          </div>
-
-          <div className="relative aspect-[3/4] w-full md:w-2/3 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
-             <Image
-                src="/images/info/holistic.png"
-                alt="Woman practicing holistic wellness in nature, representing THCa's potential benefits."
-                fill
-                style={{ objectFit: 'cover', padding: '0' }} 
-                data-ai-hint="holistic wellness"
-                sizes="(max-width: 768px) 100vw, 66vw"
-              />
+          <div className="flex flex-col md:flex-row items-start gap-6 mt-4">
+            <div className="w-full md:w-1/3 lg:w-2/5 shrink-0">
+              <div className="relative aspect-[3/4] rounded-lg overflow-hidden shadow-md bg-muted/30">
+                 <Image
+                    src="/images/info/holistic.png"
+                    alt="Woman practicing holistic wellness in nature, representing THCa's potential benefits."
+                    fill
+                    style={{ objectFit: 'cover' }} 
+                    data-ai-hint="holistic wellness"
+                    sizes="(max-width: 767px) 100vw, (max-width: 1023px) 33vw, 40vw"
+                  />
+              </div>
+            </div>
+            <div className="w-full md:w-2/3 lg:w-3/5 space-y-3">
+              <p><span className="text-xl mr-2">🧬</span> <strong>Anti-Inflammatory:</strong> May help reduce inflammation in conditions like arthritis, lupus, and other autoimmune disorders.</p>
+              <p><span className="text-xl mr-2">🧠</span> <strong>Neuroprotective:</strong> Shown to possibly protect brain cells and slow progression of neurodegenerative diseases like Parkinson’s or Alzheimer’s.</p>
+              <p><span className="text-xl mr-2">🤢</span> <strong>Anti-Emetic:</strong> May ease nausea and vomiting, offering a potential benefit for chemotherapy patients or those with digestive issues.</p>
+              <p><span className="text-xl mr-2">🛡️</span> <strong>Anti-Proliferative:</strong> Preliminary studies suggest THCa could inhibit the growth of certain cancer cells, though more clinical research is necessary.</p>
+            </div>
           </div>
         </CardContent>
       </Card>
