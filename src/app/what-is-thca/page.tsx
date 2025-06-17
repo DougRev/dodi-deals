@@ -1,8 +1,8 @@
 
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { AlertCircle, Info, Leaf } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertCircle, Info, Leaf, Thermometer, ShieldCheck, Brain, AlertTriangle as AntiNauseaIcon, XCircle as AntiProliferativeIcon } from 'lucide-react'; // Added more icons
 
 export default function WhatIsThcaPage() {
   return (
@@ -11,7 +11,7 @@ export default function WhatIsThcaPage() {
         <Leaf className="h-16 w-16 mx-auto text-primary" />
         <h1 className="text-4xl font-bold font-headline text-primary">Understanding THCa</h1>
         <p className="text-xl text-muted-foreground">
-          Learn about Tetrahydrocannabinolic Acid and its role in cannabis.
+          Explore the science and benefits of Tetrahydrocannabinolic Acid.
         </p>
       </header>
 
@@ -22,56 +22,63 @@ export default function WhatIsThcaPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-base leading-relaxed">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-            <div className="md:col-span-1">
-              <div className="relative aspect-square rounded-lg overflow-hidden shadow-md">
-                <Image
-                  src="https://placehold.co/400x400.png"
-                  alt="Cannabis plant structure"
-                  fill
-                  style={{ objectFit: 'cover' }}
-                  data-ai-hint="cannabis plant"
-                  sizes="(max-width: 768px) 100vw, 33vw"
-                />
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <p>
-                THCa, or Tetrahydrocannabinolic Acid, is a non-psychoactive cannabinoid found in raw and live cannabis. As the cannabis plant dries or is heated, THCa slowly converts to THC, the compound known for its psychoactive effects.
-              </p>
-              <p className="mt-2">
-                In its raw form, THCa has a different molecular structure than THC, which prevents it from binding effectively with the CB1 receptors in the brain responsible for producing the "high" associated with cannabis.
-              </p>
-            </div>
-          </div>
+          <p>
+            THCa, or Tetrahydrocannabinolic Acid, is a naturally occurring, non-psychoactive cannabinoid found in raw and live cannabis. Unlike THC (the compound known for producing a “high”), THCa doesn’t bind effectively to CB1 receptors in the brain—meaning it won’t cause intoxication in its natural form.
+          </p>
+          <p>
+            As cannabis is dried, cured, or heated, THCa converts into THC through a chemical reaction known as decarboxylation. This transformation alters the molecular structure by removing a carboxyl group (COOH), enabling it to bind to the brain’s cannabinoid receptors.
+          </p>
         </CardContent>
       </Card>
 
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold text-accent flex items-center">
-            <Info className="mr-3 h-7 w-7" /> THCa vs. THC: The Key Difference
+            <Thermometer className="mr-3 h-7 w-7" /> THCa vs. THC: Key Differences
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-base leading-relaxed">
-          <p>
-            The primary difference between THCa and THC (Delta-9-Tetrahydrocannabinol) lies in their psychoactive properties and molecular structure.
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[150px]">Feature</TableHead>
+                <TableHead>THCa</TableHead>
+                <TableHead>THC</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="font-medium">Psychoactive</TableCell>
+                <TableCell>❌ Non-psychoactive</TableCell>
+                <TableCell>✅ Psychoactive</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Found In</TableCell>
+                <TableCell>Raw/live cannabis</TableCell>
+                <TableCell>Heated/cured cannabis</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Converts To</TableCell>
+                <TableCell>THC (via heat/time)</TableCell>
+                <TableCell>—</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Interaction with CB1 Receptors</TableCell>
+                <TableCell>Minimal</TableCell>
+                <TableCell>Strong (induces high)</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <p className="mt-4">
+            Decarboxylation is the process by which THCa becomes THC. This occurs through smoking, vaping, baking, or even extended drying/curing.
           </p>
-          <ul className="list-disc list-inside space-y-2 pl-2">
-            <li>
-              <span className="font-semibold">Psychoactivity:</span> THCa is non-psychoactive in its raw state, while THC is psychoactive.
-            </li>
-            <li>
-              <span className="font-semibold">Decarboxylation:</span> THCa converts into THC through a process called decarboxylation, which occurs when cannabis is exposed to heat (like smoking, vaping, or cooking) or over time as it cures. This process removes a carboxyl group (COOH) from the THCa molecule, changing its shape and allowing it to interact with CB1 receptors.
-            </li>
-          </ul>
           <div className="relative aspect-video w-full md:w-2/3 mx-auto rounded-lg overflow-hidden shadow-md mt-4">
              <Image
                 src="https://placehold.co/600x300.png"
-                alt="Decarboxylation process diagram"
+                alt="THCa to THC Conversion Diagram: THCa molecule in raw cannabis, heat icon, transforming to THC molecule, labeled Decarboxylation"
                 fill
                 style={{ objectFit: 'cover' }}
-                data-ai-hint="science diagram"
+                data-ai-hint="molecule diagram"
                 sizes="(max-width: 768px) 100vw, 66vw"
               />
           </div>
@@ -81,34 +88,26 @@ export default function WhatIsThcaPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-semibold text-accent flex items-center">
-            <Info className="mr-3 h-7 w-7" /> Potential Reported Benefits of THCa
+            <ShieldCheck className="mr-3 h-7 w-7" /> Potential Benefits of THCa
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-base leading-relaxed">
           <p>
-            While research is ongoing, preliminary studies and anecdotal reports suggest that THCa may offer several potential therapeutic benefits in its non-decarboxylated form. These include:
+            Though more research is needed, early studies and anecdotal evidence suggest THCa may provide several therapeutic benefits—all without the high of THC:
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 bg-muted/50 rounded-lg border">
-              <h4 className="font-semibold text-primary mb-1">Anti-inflammatory Properties</h4>
-              <p className="text-sm">THCa has been studied for its potential to reduce inflammation, which could be beneficial for conditions like arthritis or lupus.</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg border">
-              <h4 className="font-semibold text-primary mb-1">Neuroprotective Effects</h4>
-              <p className="text-sm">Some research indicates THCa might help protect nerve cells, potentially offering benefits for neurodegenerative diseases.</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg border">
-              <h4 className="font-semibold text-primary mb-1">Anti-emetic Properties</h4>
-              <p className="text-sm">THCa may help reduce nausea and vomiting, similar to THC but without the psychoactive effects.</p>
-            </div>
-            <div className="p-4 bg-muted/50 rounded-lg border">
-              <h4 className="font-semibold text-primary mb-1">Anti-proliferative Effects</h4>
-              <p className="text-sm">Early studies suggest THCa might inhibit the growth of certain types of cancer cells, though much more research is needed.</p>
-            </div>
+          <div className="relative aspect-[4/3] w-full md:w-3/4 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
+             <Image
+                src="https://placehold.co/600x450.png"
+                alt="Benefits of THCa Infographic: Anti-inflammatory (joint icon), Neuroprotective (brain shield), Anti-emetic (settled stomach), Anti-proliferative (cells with stop sign)."
+                fill
+                style={{ objectFit: 'contain', padding: '1rem' }} // Use contain for infographic
+                data-ai-hint="infographic health"
+                sizes="(max-width: 768px) 100vw, 75vw"
+              />
           </div>
-          <p className="mt-4">
-            It's important to note that these are areas of active research, and THCa is not a substitute for medical treatment.
-          </p>
+          <CardDescription className="mt-4 text-center text-sm">
+            The infographic above highlights key areas of THCa research: Anti-Inflammatory, Neuroprotective, Anti-Emetic, and Anti-Proliferative effects.
+          </CardDescription>
         </CardContent>
       </Card>
 
@@ -120,10 +119,13 @@ export default function WhatIsThcaPage() {
         </CardHeader>
         <CardContent className="text-destructive/90 text-sm space-y-2">
           <p>
+            THCa is not a substitute for medical treatment. Always consult a healthcare professional before starting any cannabinoid-based regimen.
+          </p>
+          <p>
             The information provided on this page is for educational purposes only and is not intended as medical advice. The statements made regarding these products have not been evaluated by the Food and Drug Administration.
           </p>
           <p>
-            Consult with a healthcare professional before using any cannabis products, especially if you have a medical condition or are taking other medications. Product effects can vary between individuals. Use responsibly and in accordance with local laws and regulations.
+            Product effects can vary between individuals. Use responsibly and in accordance with local laws and regulations.
           </p>
         </CardContent>
       </Card>
