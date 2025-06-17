@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react'; // Added useEffect
-import { useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { useState, useMemo, useEffect, Suspense } from 'react'; // Added Suspense
+import { useSearchParams } from 'next/navigation';
 import { ProductCard } from '@/components/site/ProductCard';
 import { useAppContext } from '@/hooks/useAppContext';
 import type { ResolvedProduct, ProductCategory } from '@/lib/types';
@@ -12,7 +12,7 @@ import { Search, Filter, MapPin, Loader2, Tag } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
-export default function ProductsPage() {
+function ProductsPageInternal() {
   const { products: storeProducts, allProducts, selectedStore, setStoreSelectorOpen, loadingStores, loadingProducts } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | ProductCategory>('All');
@@ -36,7 +36,7 @@ export default function ProductsPage() {
   }, [allProducts, selectedCategory, loadingProducts]);
 
   useEffect(() => {
-    if (loadingProducts) return; // Don't run if categories/brands aren't ready
+    if (loadingProducts) return; 
 
     const categoryQuery = searchParams.get('category') as ProductCategory | null;
     const brandQuery = searchParams.get('brand') as string | null;
@@ -50,15 +50,12 @@ export default function ProductsPage() {
 
     if (brandQuery && brands.includes(brandQuery)) {
       setSelectedBrand(brandQuery);
-      // If brand is set from query, and category wasn't (or was invalid), set category to 'All'
       if (!categoryChangedByQuery) {
         setSelectedCategory('All');
       }
     } else if (categoryChangedByQuery) {
-      // If category was set by query, but brand from query is invalid or not present, default brand to 'All'
       setSelectedBrand('All');
     }
-    // If neither param is valid, filters remain as they are (initially 'All', or user's manual selection)
   }, [searchParams, loadingProducts, categories, brands]);
 
 
@@ -175,5 +172,18 @@ export default function ProductsPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-[70vh]">
+        <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading products page...</p>
+      </div>
+    }>
+      <ProductsPageInternal />
+    </Suspense>
   );
 }
