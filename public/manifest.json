@@ -1,7 +1,6 @@
-
 {
   "name": "Dodi Deals",
-  "short_name": "Dodi Deals",
+  "short_name": "DodiDeals",
   "description": "Discover daily deals on vapes, THCa flower, edibles, and more at Dodi Deals. Order online for convenient in-store pickup across Indiana.",
   "icons": [
     {
@@ -19,7 +18,8 @@
   ],
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FDFBF7",
-  "theme_color": "#4D8C57",
+  "background_color": "#E6E6FA",
+  "theme_color": "#4B0082",
+  "scope": "/",
   "orientation": "portrait-primary"
 }
