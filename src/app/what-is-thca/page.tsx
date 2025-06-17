@@ -103,19 +103,16 @@ export default function WhatIsThcaPage() {
             <p><span className="text-xl mr-2">🛡️</span> <strong>Anti-Proliferative:</strong> Preliminary studies suggest THCa could inhibit the growth of certain cancer cells, though more clinical research is necessary.</p>
           </div>
 
-          <div className="relative aspect-[4/3] w-full md:w-3/4 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
+          <div className="relative aspect-[3/4] w-full md:w-2/3 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
              <Image
-                src="/images/info/health.png"
-                alt="Benefits of THCa Infographic: Anti-inflammatory (joint icon), Neuroprotective (brain shield), Anti-emetic (settled stomach), Anti-proliferative (cells with stop sign)."
+                src="/images/info/holistic.png"
+                alt="Woman practicing holistic wellness in nature, representing THCa's potential benefits."
                 fill
-                style={{ objectFit: 'contain', padding: '1rem' }} 
-                data-ai-hint="infographic health"
-                sizes="(max-width: 768px) 100vw, 75vw"
+                style={{ objectFit: 'cover', padding: '0' }} 
+                data-ai-hint="holistic wellness"
+                sizes="(max-width: 768px) 100vw, 66vw"
               />
           </div>
-          <CardDescription className="mt-4 text-center text-sm">
-            The infographic above highlights key areas of THCa research: Anti-Inflammatory, Neuroprotective, Anti-Emetic, and Anti-Proliferative effects.
-          </CardDescription>
         </CardContent>
       </Card>
 
