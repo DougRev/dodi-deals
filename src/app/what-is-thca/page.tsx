@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertCircle, Info, Leaf, Thermometer, ShieldCheck, Brain, AlertTriangle as AntiNauseaIcon, XCircle as AntiProliferativeIcon } from 'lucide-react'; // Added more icons
+import { AlertCircle, Info, Leaf, Thermometer, ShieldCheck } from 'lucide-react';
 
 export default function WhatIsThcaPage() {
   return (
@@ -95,12 +95,20 @@ export default function WhatIsThcaPage() {
           <p>
             Though more research is needed, early studies and anecdotal evidence suggest THCa may provide several therapeutic benefits—all without the high of THC:
           </p>
+          
+          <div className="space-y-3">
+            <p><span className="text-xl mr-2">🧬</span> <strong>Anti-Inflammatory:</strong> May help reduce inflammation in conditions like arthritis, lupus, and other autoimmune disorders.</p>
+            <p><span className="text-xl mr-2">🧠</span> <strong>Neuroprotective:</strong> Shown to possibly protect brain cells and slow progression of neurodegenerative diseases like Parkinson’s or Alzheimer’s.</p>
+            <p><span className="text-xl mr-2">🤢</span> <strong>Anti-Emetic:</strong> May ease nausea and vomiting, offering a potential benefit for chemotherapy patients or those with digestive issues.</p>
+            <p><span className="text-xl mr-2">🛡️</span> <strong>Anti-Proliferative:</strong> Preliminary studies suggest THCa could inhibit the growth of certain cancer cells, though more clinical research is necessary.</p>
+          </div>
+
           <div className="relative aspect-[4/3] w-full md:w-3/4 mx-auto rounded-lg overflow-hidden shadow-md mt-4 bg-muted/30 flex items-center justify-center">
              <Image
                 src="https://placehold.co/600x450.png"
                 alt="Benefits of THCa Infographic: Anti-inflammatory (joint icon), Neuroprotective (brain shield), Anti-emetic (settled stomach), Anti-proliferative (cells with stop sign)."
                 fill
-                style={{ objectFit: 'contain', padding: '1rem' }} // Use contain for infographic
+                style={{ objectFit: 'contain', padding: '1rem' }} 
                 data-ai-hint="infographic health"
                 sizes="(max-width: 768px) 100vw, 75vw"
               />
