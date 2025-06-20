@@ -6,7 +6,6 @@ import {defineSecret} from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
-
 let stripe: Stripe;
 
 /**
@@ -76,7 +75,7 @@ export const createOrRetrieveStripeCustomer = onCall(
       `[Stripe] Authenticated user UID: ${uid}, Email from token: ${email}`
     );
 
-    const name = auth.token.name || email; // Default to email if name not in token
+    const name = auth.token.name || email;
     logger.info(
       `[Stripe] Processing for UID: ${uid}, Email: ${email}, Name: ${name}`
     );
@@ -136,8 +135,8 @@ export const createOrRetrieveStripeCustomer = onCall(
         logger.info("[Stripe] Stripe customer retrieved:", customer);
         if (customer && !customer.deleted) {
           logger.info(
-            `[Stripe] Verified Stripe Customer ID ${userData.stripeCustomerId}. `+
-            "Returning existing ID."
+            `[Stripe] Verified Stripe Customer ID ` +
+            `${userData.stripeCustomerId}. Returning existing ID.`
           );
           return {customerId: userData.stripeCustomerId};
         }
@@ -147,15 +146,15 @@ export const createOrRetrieveStripeCustomer = onCall(
           "A new one will be created."
         );
       } catch (verificationError: unknown) {
-        const errorMessage =
-          verificationError instanceof Error ?
-            verificationError.message :
-            String(verificationError);
         logger.warn(
-          `[Stripe] Error verifying existing Stripe Customer ID ` +
-          `${userData.stripeCustomerId}: ${errorMessage}. ` +
-          "This might happen if the ID is invalid or network issues " +
-          "occurred. A new one will be created."
+          `[Stripe] Error verifying existing ID ` +
+          `${userData.stripeCustomerId}: Invalid ID or network issue: ` +
+          `${
+            (verificationError instanceof Error ?
+              verificationError.message :
+              String(verificationError)
+            ).substring(0, 100)
+          }... occurred. A new one will be created.`
         );
       }
     }
@@ -174,7 +173,7 @@ export const createOrRetrieveStripeCustomer = onCall(
       logger.info(
         `[Stripe] Created Stripe Customer ${customer.id} for UID ${uid}.`
       );
-      await userRef.update({stripeCustomerId: customer.id});
+      await userRef.set({stripeCustomerId: customer.id}, {merge: true});
       logger.info(
         `[Stripe] Updated Firestore user ${uid} with Stripe Customer ID ` +
         `${customer.id}.`
@@ -202,7 +201,6 @@ export const createOrRetrieveStripeCustomer = onCall(
 interface CreateSetupIntentData {
   customerId?: unknown;
 }
-
 /**
  * Create Stripe SetupIntent for saving card details for future payments.
  * @return {{clientSecret: string}} The SetupIntent client secret.
