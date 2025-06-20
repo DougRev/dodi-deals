@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions';
 import { Loader2, CreditCard, Lock } from 'lucide-react';
 
 const CARD_ELEMENT_OPTIONS = {
@@ -58,26 +58,31 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     setLoading(true);
 
     try {
-      // Step 1: Create or retrieve Stripe Customer ID
+      console.log("[AddPaymentMethodForm] Attempting to get Firebase Functions instance.");
       const functions = getFunctions();
+      console.log("[AddPaymentMethodForm] Firebase Functions instance obtained. Preparing to call 'createOrRetrieveStripeCustomer'.");
+      
       const createOrRetrieveCustomer = httpsCallable(functions, 'createOrRetrieveStripeCustomer');
       const customerResult = await createOrRetrieveCustomer() as { data: { customerId: string } };
       const customerId = customerResult.data.customerId;
+      console.log("[AddPaymentMethodForm] 'createOrRetrieveStripeCustomer' successful. Customer ID:", customerId);
 
       if (!customerId) {
         throw new Error("Failed to create or retrieve Stripe customer.");
       }
 
-      // Step 2: Create a SetupIntent
+      console.log("[AddPaymentMethodForm] Preparing to call 'createStripeSetupIntent'.");
       const createSetupIntent = httpsCallable(functions, 'createStripeSetupIntent');
       const setupIntentResult = await createSetupIntent({ customerId }) as { data: { clientSecret: string } };
       const clientSecret = setupIntentResult.data.clientSecret;
+      console.log("[AddPaymentMethodForm] 'createStripeSetupIntent' successful. Client Secret obtained.");
+
 
       if (!clientSecret) {
         throw new Error("Failed to create Stripe SetupIntent.");
       }
 
-      // Step 3: Confirm Card Setup
+      console.log("[AddPaymentMethodForm] Confirming card setup with Stripe.");
       const { setupIntent, error: setupError } = await stripe.confirmCardSetup(clientSecret, {
         payment_method: {
           card: cardElement,
@@ -89,9 +94,11 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
       });
 
       if (setupError) {
+        console.error("[AddPaymentMethodForm] Stripe confirmCardSetup error:", setupError);
         throw setupError;
       }
 
+      console.log("[AddPaymentMethodForm] Stripe confirmCardSetup result:", setupIntent);
       if (setupIntent?.status === 'succeeded') {
         toast({
           title: "Payment Method Saved",
@@ -102,8 +109,16 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
         throw new Error(setupIntent?.last_setup_error?.message || "Failed to save card. Status: " + setupIntent?.status);
       }
     } catch (err: any) {
-      console.error("Error adding payment method:", err);
-      const displayError = err.message || "An unexpected error occurred. Please try again.";
+      console.error("[AddPaymentMethodForm] Error adding payment method:", err);
+      let displayError = err.message || "An unexpected error occurred. Please try again.";
+      if (err.code === 'functions/internal' || (err as FunctionsError)?.details?.error?.message?.includes('internal')) {
+        displayError = "An internal server error occurred while contacting our services. Please try again later or contact support if the issue persists. Check server logs for more details.";
+      } else if (err.code === 'functions/unavailable') {
+        displayError = "Our payment service is temporarily unavailable. Please try again later.";
+      } else if (err.type && err.type.startsWith('Stripe')) { // Stripe specific errors
+        displayError = err.message; // Stripe errors are usually user-friendly
+      }
+      
       setError(displayError);
       toast({
         title: "Error Saving Card",

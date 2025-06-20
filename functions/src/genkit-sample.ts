@@ -66,7 +66,8 @@ export const menuSuggestion = onCallGenkit({
   // dictionary) and the request data. The isSignedIn() and hasClaim() helpers
   // can be used to simplify. The following will require the user to have the
   // email_verified claim, for example.
-  // authPolicy: hasClaim("email_verified"), // Example of where hasClaim might be used
+  // authPolicy: hasClaim("email_verified"),
+  // Example of where hasClaim might be used
 
   // Grant access to the API key to this function:
   secrets: [apiKey],
