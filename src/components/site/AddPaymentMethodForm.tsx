@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { toast } from '@/hooks/use-toast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions';
+import { app as firebaseApp } from '@/lib/firebase'; // Import the initialized Firebase app
 import { Loader2, CreditCard, Lock } from 'lucide-react';
 
 const CARD_ELEMENT_OPTIONS = {
@@ -58,9 +59,9 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     setLoading(true);
 
     try {
-      console.log("[AddPaymentMethodForm] Attempting to get Firebase Functions instance.");
-      const functions = getFunctions();
-      console.log("[AddPaymentMethodForm] Firebase Functions instance obtained. Preparing to call 'createOrRetrieveStripeCustomer'.");
+      // Explicitly use the Firebase app instance and specify the region
+      const functions = getFunctions(firebaseApp, 'us-central1');
+      console.log("[AddPaymentMethodForm] Firebase Functions instance obtained for region 'us-central1'. Preparing to call 'createOrRetrieveStripeCustomer'.");
       
       const createOrRetrieveCustomer = httpsCallable(functions, 'createOrRetrieveStripeCustomer');
       const customerResult = await createOrRetrieveCustomer() as { data: { customerId: string } };
@@ -111,10 +112,32 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     } catch (err: any) {
       console.error("[AddPaymentMethodForm] Error adding payment method:", err);
       let displayError = err.message || "An unexpected error occurred. Please try again.";
-      if (err.code === 'functions/internal' || (err as FunctionsError)?.details?.error?.message?.includes('internal')) {
-        displayError = "An internal server error occurred while contacting our services. Please try again later or contact support if the issue persists. Check server logs for more details.";
-      } else if (err.code === 'functions/unavailable') {
-        displayError = "Our payment service is temporarily unavailable. Please try again later.";
+      
+      // Check for specific Firebase Functions error codes
+      if (err.code) {
+        switch (err.code) {
+          case 'functions/unauthenticated':
+            displayError = "Authentication error. Please ensure you are logged in.";
+            break;
+          case 'functions/permission-denied':
+            displayError = "Permission denied. You may not have access to this feature.";
+            break;
+          case 'functions/not-found':
+             displayError = "The requested function was not found. This might be a deployment or naming issue.";
+             break;
+          case 'functions/internal':
+            displayError = "An internal server error occurred. Please try again later or contact support. Check server logs for details.";
+            break;
+          case 'functions/unavailable':
+             displayError = "The service is temporarily unavailable. Please try again later.";
+             break;
+          default:
+            // Keep the original message if it's a Stripe error or other specific message
+            if (!err.type || !err.type.startsWith('Stripe')) {
+                 displayError = `Function call failed: ${err.code}. ${err.message || "Please try again."}`;
+            }
+            break;
+        }
       } else if (err.type && err.type.startsWith('Stripe')) { // Stripe specific errors
         displayError = err.message; // Stripe errors are usually user-friendly
       }
@@ -164,3 +187,4 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     </Card>
   );
 }
+

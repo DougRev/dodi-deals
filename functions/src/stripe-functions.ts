@@ -121,22 +121,22 @@ export const createOrRetrieveStripeCustomer = onCall(
 
     if (userData?.stripeCustomerId) {
       logger.info(
-        `[Stripe] Found existing Stripe Customer ID: ` +
-        `${userData.stripeCustomerId} for user ${uid}. Verifying customer...`
+        "[Stripe] Found existing Stripe Customer ID: " +
+        "${userData.stripeCustomerId} for user ${uid}. Verifying customer..."
       );
       try {
         const inst = getStripeInstance();
         logger.info(
-          `[Stripe] Attempting to retrieve customer ` +
-          `${userData.stripeCustomerId} from Stripe.`
+          "[Stripe] Attempting to retrieve customer " +
+          "${userData.stripeCustomerId} from Stripe."
         );
         const customer =
           await inst.customers.retrieve(userData.stripeCustomerId);
         logger.info("[Stripe] Stripe customer retrieved:", customer);
         if (customer && !customer.deleted) {
           logger.info(
-            `[Stripe] Verified Stripe Customer ID ` +
-            `${userData.stripeCustomerId}. Returning existing ID.`
+            "[Stripe] Verified Stripe Customer ID " +
+            "${userData.stripeCustomerId}. Returning existing ID."
           );
           return {customerId: userData.stripeCustomerId};
         }
@@ -147,8 +147,8 @@ export const createOrRetrieveStripeCustomer = onCall(
         );
       } catch (verificationError: unknown) {
         logger.warn(
-          `[Stripe] Error verifying existing ID ` +
-          `${userData.stripeCustomerId}: Invalid ID or network issue: ` +
+          "[Stripe] Error verifying existing ID " +
+          "${userData.stripeCustomerId}: Invalid ID or network issue: " +
           `${
             (verificationError instanceof Error ?
               verificationError.message :
@@ -276,8 +276,8 @@ export const createStripeSetupIntent = onCall(
       const errorMessage =
         stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
       logger.error(
-        `[Stripe] Stripe API error creating SetupIntent for customer ` +
-        `${customerId}: ${errorMessage}`,
+        "[Stripe] Stripe API error creating SetupIntent for customer " +
+        "${customerId}: ${errorMessage}",
         stripeErr
       );
       throw new HttpsError(
