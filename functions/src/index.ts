@@ -1,19 +1,27 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
 
-import {onRequest} from "firebase-functions/v2/https";
+import * as functions from "firebase-functions";
 import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+// Initialize Firebase Admin SDK *ONCE*
+// Guard ensures initializeApp() runs only if no default app exists.
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+  logger.info("Firebase Admin SDK initialized in functions/src/index.ts");
+} else {
+  logger.info("Firebase Admin SDK already initialized, using existing app.");
+}
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+// Export Stripe-related functions
+export * from "./stripe-functions";
+
+// If you have genkit-sample.ts and intend to use it, uncomment below.
+// export * from "./genkit-sample";
+
+// A simple HTTP function for a health check or demo.
+export const helloWorld = functions.https.onRequest((request, response) => {
+  logger.info("Hello logs from Dodi Deals!", {
+    structuredData: true,
+  });
+  response.send("Hello from Dodi Deals Firebase Functions!");
+});

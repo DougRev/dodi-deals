@@ -283,7 +283,16 @@ export interface User {
   isBanned: boolean;
   createdAt: string;
   favoriteProductIds?: string[];
+  stripeCustomerId?: string; // Added for Stripe
+  // paymentMethods?: UserPaymentMethod[]; // For storing a list of saved payment methods (basic info)
 }
+
+// export interface UserPaymentMethod {
+//   id: string; // Stripe PaymentMethod ID (pm_xxxx)
+//   brand: string; // e.g., "visa", "mastercard"
+//   last4: string;
+//   isDefault?: boolean;
+// }
 
 export interface CartItem {
   product: ResolvedProduct;
