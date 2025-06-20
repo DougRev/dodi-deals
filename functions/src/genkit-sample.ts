@@ -10,7 +10,7 @@ import {gemini15Flash} from "@genkit-ai/vertexai";
 // function from a Genkit action. It automatically implements streaming if your flow does.
 // The https library also has other utility methods such as hasClaim, which verifies that
 // a caller's token has a specific claim (optionally matching a specific value)
-import { onCallGenkit, hasClaim } from "firebase-functions/https";
+import { onCallGenkit } from "firebase-functions/https";
 
 // Genkit models generally depend on an API key. APIs should be stored in Cloud Secret Manager so that
 // access to these sensitive values can be controlled. defineSecret does this for you automatically.
@@ -65,7 +65,7 @@ export const menuSuggestion = onCallGenkit({
   // authPolicy can be any callback that accepts an AuthData (a uid and tokens dictionary) and the
   // request data. The isSignedIn() and hasClaim() helpers can be used to simplify. The following
   // will require the user to have the email_verified claim, for example.
-  // authPolicy: hasClaim("email_verified"),
+  // authPolicy: hasClaim("email_verified"), // Example of where hasClaim might be used
 
   // Grant access to the API key to this function:
   secrets: [apiKey],
