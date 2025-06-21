@@ -74,7 +74,7 @@ export const createOrRetrieveStripeCustomer = onCall(
 
       logger.info(
         "[createOrRetrieveStripeCustomer] Successfully created and saved " +
-        "new Stripe customer ID for user ${uid}: ${customer.id}"
+        `new Stripe customer ID for user ${uid}: ${customer.id}`
       );
 
       return {customerId: customer.id};
@@ -192,8 +192,8 @@ export const listStripePaymentMethods = onCall(
 
       logger.info(
         "[listStripePaymentMethods] Successfully retrieved " +
-        "${formattedPaymentMethods.length} payment methods for customer " +
-        "${customerId}."
+        `${formattedPaymentMethods.length} payment methods for customer ` +
+        `${customerId}.`
       );
 
       return {paymentMethods: formattedPaymentMethods};

@@ -170,6 +170,123 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     doSeed().catch(err => console.error("Error during initial data seed:", err));
   }, []);
 
+  const createUserProfile = useCallback(async (firebaseUser: FirebaseUser, name?: string) => {
+    const userRef = doc(db, "users", firebaseUser.uid);
+    let userSnap;
+    try {
+        userSnap = await getDoc(userRef);
+    } catch (error) {
+        console.error(`[AppContext] Error fetching user profile for ${firebaseUser.uid}:`, error);
+        toast({ title: "Profile Error", description: "Could not load user profile.", variant: "destructive" });
+        return null;
+    }
+
+    const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
+    const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
+    const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
+    const existingData = userSnap.exists() ? userSnap.data() as User : null;
+
+    const determinedAssignedStoreId = existingData?.assignedStoreId || null;
+    const determinedStoreRole = existingData?.storeRole || null;
+
+    const profileDataToSet: User = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email!,
+        name: displayName,
+        points: existingData?.points ?? 0,
+        isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
+        createdAt: existingData?.createdAt || new Date().toISOString(),
+        avatarUrl: determinedAvatarUrl,
+        assignedStoreId: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedAssignedStoreId,
+        storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole,
+        noShowStrikes: existingData?.noShowStrikes ?? 0,
+        isBanned: existingData?.isBanned ?? false,
+        favoriteProductIds: existingData?.favoriteProductIds || [],
+        stripeCustomerId: existingData?.stripeCustomerId || undefined,
+      };
+
+    if (!userSnap.exists()) {
+      try {
+        const dataToSetForNewUser: any = {
+            email: profileDataToSet.email,
+            name: profileDataToSet.name,
+            points: profileDataToSet.points,
+            isAdmin: profileDataToSet.isAdmin,
+            createdAt: profileDataToSet.createdAt,
+            avatarUrl: profileDataToSet.avatarUrl,
+            assignedStoreId: profileDataToSet.assignedStoreId,
+            storeRole: profileDataToSet.storeRole,
+            noShowStrikes: profileDataToSet.noShowStrikes,
+            isBanned: profileDataToSet.isBanned,
+            favoriteProductIds: profileDataToSet.favoriteProductIds,
+        };
+         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
+
+        await setDoc(userRef, dataToSetForNewUser);
+
+        if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
+            await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
+        }
+      } catch (error: any) {
+        console.error(`[AppContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
+        toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
+        return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false, favoriteProductIds: [] };
+      }
+    } else {
+      const updates: Partial<User> = {};
+      if (isTheAdminEmail && !existingData?.isAdmin) {
+        updates.isAdmin = true;
+        updates.assignedStoreId = null;
+        updates.storeRole = null;
+        profileDataToSet.isAdmin = true;
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
+      }
+      if (displayName && existingData?.name !== displayName) {
+        updates.name = displayName;
+        profileDataToSet.name = displayName;
+      }
+      if (determinedAvatarUrl !== existingData?.avatarUrl) {
+         updates.avatarUrl = determinedAvatarUrl;
+         profileDataToSet.avatarUrl = determinedAvatarUrl;
+      }
+      if (existingData.noShowStrikes === undefined) {
+        updates.noShowStrikes = 0;
+        profileDataToSet.noShowStrikes = 0;
+      }
+      if (existingData.isBanned === undefined) {
+        updates.isBanned = false;
+        profileDataToSet.isBanned = false;
+      }
+      if (existingData.favoriteProductIds === undefined) {
+        updates.favoriteProductIds = [];
+        profileDataToSet.favoriteProductIds = [];
+      }
+       if (existingData.stripeCustomerId === undefined) {
+        updates.stripeCustomerId = undefined;
+        profileDataToSet.stripeCustomerId = undefined;
+      }
+
+      if (updates.isAdmin) {
+        updates.assignedStoreId = null;
+        updates.storeRole = null;
+        profileDataToSet.assignedStoreId = null;
+        profileDataToSet.storeRole = null;
+      }
+
+
+      if (Object.keys(updates).length > 0) {
+        try {
+            await updateDoc(userRef, updates);
+            if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
+            if (updates.avatarUrl !== undefined && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
+        } catch (error: any) {
+             console.error(`[AppContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
+        }
+      }
+    }
+    return profileDataToSet;
+  }, []);
 
   useEffect(() => {
     setLoadingStores(true);
@@ -304,154 +421,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user?.id]);
 
-
-  const createUserProfile = async (firebaseUser: FirebaseUser, name?: string) => {
-    const userRef = doc(db, "users", firebaseUser.uid);
-    let userSnap;
-    try {
-        userSnap = await getDoc(userRef);
-    } catch (error) {
-        console.error(`[AuthContext] Error fetching user profile for ${firebaseUser.uid}:`, error);
-        toast({ title: "Profile Error", description: "Could not load user profile.", variant: "destructive" });
-        return null;
-    }
-
-    const isTheAdminEmail = firebaseUser.email === ADMIN_EMAIL;
-    const displayName = name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dodi User';
-    const determinedAvatarUrl = firebaseUser.photoURL || (userSnap.exists() ? (userSnap.data() as User).avatarUrl : undefined);
-    const existingData = userSnap.exists() ? userSnap.data() as User : null;
-
-    const determinedAssignedStoreId = existingData?.assignedStoreId || null;
-    const determinedStoreRole = existingData?.storeRole || null;
-
-    const profileDataToSet: User = {
-        id: firebaseUser.uid,
-        email: firebaseUser.email!,
-        name: displayName,
-        points: existingData?.points ?? 0,
-        isAdmin: isTheAdminEmail || (existingData?.isAdmin === true),
-        createdAt: existingData?.createdAt || new Date().toISOString(),
-        avatarUrl: determinedAvatarUrl,
-        assignedStoreId: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedAssignedStoreId,
-        storeRole: (isTheAdminEmail || (existingData?.isAdmin === true)) ? null : determinedStoreRole,
-        noShowStrikes: existingData?.noShowStrikes ?? 0,
-        isBanned: existingData?.isBanned ?? false,
-        favoriteProductIds: existingData?.favoriteProductIds || [],
-      };
-
-    if (!userSnap.exists()) {
-      try {
-        const dataToSetForNewUser: any = {
-            email: profileDataToSet.email,
-            name: profileDataToSet.name,
-            points: profileDataToSet.points,
-            isAdmin: profileDataToSet.isAdmin,
-            createdAt: profileDataToSet.createdAt,
-            avatarUrl: profileDataToSet.avatarUrl,
-            assignedStoreId: profileDataToSet.assignedStoreId,
-            storeRole: profileDataToSet.storeRole,
-            noShowStrikes: profileDataToSet.noShowStrikes,
-            isBanned: profileDataToSet.isBanned,
-            favoriteProductIds: profileDataToSet.favoriteProductIds,
-        };
-         if (dataToSetForNewUser.avatarUrl === undefined) delete dataToSetForNewUser.avatarUrl;
-
-        await setDoc(userRef, dataToSetForNewUser);
-
-        if (firebaseUser.displayName !== displayName || (determinedAvatarUrl && firebaseUser.photoURL !== determinedAvatarUrl)) {
-            await updateProfile(firebaseUser, { displayName: displayName, photoURL: determinedAvatarUrl });
-        }
-      } catch (error: any) {
-        console.error(`[AuthContext] Error CREATING Firestore profile for ${firebaseUser.email}: ${error.message}`, error);
-        toast({ title: "Profile Creation Failed", description: "Could not save user profile.", variant: "destructive" });
-        return { ...profileDataToSet, isAdmin: false, assignedStoreId: null, storeRole: null, noShowStrikes: 0, isBanned: false, favoriteProductIds: [] };
-      }
-    } else {
-      const updates: Partial<User> = {};
-      if (isTheAdminEmail && !existingData?.isAdmin) {
-        updates.isAdmin = true;
-        updates.assignedStoreId = null;
-        updates.storeRole = null;
-        profileDataToSet.isAdmin = true;
-        profileDataToSet.assignedStoreId = null;
-        profileDataToSet.storeRole = null;
-      }
-      if (displayName && existingData?.name !== displayName) {
-        updates.name = displayName;
-        profileDataToSet.name = displayName;
-      }
-      if (determinedAvatarUrl !== existingData?.avatarUrl) {
-         updates.avatarUrl = determinedAvatarUrl;
-         profileDataToSet.avatarUrl = determinedAvatarUrl;
-      }
-      if (existingData.noShowStrikes === undefined) {
-        updates.noShowStrikes = 0;
-        profileDataToSet.noShowStrikes = 0;
-      }
-      if (existingData.isBanned === undefined) {
-        updates.isBanned = false;
-        profileDataToSet.isBanned = false;
-      }
-      if (existingData.favoriteProductIds === undefined) {
-        updates.favoriteProductIds = [];
-        profileDataToSet.favoriteProductIds = [];
-      }
-
-      if (updates.isAdmin) {
-        updates.assignedStoreId = null;
-        updates.storeRole = null;
-        profileDataToSet.assignedStoreId = null;
-        profileDataToSet.storeRole = null;
-      }
-
-
-      if (Object.keys(updates).length > 0) {
-        try {
-            await updateDoc(userRef, updates);
-            if (updates.name && firebaseUser.displayName !== updates.name) await updateProfile(firebaseUser, { displayName: updates.name });
-            if (updates.avatarUrl !== undefined && firebaseUser.photoURL !== updates.avatarUrl) await updateProfile(firebaseUser, { photoURL: updates.avatarUrl });
-        } catch (error: any) {
-             console.error(`[AuthContext] Failed to update Firestore profile for ${firebaseUser.email}:`, error);
-        }
-      }
-    }
-    return profileDataToSet;
-  };
-
-
   useEffect(() => {
     setLoadingAuth(true);
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      try {
-        if (firebaseUser) {
-          const userProfile = await createUserProfile(firebaseUser, firebaseUser.displayName || undefined);
-          if (userProfile) {
-            setUser(userProfile);
+    let unsubscribeFromUserDoc: (() => void) | null = null;
+  
+    const unsubscribeFromAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubscribeFromUserDoc) {
+        unsubscribeFromUserDoc();
+        unsubscribeFromUserDoc = null;
+      }
+  
+      if (firebaseUser) {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+  
+        unsubscribeFromUserDoc = onSnapshot(userRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = {
+              id: docSnap.id,
+              ...docSnap.data(),
+            } as User;
+            setUser(userData);
             setIsAuthenticated(true);
-            if (userProfile.isBanned) {
+            if (userData.isBanned) {
               toast({ title: "Account Suspended", description: "This account has been suspended. Please contact support.", variant: "destructive", duration: 10000 });
             }
           } else {
-            setUser(null);
-            setIsAuthenticated(false);
-            if (typeof window !== 'undefined') await firebaseSignOut(auth);
+            console.log(`[AppContext] No user document found for ${firebaseUser.uid}, creating one...`);
+            const userProfile = await createUserProfile(firebaseUser, firebaseUser.displayName || undefined);
+            if (userProfile) {
+              setUser(userProfile);
+              setIsAuthenticated(true);
+            } else {
+              setIsAuthenticated(false);
+              setUser(null);
+              await firebaseSignOut(auth);
+            }
           }
-        } else {
+          setLoadingAuth(false);
+        }, (error) => {
+          console.error("[AppContext] Error listening to user document:", error);
+          toast({ title: "Profile Sync Error", description: "Could not sync your profile data.", variant: "destructive" });
           setUser(null);
           setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error("[AuthContext] Error during auth state change or profile handling:", error);
+          setLoadingAuth(false);
+        });
+      } else {
         setUser(null);
         setIsAuthenticated(false);
-      } finally {
         setLoadingAuth(false);
       }
     });
-    return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  
+    return () => {
+      unsubscribeFromAuth();
+      if (unsubscribeFromUserDoc) {
+        unsubscribeFromUserDoc();
+      }
+    };
+  }, [createUserProfile]);
 
   useEffect(() => {
     if (_selectedStore) {
@@ -544,6 +571,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (name && userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
       }
+      // The onSnapshot listener will handle profile creation in Firestore
       toast({ title: "Registration Successful", description: "Welcome to Dodi Deals!" });
       setLoadingAuth(false);
       return true;
@@ -571,7 +599,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await updateProfile(auth.currentUser, { photoURL: newAvatarUrl });
       await updateUserAvatarInFirestore(auth.currentUser.uid, newAvatarUrl);
-      setUser(prevUser => prevUser ? { ...prevUser, avatarUrl: newAvatarUrl } : null);
+      // The onSnapshot listener will update the user state automatically
       toast({ title: "Avatar Updated", description: "Your profile picture has been changed." });
       return true;
     } catch (error: any) {
@@ -594,7 +622,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await updateProfile(auth.currentUser, { displayName: newName });
       await updateUserNameInFirestore(auth.currentUser.uid, newName);
-      setUser(prevUser => prevUser ? { ...prevUser, name: newName } : null);
+       // The onSnapshot listener will update the user state automatically
       toast({ title: "Profile Updated", description: "Your name has been successfully updated." });
       return true;
     } catch (error: any) {
