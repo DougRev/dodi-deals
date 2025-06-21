@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, Suspense, useState } from 'react';
+import { useEffect, Suspense, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
 import type { ResolvedProduct, FlowerWeight, Order } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, CreditCard, PlusCircle } from 'lucide-react';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, CreditCard, PlusCircle, Bug } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -26,6 +26,8 @@ import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { AddPaymentMethodForm } from '@/components/site/AddPaymentMethodForm';
 import { PaymentMethodsList } from '@/components/site/PaymentMethodsList';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app as firebaseApp } from '@/lib/firebase';
 
 
 const avatarOptions = [
@@ -93,6 +95,35 @@ function ProfilePageInternal() {
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
   const [showAddPaymentMethodForm, setShowAddPaymentMethodForm] = useState(false);
+
+  const [isTestingFunction, setIsTestingFunction] = useState(false);
+
+  const handleTestAuthFunction = useCallback(async () => {
+    setIsTestingFunction(true);
+    toast({
+      title: "Running Test...",
+      description: "Calling the 'testAuth' Firebase Function.",
+    });
+    try {
+      const functions = getFunctions(firebaseApp, 'us-central1');
+      const testAuth = httpsCallable(functions, 'testAuth');
+      const result = await testAuth();
+      console.log('Test Function Result:', result.data);
+      toast({
+        title: "Test Successful!",
+        description: `Function returned: ${JSON.stringify(result.data)}`,
+      });
+    } catch (error: any) {
+      console.error('Test Function Error:', error);
+      toast({
+        title: "Test Failed",
+        description: `Error: ${error.message || 'Unknown error'}. Check browser console and function logs.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingFunction(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loadingAuth && !isAuthenticated) {
@@ -253,34 +284,42 @@ function ProfilePageInternal() {
               <CardDescription>Manage your saved payment methods for faster checkout (online payments coming soon).</CardDescription>
             </CardHeader>
             <CardContent>
-              {!stripePublishableKey ? (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <AlertCircle className="h-10 w-10 mx-auto mb-2 text-destructive" />
-                    <p>Payment system configuration is pending.</p>
-                    <p className="text-xs">Stripe publishable key is not set.</p>
-                  </div>
-              ) : showAddPaymentMethodForm ? (
-                <Elements stripe={getStripePromise()}>
-                  <AddPaymentMethodForm 
-                    onPaymentMethodAdded={() => {
-                      setShowAddPaymentMethodForm(false);
-                      // Potentially refresh payment methods list here
-                    }}
-                    onCancel={() => setShowAddPaymentMethodForm(false)}
-                  />
-                </Elements>
-              ) : (
-                <>
-                  <PaymentMethodsList />
-                  <Button 
-                    variant="outline" 
-                    className="w-full mt-4 text-accent border-accent hover:bg-accent/10"
-                    onClick={() => setShowAddPaymentMethodForm(true)}
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method
-                  </Button>
-                </>
-              )}
+              <div className="flex flex-col gap-4">
+                {/* Diagnostic Test Button */}
+                <Button variant="secondary" onClick={handleTestAuthFunction} disabled={isTestingFunction}>
+                  {isTestingFunction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bug className="mr-2 h-4 w-4" />}
+                  {isTestingFunction ? 'Testing...' : 'Run Function Connection Test'}
+                </Button>
+
+                {!stripePublishableKey ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <AlertCircle className="h-10 w-10 mx-auto mb-2 text-destructive" />
+                      <p>Payment system configuration is pending.</p>
+                      <p className="text-xs">Stripe publishable key is not set.</p>
+                    </div>
+                ) : showAddPaymentMethodForm ? (
+                  <Elements stripe={getStripePromise()}>
+                    <AddPaymentMethodForm 
+                      onPaymentMethodAdded={() => {
+                        setShowAddPaymentMethodForm(false);
+                        // Potentially refresh payment methods list here
+                      }}
+                      onCancel={() => setShowAddPaymentMethodForm(false)}
+                    />
+                  </Elements>
+                ) : (
+                  <>
+                    <PaymentMethodsList />
+                    <Button 
+                      variant="outline" 
+                      className="w-full mt-4 text-accent border-accent hover:bg-accent/10"
+                      onClick={() => setShowAddPaymentMethodForm(true)}
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method
+                    </Button>
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
 

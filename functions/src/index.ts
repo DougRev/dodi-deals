@@ -15,8 +15,8 @@ if (admin.apps.length === 0) {
 // Export Stripe-related functions
 export * from "./stripe-functions";
 
-// If you have genkit-sample.ts and intend to use it, uncomment below.
-// export * from "./genkit-sample";
+// Export the new test function
+export * from "./test-function";
 
 // A simple HTTP function for a health check or demo.
 export const helloWorld = functions.https.onRequest((request, response) => {
