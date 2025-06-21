@@ -302,9 +302,9 @@ export interface CartItem {
   selectedWeight?: FlowerWeight;
 }
 
-export const OrderStatusEnum = z.enum(["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"]);
+export const OrderStatusEnum = z.enum(["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled", "Refunded"]);
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
-export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled"];
+export const orderStatuses: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup", "Completed", "Cancelled", "Refunded"];
 
 export const CancellationReasonEnum = z.enum(["Inventory Issue", "Customer No-Show", "Customer Request", "Cancelled by Customer", "Other"]);
 export type CancellationReason = z.infer<typeof CancellationReasonEnum>;
@@ -341,6 +341,8 @@ export interface Order {
   cancellationDescription?: string;
   isPaid?: boolean;
   stripePaymentIntentId?: string;
+  refundId?: string;
+  refundedAt?: string;
 }
 
 export interface RedemptionOption {

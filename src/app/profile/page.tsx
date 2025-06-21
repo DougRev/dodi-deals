@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
 import type { ResolvedProduct, FlowerWeight, Order } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, Bug, PlusCircle, CreditCard } from 'lucide-react';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, Bug, PlusCircle, CreditCard, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -197,6 +197,7 @@ function ProfilePageInternal() {
       case "Ready for Pickup": return "outline";
       case "Completed": return "default";
       case "Cancelled": return "destructive";
+      case "Refunded": return "destructive";
       default: return "secondary";
     }
   };
@@ -455,10 +456,10 @@ function ProfilePageInternal() {
                          {order.pointsEarned && order.pointsEarned > 0 && order.status === "Completed" && (
                             <p className="text-xs text-green-600 text-right mt-1">({order.pointsEarned} points earned)</p>
                          )}
-                         {order.status === "Cancelled" && (
+                         {(order.status === "Cancelled" || order.status === "Refunded") && (
                             <div className="mt-4 p-3 bg-destructive/10 rounded-md border border-destructive/20">
                                 <h5 className="text-sm font-semibold text-destructive flex items-center">
-                                    <AlertCircle className="mr-2 h-4 w-4" /> Order Cancelled
+                                    <AlertCircle className="mr-2 h-4 w-4" /> Order {order.status}
                                 </h5>
                                 {order.cancellationReason && (
                                     <p className="text-xs text-destructive/90 mt-1">
@@ -468,6 +469,11 @@ function ProfilePageInternal() {
                                 {order.cancellationDescription && (
                                     <p className="text-xs text-destructive/80 mt-0.5">
                                         Note: {order.cancellationDescription}
+                                    </p>
+                                )}
+                                {order.status === 'Refunded' && order.refundedAt && (
+                                     <p className="text-xs text-destructive/90 mt-1">
+                                        Refunded on: <span className="font-medium">{formatOrderDate(order.refundedAt)}</span>
                                     </p>
                                 )}
                             </div>

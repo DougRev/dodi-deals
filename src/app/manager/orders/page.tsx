@@ -15,11 +15,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX, FileText, Edit2 } from 'lucide-react';
+import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX, FileText, Edit2, RotateCcw } from 'lucide-react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app as firebaseApp } from '@/lib/firebase';
+
 
 // Updated status groupings
 const ACTIVE_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Pending Confirmation", "Preparing", "Ready for Pickup"];
-const ARCHIVED_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Completed", "Cancelled"];
+const ARCHIVED_MANAGER_VIEW_STATUSES: OrderStatus[] = ["Completed", "Cancelled", "Refunded"];
 
 
 function formatOrderTimestamp(isoDate: string) {
@@ -39,6 +42,9 @@ export default function ManagerOrdersPage() {
   const [orderToCancelDetails, setOrderToCancelDetails] = useState<{ orderId: string; currentStatus: OrderStatus; userName: string } | null>(null);
   const [selectedCancelReason, setSelectedCancelReason] = useState<CancellationReason | ''>('');
   const [cancelDescription, setCancelDescription] = useState('');
+  
+  const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
+  const [orderToRefund, setOrderToRefund] = useState<Order | null>(null);
 
 
   const fetchOrders = useCallback(async (storeId: string, activeView: boolean) => {
@@ -101,6 +107,35 @@ export default function ManagerOrdersPage() {
     setOrderToCancelDetails(null);
   };
 
+  const openRefundDialog = (order: Order) => {
+    setOrderToRefund(order);
+    setIsRefundDialogOpen(true);
+  };
+  
+  const handleConfirmRefund = async () => {
+    if (!orderToRefund) return;
+    setUpdatingOrderId(orderToRefund.id);
+    setIsRefundDialogOpen(false);
+
+    try {
+      const functions = getFunctions(firebaseApp, "us-central1");
+      const createRefundFunction = httpsCallable(functions, 'createStripeRefund');
+      await createRefundFunction({ orderId: orderToRefund.id });
+      
+      toast({ title: "Refund Processed", description: `Order ${orderToRefund.id.substring(0,6)}... has been successfully refunded.` });
+      
+      if (user?.assignedStoreId) {
+        fetchOrders(user.assignedStoreId, !viewingArchived);
+      }
+    } catch (error: any) {
+        console.error("Failed to process refund:", error);
+        toast({ title: "Refund Failed", description: error.message || "Could not process the refund.", variant: "destructive" });
+    } finally {
+        setUpdatingOrderId(null);
+        setOrderToRefund(null);
+    }
+  };
+
 
   const getNextStatusOptions = (currentStatus: OrderStatus): OrderStatus[] => {
     switch (currentStatus) {
@@ -122,6 +157,7 @@ export default function ManagerOrdersPage() {
       case "Ready for Pickup": return "outline";
       case "Completed": return "default";
       case "Cancelled": return "destructive";
+      case "Refunded": return "destructive";
       default: return "secondary";
     }
   };
@@ -133,6 +169,7 @@ export default function ManagerOrdersPage() {
       case "Ready for Pickup": return <CheckCircle className="h-4 w-4 text-green-600" />;
       case "Completed": return <Package className="h-4 w-4 text-gray-500" />;
       case "Cancelled": return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      case "Refunded": return <RotateCcw className="h-4 w-4 text-red-600" />;
       default: return <ListOrdered className="h-4 w-4 text-muted-foreground"/>;
     }
   };
@@ -236,20 +273,19 @@ export default function ManagerOrdersPage() {
                              `Set to ${nextStatus}`}
                             </Button>
                         ))}
-                        {/* Add a dedicated Cancel button if the order is not already completed or cancelled */}
-                        {(order.status !== "Completed" && order.status !== "Cancelled") && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => openCancelDialog(order)}
-                            className="flex-1"
-                          >
+                        {(order.status !== "Completed" && order.status !== "Cancelled" && order.status !== "Refunded") && (
+                          <Button size="sm" variant="destructive" onClick={() => openCancelDialog(order)} className="flex-1">
                             Cancel Order
+                          </Button>
+                        )}
+                         {order.status === "Completed" && order.isPaid && (
+                          <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
+                            <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
                           </Button>
                         )}
                       </div>
                     )}
-                     {(order.status === "Completed" || order.status === "Cancelled") && (
+                     {(order.status === "Completed" && !order.isPaid || order.status === "Cancelled" || order.status === "Refunded") && (
                          <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>
                      )}
                     <p className="text-xs text-muted-foreground mt-3">
@@ -264,6 +300,15 @@ export default function ManagerOrdersPage() {
                             <p className="text-xs text-destructive/80 mt-0.5">Note: {order.cancellationDescription}</p>
                         )}
                       </div>
+                    )}
+                    {order.status === "Refunded" && (
+                       <div className="mt-3 p-2 bg-destructive/10 rounded-md">
+                         <p className="text-xs font-semibold text-destructive flex items-center">
+                            <RotateCcw className="mr-1 h-3 w-3"/> Order Refunded
+                         </p>
+                         {order.refundedAt && <p className="text-xs text-destructive/80 mt-0.5">On: {formatOrderTimestamp(order.refundedAt)}</p>}
+                         {order.refundId && <p className="text-xs text-destructive/80 mt-0.5">Stripe Refund ID: {order.refundId}</p>}
+                       </div>
                     )}
                   </div>
                 </div>
@@ -329,8 +374,28 @@ export default function ManagerOrdersPage() {
             </AlertDialogContent>
         </AlertDialog>
 
+        <AlertDialog open={isRefundDialogOpen} onOpenChange={setIsRefundDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Refund Order: {orderToRefund?.id.substring(0,8)}...?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will issue a full refund of ${orderToRefund?.finalTotal.toFixed(2)} to the customer's original payment method via Stripe. This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setOrderToRefund(null)}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleConfirmRefund}
+                        disabled={updatingOrderId === orderToRefund?.id}
+                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                    >
+                        {updatingOrderId === orderToRefund?.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4"/>}
+                        Confirm Full Refund
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
     </div>
   );
 }
-
-    

@@ -81,7 +81,7 @@ export const createOrRetrieveStripeCustomer = onCall(
     } catch (error) {
       const err = error as Error;
       logger.error(
-        `[createOrRetrieveStripeCustomer] Error processing for user ${uid}:`,
+        `[createOrRetrieveStripeCustomer] Error for user ${uid}:`,
         err
       );
       throw new HttpsError("internal", "Failed to process Stripe customer.");
@@ -91,8 +91,7 @@ export const createOrRetrieveStripeCustomer = onCall(
 
 
 /**
- * Creates a Stripe SetupIntent to securely save a payment method for
- * future use.
+ * Creates a Stripe SetupIntent to securely save a payment method.
  */
 export const createStripeSetupIntent = onCall(
   {secrets: [stripeSecretKey], cors: true},
@@ -130,8 +129,7 @@ export const createStripeSetupIntent = onCall(
     } catch (error) {
       const err = error as Error;
       logger.error(
-        "[createStripeSetupIntent] Error creating SetupIntent for " +
-        `customer ${customerId}:`,
+        `[createStripeSetupIntent] Error for customer ${customerId}:`,
         err
       );
       throw new HttpsError("internal", "Failed to create Stripe SetupIntent.");
@@ -191,17 +189,15 @@ export const listStripePaymentMethods = onCall(
       }));
 
       logger.info(
-        "[listStripePaymentMethods] Successfully retrieved " +
-        `${formattedPaymentMethods.length} payment methods for customer ` +
-        `${customerId}.`
+        `[listStripePaymentMethods] Retrieved ` +
+        `${formattedPaymentMethods.length} methods for customer ${customerId}.`
       );
 
       return {paymentMethods: formattedPaymentMethods};
     } catch (error) {
       const err = error as Error;
       logger.error(
-        "[listStripePaymentMethods] Error listing payment methods for " +
-        `customer ${customerId}:`,
+        `[listStripePaymentMethods] Error for customer ${customerId}:`,
         err
       );
       throw new HttpsError("internal", "Failed to retrieve payment methods.");
@@ -240,23 +236,19 @@ export const detachStripePaymentMethod = onCall(
 
       logger.info(
         "[detachStripePaymentMethod] Successfully detached payment method " +
-        "${detachedPaymentMethod.id} for user ${request.auth.uid}."
+        `${detachedPaymentMethod.id} for user ${request.auth.uid}.`
       );
 
       return {success: true, id: detachedPaymentMethod.id};
     } catch (error) {
       const err = error as Stripe.StripeRawError;
       logger.error(
-        "[detachStripePaymentMethod] Error detaching payment method " +
-        `${paymentMethodId}:`,
+        `[detachStripePaymentMethod] Error for PM ${paymentMethodId}:`,
         err
       );
-      // It's possible the PM is already detached.
       if (err.code === "payment_method_already_detached") {
-        logger.warn(
-          `[detachStripePaymentMethod] PM ${paymentMethodId} ` +
-          "was already detached."
-        );
+        logger.warn(`[detachStripePaymentMethod] PM ${paymentMethodId} ` +
+          "was already detached.");
         return {success: true, id: paymentMethodId, message: "Been detached."};
       }
       throw new HttpsError("internal", "Failed to detach payment method.");
@@ -289,7 +281,6 @@ export const createStripePaymentIntent = onCall(
       );
     }
 
-    // Get user's stripe customer ID
     const userRef = db.collection("users").doc(uid);
     const userDoc = await userRef.get();
     const stripeCustomerId = userDoc.data()?.stripeCustomerId;
@@ -297,7 +288,8 @@ export const createStripePaymentIntent = onCall(
     if (!stripeCustomerId) {
       throw new HttpsError(
         "failed-precondition",
-        "User does not have a Stripe customer ID. Please add a payment method first."
+        "User does not have a Stripe customer ID." +
+        "Please add a payment method first."
       );
     }
 
@@ -305,7 +297,7 @@ export const createStripePaymentIntent = onCall(
       const stripe = initializeStripe();
 
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount), // Ensure it's an integer
+        amount: Math.round(amount),
         currency: "usd",
         customer: stripeCustomerId,
         payment_method_types: ["card"],
@@ -320,14 +312,89 @@ export const createStripePaymentIntent = onCall(
     } catch (error) {
       const err = error as Error;
       logger.error(
-        "[createStripePaymentIntent] Error creating PaymentIntent for " +
-        `customer ${stripeCustomerId}:`,
+        "[createStripePaymentIntent] Error for customer " +
+        `${stripeCustomerId}:`,
         err
       );
       throw new HttpsError(
         "internal",
         "Failed to create Stripe PaymentIntent."
       );
+    }
+  }
+);
+
+/**
+ * Processes a refund for a given order.
+ */
+export const createStripeRefund = onCall(
+  {secrets: [stripeSecretKey], cors: true},
+  async (request) => {
+    logger.info("[createStripeRefund] Function execution STARTED.");
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Authentication required.");
+    }
+
+    const {orderId} = request.data;
+    if (!orderId) {
+      throw new HttpsError("invalid-argument", "Order ID is required.");
+    }
+
+    const orderRef = db.collection("orders").doc(orderId);
+    const orderDoc = await orderRef.get();
+
+    if (!orderDoc.exists) {
+      throw new HttpsError("not-found", "Order not found.");
+    }
+
+    const orderData = orderDoc.data() as any;
+
+    const userRef = db.collection("users").doc(request.auth.uid);
+    const userDoc = await userRef.get();
+    const user = userDoc.data();
+
+    if (
+      !user?.isAdmin &&
+      !(user?.storeRole === "Manager" && user?.assignedStoreId === orderData.storeId)
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "User is not authorized to refund this order."
+      );
+    }
+
+    if (!orderData.isPaid || !orderData.stripePaymentIntentId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "This order was not paid online and cannot be refunded via this method."
+      );
+    }
+
+    if (orderData.status === "Refunded") {
+      throw new HttpsError("failed-precondition", "This order has already been refunded.");
+    }
+
+    try {
+      const stripe = initializeStripe();
+      const refund = await stripe.refunds.create({
+        payment_intent: orderData.stripePaymentIntentId,
+      });
+
+      await orderRef.update({
+        status: "Refunded",
+        refundId: refund.id,
+        refundedAt: new Date().toISOString(),
+      });
+
+      logger.info(
+        `[createStripeRefund] Refund ${refund.id} processed successfully ` +
+        `for order ${orderId}.`
+      );
+      return {success: true, refundId: refund.id};
+    } catch (error) {
+      const err = error as Error;
+      logger.error(`[createStripeRefund] Error refunding order ${orderId}:`, err);
+      throw new HttpsError("internal", "Failed to process refund.");
     }
   }
 );
