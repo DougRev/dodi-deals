@@ -1,7 +1,8 @@
 
-import * as functions from "firebase-functions";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+// Use v2 onRequest handler
+import { onRequest } from "firebase-functions/v2/https";
 
 // Initialize Firebase Admin SDK *ONCE*
 // Guard ensures initializeApp() runs only if no default app exists.
@@ -15,10 +16,10 @@ if (admin.apps.length === 0) {
 // Export the new test function
 export * from "./test-function";
 
-// A simple HTTP function for a health check or demo.
-export const helloWorld = functions.https.onRequest((request, response) => {
+// A simple HTTP function for a health check or demo, updated to v2.
+export const helloWorld = onRequest((request, response) => {
   logger.info("Hello logs from Dodi Deals!", {
     structuredData: true,
   });
-  response.send("Hello from Dodi Deals Firebase Functions!");
+  response.send("Hello from Dodi Deals Firebase v2 Functions!");
 });
