@@ -54,15 +54,15 @@ export const createOrRetrieveStripeCustomer = onCall(
 
       if (userData?.stripeCustomerId) {
         logger.info(
-          `[createOrRetrieveStripeCustomer] Found existing Stripe ` +
-          `customer ID for user ${uid}: ${userData.stripeCustomerId}`
+          "[createOrRetrieveStripeCustomer] Found existing Stripe " +
+          "customer ID for user ${uid}: ${userData.stripeCustomerId}"
         );
         return {customerId: userData.stripeCustomerId};
       }
 
       logger.info(
-        `[createOrRetrieveStripeCustomer] No Stripe customer ID found for ` +
-        `user ${uid}. Creating a new one.`
+        "[createOrRetrieveStripeCustomer] No Stripe customer ID found for " +
+        "user ${uid}. Creating a new one."
       );
 
       const stripe = initializeStripe();
@@ -75,14 +75,14 @@ export const createOrRetrieveStripeCustomer = onCall(
       await userRef.update({stripeCustomerId: customer.id});
 
       logger.info(
-        `[createOrRetrieveStripeCustomer] Successfully created and ` +
-        `saved new Stripe customer ID for user ${uid}: ${customer.id}`
+        "[createOrRetrieveStripeCustomer] Successfully created and " +
+        "saved new Stripe customer ID for user ${uid}: ${customer.id}"
       );
 
       return {customerId: customer.id};
     } catch (error) {
       logger.error(
-        `[createOrRetrieveStripeCustomer] Error processing for user ${uid}:`,
+        "[createOrRetrieveStripeCustomer] Error processing for user ${uid}:",
         error
       );
       throw new HttpsError("internal", "Failed to process Stripe customer.");
@@ -123,15 +123,15 @@ export const createStripeSetupIntent = onCall(
       });
 
       logger.info(
-        `[createStripeSetupIntent] Successfully created SetupIntent for ` +
-        `customer ${customerId}.`
+        "[createStripeSetupIntent] Successfully created SetupIntent for " +
+        "customer ${customerId}."
       );
 
       return {clientSecret: setupIntent.client_secret};
     } catch (error) {
       logger.error(
-        `[createStripeSetupIntent] Error creating SetupIntent for ` +
-        `customer ${customerId}:`,
+        "[createStripeSetupIntent] Error creating SetupIntent for " +
+        "customer ${customerId}:",
         error
       );
       throw new HttpsError("internal", "Failed to create Stripe SetupIntent.");

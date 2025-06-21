@@ -2,19 +2,27 @@
 "use client";
 
 import { useState } from 'react';
-import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { 
+  CardNumberElement, 
+  CardExpiryElement, 
+  CardCvcElement, 
+  useStripe, 
+  useElements 
+} from '@stripe/react-stripe-js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions';
-import { app as firebaseApp } from '@/lib/firebase'; // Import the initialized Firebase app
+import { app as firebaseApp } from '@/lib/firebase';
 import { Loader2, CreditCard, Lock } from 'lucide-react';
 
-const CARD_ELEMENT_OPTIONS = {
+const ELEMENT_OPTIONS = {
   style: {
     base: {
-      color: "#32325d", // Example color, can be themed
+      color: "#32325d",
       fontFamily: '"Alegreya", serif',
       fontSmoothing: "antialiased",
       fontSize: "16px",
@@ -30,7 +38,7 @@ const CARD_ELEMENT_OPTIONS = {
 };
 
 interface AddPaymentMethodFormProps {
-  onPaymentMethodAdded: () => void; // Callback after successful addition
+  onPaymentMethodAdded: () => void;
   onCancel: () => void;
 }
 
@@ -40,6 +48,7 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
   const { user } = useAppContext();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [postalCode, setPostalCode] = useState('');
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -50,7 +59,7 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
       return;
     }
 
-    const cardElement = elements.getElement(CardElement);
+    const cardElement = elements.getElement(CardNumberElement);
     if (!cardElement) {
       setError("Card details element not found.");
       return;
@@ -59,37 +68,28 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     setLoading(true);
 
     try {
-      // Explicitly use the Firebase app instance and specify the region
       const functions = getFunctions(firebaseApp, 'us-central1');
-      console.log("[AddPaymentMethodForm] Firebase Functions instance obtained for region 'us-central1'. Preparing to call 'createOrRetrieveStripeCustomer'.");
-      
       const createOrRetrieveCustomer = httpsCallable(functions, 'createOrRetrieveStripeCustomer');
       const customerResult = await createOrRetrieveCustomer() as { data: { customerId: string } };
       const customerId = customerResult.data.customerId;
-      console.log("[AddPaymentMethodForm] 'createOrRetrieveStripeCustomer' successful. Customer ID:", customerId);
+      
+      if (!customerId) throw new Error("Failed to create or retrieve Stripe customer.");
 
-      if (!customerId) {
-        throw new Error("Failed to create or retrieve Stripe customer.");
-      }
-
-      console.log("[AddPaymentMethodForm] Preparing to call 'createStripeSetupIntent'.");
       const createSetupIntent = httpsCallable(functions, 'createStripeSetupIntent');
       const setupIntentResult = await createSetupIntent({ customerId }) as { data: { clientSecret: string } };
       const clientSecret = setupIntentResult.data.clientSecret;
-      console.log("[AddPaymentMethodForm] 'createStripeSetupIntent' successful. Client Secret obtained.");
 
+      if (!clientSecret) throw new Error("Failed to create Stripe SetupIntent.");
 
-      if (!clientSecret) {
-        throw new Error("Failed to create Stripe SetupIntent.");
-      }
-
-      console.log("[AddPaymentMethodForm] Confirming card setup with Stripe.");
       const { setupIntent, error: setupError } = await stripe.confirmCardSetup(clientSecret, {
         payment_method: {
           card: cardElement,
           billing_details: {
             name: user.name,
             email: user.email,
+            address: {
+              postal_code: postalCode,
+            }
           },
         },
       });
@@ -99,49 +99,18 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
         throw setupError;
       }
 
-      console.log("[AddPaymentMethodForm] Stripe confirmCardSetup result:", setupIntent);
       if (setupIntent?.status === 'succeeded') {
         toast({
           title: "Payment Method Saved",
           description: "Your card has been securely saved.",
         });
-        onPaymentMethodAdded(); // Notify parent component
+        onPaymentMethodAdded();
       } else {
         throw new Error(setupIntent?.last_setup_error?.message || "Failed to save card. Status: " + setupIntent?.status);
       }
     } catch (err: any) {
       console.error("[AddPaymentMethodForm] Error adding payment method:", err);
       let displayError = err.message || "An unexpected error occurred. Please try again.";
-      
-      // Check for specific Firebase Functions error codes
-      if (err.code) {
-        switch (err.code) {
-          case 'functions/unauthenticated':
-            displayError = "Authentication error. Please ensure you are logged in.";
-            break;
-          case 'functions/permission-denied':
-            displayError = "Permission denied. You may not have access to this feature.";
-            break;
-          case 'functions/not-found':
-             displayError = "The requested function was not found. This might be a deployment or naming issue.";
-             break;
-          case 'functions/internal':
-            displayError = "An internal server error occurred. Please try again later or contact support. Check server logs for details.";
-            break;
-          case 'functions/unavailable':
-             displayError = "The service is temporarily unavailable. Please try again later.";
-             break;
-          default:
-            // Keep the original message if it's a Stripe error or other specific message
-            if (!err.type || !err.type.startsWith('Stripe')) {
-                 displayError = `Function call failed: ${err.code}. ${err.message || "Please try again."}`;
-            }
-            break;
-        }
-      } else if (err.type && err.type.startsWith('Stripe')) { // Stripe specific errors
-        displayError = err.message; // Stripe errors are usually user-friendly
-      }
-      
       setError(displayError);
       toast({
         title: "Error Saving Card",
@@ -164,11 +133,42 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-6">
-          <div className="p-3 border rounded-md bg-muted/30">
-            <CardElement options={CARD_ELEMENT_OPTIONS} />
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label htmlFor="card-number">Card Number</Label>
+            <div className="p-3 border rounded-md bg-muted/30">
+              <CardNumberElement id="card-number" options={ELEMENT_OPTIONS} />
+            </div>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1 md:col-span-1">
+              <Label htmlFor="card-expiry">Expiration</Label>
+              <div className="p-3 border rounded-md bg-muted/30">
+                <CardExpiryElement id="card-expiry" options={ELEMENT_OPTIONS} />
+              </div>
+            </div>
+            <div className="space-y-1 md:col-span-1">
+              <Label htmlFor="card-cvc">CVC</Label>
+              <div className="p-3 border rounded-md bg-muted/30">
+                <CardCvcElement id="card-cvc" options={ELEMENT_OPTIONS} />
+              </div>
+            </div>
+             <div className="space-y-1 md:col-span-1">
+              <Label htmlFor="postal-code">ZIP / Postal Code</Label>
+               <Input
+                id="postal-code"
+                name="postal-code"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                placeholder="12345"
+                required
+                className="text-base"
+              />
+            </div>
+          </div>
+          
+          {error && <p className="text-sm text-destructive pt-2">{error}</p>}
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-end gap-3">
            <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
