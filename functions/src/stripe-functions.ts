@@ -1,3 +1,4 @@
+
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import {defineSecret} from "firebase-functions/params";
@@ -238,13 +239,13 @@ export const detachStripePaymentMethod = onCall(
       );
 
       logger.info(
-        `[detachStripePaymentMethod] Successfully detached payment method ` +
-        `${detachedPaymentMethod.id} for user ${request.auth.uid}.`
+        "[detachStripePaymentMethod] Successfully detached payment method " +
+        "${detachedPaymentMethod.id} for user ${request.auth.uid}."
       );
 
       return {success: true, id: detachedPaymentMethod.id};
     } catch (error) {
-      const err = error as Stripe.StripeError;
+      const err = error as Stripe.StripeRawError;
       logger.error(
         "[detachStripePaymentMethod] Error detaching payment method " +
         `${paymentMethodId}:`,
@@ -256,7 +257,7 @@ export const detachStripePaymentMethod = onCall(
           `[detachStripePaymentMethod] PM ${paymentMethodId} ` +
           "was already detached."
         );
-        return {success: true, id: paymentMethodId, message: "Already detached."};
+        return {success: true, id: paymentMethodId, message: "Been detached."};
       }
       throw new HttpsError("internal", "Failed to detach payment method.");
     }
