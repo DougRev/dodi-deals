@@ -1,15 +1,16 @@
 
-import {onCall, HttpsError} from "firebase-functions/v1/https";
+import {onCall, HttpsError, type CallableContext} from "firebase-functions/v1/https";
 import * as logger from "firebase-functions/logger";
 
 /**
  * A simple onCall function for testing authentication and invocation.
  * This is a v1 function.
  */
-export const testAuth = onCall({region: "us-central1"}, (request) => {
+export const testAuth = onCall((data: unknown, context: CallableContext) => {
   logger.info("[testAuth][v1] Function successfully invoked.");
 
-  if (!request.auth) {
+  // For v1 onCall functions, authentication info is in context.auth
+  if (!context.auth) {
     logger.warn("[testAuth][v1] Invoked without authentication context.");
     throw new HttpsError(
       "unauthenticated",
@@ -17,7 +18,7 @@ export const testAuth = onCall({region: "us-central1"}, (request) => {
     );
   }
 
-  const uid = request.auth.uid;
+  const uid = context.auth.uid;
   logger.info(`[testAuth][v1] Invoked by authenticated user: ${uid}`);
 
   return {
