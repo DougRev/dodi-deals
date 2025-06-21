@@ -10,8 +10,14 @@ import type { UserPaymentMethod } from '@/lib/types';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
-export function PaymentMethodsList() {
+interface PaymentMethodsListProps {
+    selectedPaymentMethodId?: string;
+    onSelectPaymentMethod?: (id: string) => void;
+}
+
+export function PaymentMethodsList({ selectedPaymentMethodId, onSelectPaymentMethod }: PaymentMethodsListProps) {
   const { user } = useAppContext();
   const [paymentMethods, setPaymentMethods] = useState<UserPaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +51,8 @@ export function PaymentMethodsList() {
     fetchPaymentMethods();
   }, [user?.stripeCustomerId]);
 
-  const handleDeletePaymentMethod = async (pmId: string) => {
+  const handleDeletePaymentMethod = async (pmId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent the onClick of the parent div from firing
     setDeletingId(pmId);
     setError(null);
     try {
@@ -99,7 +106,15 @@ export function PaymentMethodsList() {
   return (
     <div className="space-y-3">
         {paymentMethods.map((pm) => (
-          <div key={pm.id} className="flex items-center justify-between p-3 border rounded-md hover:shadow-sm transition-shadow">
+          <div 
+            key={pm.id} 
+            className={cn(
+              "flex items-center justify-between p-3 border rounded-md hover:shadow-sm transition-shadow",
+              onSelectPaymentMethod && "cursor-pointer",
+              selectedPaymentMethodId === pm.id && "border-primary ring-2 ring-primary"
+            )}
+            onClick={() => onSelectPaymentMethod?.(pm.id)}
+          >
             <div className="flex items-center gap-3">
               <CreditCard className="h-6 w-6 text-primary" />
               <div>
@@ -113,11 +128,13 @@ export function PaymentMethodsList() {
                   <Star className="h-3 w-3 mr-1 text-yellow-500 fill-yellow-400"/> Default
                 </Badge>
               ) : (
-                <Button variant="ghost" size="sm" onClick={() => handleSetDefaultPaymentMethod(pm.id)} title="Set as default" disabled={!!deletingId}>
-                  <Star className="h-5 w-5 text-muted-foreground hover:text-yellow-500"/>
-                </Button>
+                 onSelectPaymentMethod && (
+                    <Button variant="ghost" size="sm" onClick={() => handleSetDefaultPaymentMethod(pm.id)} title="Set as default" disabled={!!deletingId}>
+                     <Star className="h-5 w-5 text-muted-foreground hover:text-yellow-500"/>
+                    </Button>
+                 )
               )}
-              <Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(pm.id)} className="text-destructive h-8 w-8" title="Delete card" disabled={deletingId === pm.id || !!deletingId}>
+              <Button variant="ghost" size="icon" onClick={(e) => handleDeletePaymentMethod(pm.id, e)} className="text-destructive h-8 w-8" title="Delete card" disabled={deletingId === pm.id || !!deletingId}>
                  {deletingId === pm.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </Button>
             </div>

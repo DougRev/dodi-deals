@@ -339,6 +339,8 @@ export interface Order {
   userStrikesAtOrderTime?: number;
   cancellationReason?: CancellationReason;
   cancellationDescription?: string;
+  isPaid?: boolean;
+  stripePaymentIntentId?: string;
 }
 
 export interface RedemptionOption {

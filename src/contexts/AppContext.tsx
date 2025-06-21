@@ -50,7 +50,7 @@ interface AppContextType {
   appliedRedemption: RedemptionOption | null;
   applyRedemption: (option: RedemptionOption) => void;
   removeRedemption: () => void;
-  finalizeOrder: () => Promise<void>;
+  placeOrder: (payment?: { paymentIntentId: string }) => Promise<void>;
   userOrders: Order[];
   loadingUserOrders: boolean;
   fetchUserOrders: () => Promise<void>;
@@ -876,9 +876,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "Discount Removed", description: "Points discount has been removed from your cart." });
   }, []);
 
-  const finalizeOrder = useCallback(async () => {
+  const placeOrder = useCallback(async (payment?: { paymentIntentId: string }) => {
     if (!user || !_selectedStore || cart.length === 0) {
-      toast({ title: "Cannot Finalize", description: "User not logged in, no store selected, or cart is empty.", variant: "destructive"});
+      toast({ title: "Cannot Place Order", description: "User not logged in, no store selected, or cart is empty.", variant: "destructive"});
       return;
     }
     if (user.isBanned) {
@@ -921,17 +921,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       discountApplied: appliedRedemption?.discountAmount,
       pointsRedeemed: appliedRedemption?.pointsRequired,
       finalTotal: finalTotal,
+      pointsEarned: pointsCalculated,
       pickupInstructions: `Please visit ${_selectedStore.name} at ${_selectedStore.address} during open hours. Bring a valid ID for pickup.`,
       userStrikesAtOrderTime: user.noShowStrikes || 0,
+      isPaid: !!payment,
+      stripePaymentIntentId: payment?.paymentIntentId,
     };
 
     try {
-      const { orderId } = await createOrderInFirestore({ ...orderData, pointsEarned: pointsCalculated });
+      const { orderId } = await createOrderInFirestore(orderData);
 
       if (user) fetchUserOrders();
       toast({
-        title: "Order Submitted!",
-        description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. Points will be applied by the store upon order completion.`
+        title: payment ? "Order Paid!" : "Order Submitted!",
+        description: `Your order (#${orderId.substring(0,6)}...) for pickup at ${_selectedStore.name} has been submitted. You will be notified when it's ready.`
       });
       clearCart();
       router.push('/profile');
@@ -1365,7 +1368,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     appliedRedemption,
     applyRedemption,
     removeRedemption,
-    finalizeOrder,
+    placeOrder,
     userOrders,
     loadingUserOrders,
     fetchUserOrders,
@@ -1379,7 +1382,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated, user, login, register, logout, updateUserAvatar, updateUserProfileDetails, cart, addToCart, removeFromCart,
     updateCartQuantity, getCartItemQuantity, getTotalCartItems, clearCart, products, allProducts, deals, getCartSubtotal, getCartTotal, getCartTotalSavings, getPotentialPointsForCart, stores, displayableStores,
     _selectedStore, selectStore, isStoreSelectorOpen, setStoreSelectorOpen,
-    loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, finalizeOrder,
+    loadingAuth, loadingStores, loadingProducts, appliedRedemption, applyRedemption, removeRedemption, placeOrder,
     userOrders, loadingUserOrders, fetchUserOrders, toggleFavoriteProduct, isProductFavorited, resolvedFavoriteProducts, cancelMyOrder,
     canInstallPWA, promptPWAInstall
   ]);
