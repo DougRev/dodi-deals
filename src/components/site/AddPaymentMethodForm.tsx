@@ -187,4 +187,3 @@ export function AddPaymentMethodForm({ onPaymentMethodAdded, onCancel }: AddPaym
     </Card>
   );
 }
-

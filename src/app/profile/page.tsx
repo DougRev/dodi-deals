@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
 import type { ResolvedProduct, FlowerWeight, Order } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, Bug } from 'lucide-react';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, Bug, PlusCircle, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -24,6 +24,13 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
+
+import { Elements } from '@stripe/react-stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
+import { AddPaymentMethodForm } from '@/components/site/AddPaymentMethodForm';
+import { PaymentMethodsList } from '@/components/site/PaymentMethodsList';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 
 const avatarOptions = [
@@ -78,6 +85,7 @@ function ProfilePageInternal() {
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
   const [isTestingFunction, setIsTestingFunction] = useState(false);
+  const [showAddPaymentForm, setShowAddPaymentForm] = useState(false);
 
   const handleTestAuthFunction = useCallback(async () => {
     setIsTestingFunction(true);
@@ -241,6 +249,36 @@ function ProfilePageInternal() {
 
         <div className="md:col-span-2 space-y-6">
           <PointsDisplay />
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-xl font-medium flex items-center">
+                <CreditCard className="mr-3 h-6 w-6 text-primary" /> Payment Methods
+              </CardTitle>
+              <CardDescription>Manage your saved cards for future features.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {showAddPaymentForm ? (
+                <Elements stripe={stripePromise}>
+                  <AddPaymentMethodForm
+                    onPaymentMethodAdded={() => setShowAddPaymentForm(false)}
+                    onCancel={() => setShowAddPaymentForm(false)}
+                  />
+                </Elements>
+              ) : (
+                <>
+                  <PaymentMethodsList />
+                  <Button
+                    variant="outline"
+                    className="mt-4 w-full"
+                    onClick={() => setShowAddPaymentForm(true)}
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add New Card
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Diagnostic Test Section */}
           <Card className="shadow-lg">
