@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PointsDisplay } from '@/components/site/PointsDisplay';
 import { FlowerWeightSelectorDialog } from '@/components/site/FlowerWeightSelectorDialog';
 import type { ResolvedProduct, FlowerWeight, Order } from '@/lib/types';
-import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, CreditCard, PlusCircle, Bug } from 'lucide-react';
+import { LogOut, Edit3, ShoppingBag, UserCircle, ShieldCheck, CheckCircle, Loader2, Package, Store, CalendarDays, FileText, AlertCircle, Heart, ListChecks, Weight, X, Tag, Star, ShoppingCart, Ban, Bug } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -22,10 +22,6 @@ import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Elements } from '@stripe/react-stripe-js';
-import { loadStripe, type Stripe } from '@stripe/stripe-js';
-import { AddPaymentMethodForm } from '@/components/site/AddPaymentMethodForm';
-import { PaymentMethodsList } from '@/components/site/PaymentMethodsList';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
 
@@ -44,19 +40,6 @@ function formatOrderDate(isoDate: string) {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 }
-
-let stripePromise: Promise<Stripe | null> | null = null;
-
-const getStripePromise = () => {
-  const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!stripePromise && stripePublishableKey) {
-    stripePromise = loadStripe(stripePublishableKey);
-  }
-  if (!stripePublishableKey) {
-    console.error("Stripe Publishable Key (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) is not set. Stripe Elements will not load.");
-  }
-  return stripePromise;
-};
 
 
 function ProfilePageInternal() {
@@ -94,8 +77,6 @@ function ProfilePageInternal() {
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
-  const [showAddPaymentMethodForm, setShowAddPaymentMethodForm] = useState(false);
-
   const [isTestingFunction, setIsTestingFunction] = useState(false);
 
   const handleTestAuthFunction = useCallback(async () => {
@@ -139,17 +120,6 @@ function ProfilePageInternal() {
     }
   }, [user?.avatarUrl, user?.name]);
   
-  useEffect(() => {
-    // Attempt to load Stripe when component mounts if key is available
-    const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-    if (key) {
-      getStripePromise();
-    } else {
-      console.warn("Stripe payments cannot be initialized: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is missing.");
-    }
-  }, []);
-
-
   if (loadingAuth || !isAuthenticated || !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
@@ -222,9 +192,6 @@ function ProfilePageInternal() {
     }
   };
 
-  const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-
-
   return (
     <div className="space-y-8">
       <header className="text-center">
@@ -275,54 +242,23 @@ function ProfilePageInternal() {
         <div className="md:col-span-2 space-y-6">
           <PointsDisplay />
 
-          {/* Payment Methods Section */}
+          {/* Diagnostic Test Section */}
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl font-medium flex items-center">
-                <CreditCard className="mr-3 h-6 w-6 text-primary" /> Payment Methods
+                <Bug className="mr-3 h-6 w-6 text-primary" /> Diagnostics
               </CardTitle>
-              <CardDescription>Manage your saved payment methods for faster checkout (online payments coming soon).</CardDescription>
+              <CardDescription>Use this tool to help diagnose connection issues with backend services.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">
-                {/* Diagnostic Test Button */}
                 <Button variant="secondary" onClick={handleTestAuthFunction} disabled={isTestingFunction}>
                   {isTestingFunction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bug className="mr-2 h-4 w-4" />}
                   {isTestingFunction ? 'Testing...' : 'Run Function Connection Test'}
                 </Button>
-
-                {!stripePublishableKey ? (
-                    <div className="text-center py-6 text-muted-foreground">
-                      <AlertCircle className="h-10 w-10 mx-auto mb-2 text-destructive" />
-                      <p>Payment system configuration is pending.</p>
-                      <p className="text-xs">Stripe publishable key is not set.</p>
-                    </div>
-                ) : showAddPaymentMethodForm ? (
-                  <Elements stripe={getStripePromise()}>
-                    <AddPaymentMethodForm 
-                      onPaymentMethodAdded={() => {
-                        setShowAddPaymentMethodForm(false);
-                        // Potentially refresh payment methods list here
-                      }}
-                      onCancel={() => setShowAddPaymentMethodForm(false)}
-                    />
-                  </Elements>
-                ) : (
-                  <>
-                    <PaymentMethodsList />
-                    <Button 
-                      variant="outline" 
-                      className="w-full mt-4 text-accent border-accent hover:bg-accent/10"
-                      onClick={() => setShowAddPaymentMethodForm(true)}
-                    >
-                      <PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method
-                    </Button>
-                  </>
-                )}
               </div>
             </CardContent>
           </Card>
-
 
           <Card className="shadow-lg">
             <CardHeader>

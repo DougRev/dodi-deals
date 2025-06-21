@@ -12,9 +12,6 @@ if (admin.apps.length === 0) {
   logger.info("Firebase Admin SDK already initialized, using existing app.");
 }
 
-// Export Stripe-related functions
-export * from "./stripe-functions";
-
 // Export the new test function
 export * from "./test-function";
 

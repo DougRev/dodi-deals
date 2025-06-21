@@ -6,9 +6,9 @@ import * as logger from "firebase-functions/logger";
  * A simple onCall function for testing authentication and invocation.
  */
 export const testAuth = functions
-  .region("us-central1")
-  .https.onCall((data, context) => {
-    logger.info("[testAuth][v1] Function successfully invoked.");
+  .v1.region("us-central1")
+  .https.onCall((data: any, context: functions.https.CallableContext) => {
+ logger.info("[testAuth][v1] Function successfully invoked.");
 
     if (!context.auth) {
       logger.warn("[testAuth][v1] Invoked without authentication context.");
