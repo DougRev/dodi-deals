@@ -278,14 +278,14 @@ export default function ManagerOrdersPage() {
                             Cancel Order
                           </Button>
                         )}
-                         {order.status === "Completed" && order.isPaid && (
+                         {order.status === "Completed" && order.stripePaymentIntentId && (
                           <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
                             <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
                           </Button>
                         )}
                       </div>
                     )}
-                     {(order.status === "Completed" && !order.isPaid || order.status === "Cancelled" || order.status === "Refunded") && (
+                     {(order.status === "Completed" && !order.stripePaymentIntentId || order.status === "Cancelled" || order.status === "Refunded") && (
                          <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>
                      )}
                     <p className="text-xs text-muted-foreground mt-3">
