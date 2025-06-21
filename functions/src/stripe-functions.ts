@@ -56,18 +56,17 @@ function getStripeInstance(): Stripe {
 
 /**
  * Creates or retrieves a Stripe Customer for an authenticated Firebase user.
- * @param {onCall.Request} request - The Firebase `onCall` request object.
- *                                   Requires `request.auth` to be populated.
+ * @param {object} request - The Firebase onCall request object.
  * @return {Promise<{customerId: string}>} A promise that resolves with the
- *                                         Stripe Customer ID.
- * @throws {HttpsError} Throws HttpsError on authentication failure, missing
- *                      user email, Firestore errors, or Stripe API errors.
+ *   Stripe Customer ID.
+ * @throws {HttpsError} Throws HttpsError on errors.
  */
 export const createOrRetrieveStripeCustomer = onCall(
   {
     secrets: [stripeSecretKey],
     region: "us-central1",
     timeoutSeconds: 60,
+    invoker: "public", // DIAGNOSTIC: Allow unauthenticated to bypass 403
   },
   async (request) => {
     // VERY EARLY LOG
@@ -81,7 +80,7 @@ export const createOrRetrieveStripeCustomer = onCall(
     if (!request.auth) {
       logger.warn(
         "[Stripe][createOrRetrieveStripeCustomer] Unauthenticated request. " +
-          "'request.auth' is undefined or null."
+        "'request.auth' is undefined or null."
       );
       throw new HttpsError(
         "unauthenticated",
@@ -95,13 +94,13 @@ export const createOrRetrieveStripeCustomer = onCall(
 
     logger.info(
       `[Stripe][createOrRetrieveStripeCustomer] Processing for UID: ${uid}, ` +
-        `Email: ${email}, Name: ${name}`
+      `Email: ${email}, Name: ${name}`
     );
 
     if (!email) {
       logger.error(
-        `[Stripe][createOrRetrieveStripeCustomer] User ${uid} missing email ` +
-          "in auth token. Cannot create Stripe customer."
+        "[Stripe][createOrRetrieveStripeCustomer] User " +
+        `${uid} missing email in auth token. Cannot create Stripe customer.`
       );
       throw new HttpsError(
         "failed-precondition",
@@ -114,15 +113,15 @@ export const createOrRetrieveStripeCustomer = onCall(
 
     try {
       logger.info(
-        `[Stripe][createOrRetrieveStripeCustomer] Retrieving user document ` +
-          `from Firestore for UID: ${uid}`
+        "[Stripe][createOrRetrieveStripeCustomer] Retrieving user document " +
+        `from Firestore for UID: ${uid}`
       );
       userSnap = await userRef.get();
       logger.info(
-        `[Stripe][createOrRetrieveStripeCustomer] Firestore user document ` +
-          `retrieved. Exists: ${userSnap.exists}`
+        "[Stripe][createOrRetrieveStripeCustomer] Firestore user document " +
+        `retrieved. Exists: ${userSnap.exists}`
       );
-    } catch (dbErr: unknown) {
+    } catch (dbErr) {
       const specificMessage =
         dbErr instanceof Error ? dbErr.message : String(dbErr);
       const logMessage =
@@ -138,7 +137,7 @@ export const createOrRetrieveStripeCustomer = onCall(
     if (!userSnap.exists) {
       logger.error(
         "[Stripe][createOrRetrieveStripeCustomer] User document for UID " +
-          `${uid} not found in Firestore.`
+        `${uid} not found in Firestore.`
       );
       throw new HttpsError(
         "not-found",
@@ -157,18 +156,16 @@ export const createOrRetrieveStripeCustomer = onCall(
     if (existingStripeCustomerId) {
       logger.info(
         "[Stripe][createOrRetrieveStripeCustomer] Found existing Stripe " +
-          `Customer ID: ${existingStripeCustomerId} for user ${uid}. ` +
-          "Verifying..."
+        `Customer ID: ${existingStripeCustomerId} for user ${uid}. Verifying...`
       );
       try {
         const stripeInstance = getStripeInstance();
         logger.info(
           "[Stripe][createOrRetrieveStripeCustomer] Attempting to retrieve " +
-            `customer ${existingStripeCustomerId} from Stripe.`
+          `customer ${existingStripeCustomerId} from Stripe.`
         );
-        const customer = await stripeInstance.customers.retrieve(
-          existingStripeCustomerId
-        );
+        const customer =
+          await stripeInstance.customers.retrieve(existingStripeCustomerId);
         logger.info(
           "[Stripe][createOrRetrieveStripeCustomer] Stripe customer retrieved:",
           customer
@@ -183,8 +180,8 @@ export const createOrRetrieveStripeCustomer = onCall(
         }
         logger.warn(
           "[Stripe][createOrRetrieveStripeCustomer] Stripe Customer ID " +
-            `${existingStripeCustomerId} was deleted in Stripe or invalid. ` +
-            "A new one will be created."
+          `${existingStripeCustomerId} was deleted in Stripe or invalid. ` +
+          "A new one will be created."
         );
       } catch (verificationError: unknown) {
         const errorMsg = verificationError instanceof Error ?
@@ -198,8 +195,8 @@ export const createOrRetrieveStripeCustomer = onCall(
     }
 
     logger.info(
-      `[Stripe][createOrRetrieveStripeCustomer] Creating new Stripe ` +
-        `customer for UID: ${uid}, Email: ${email}.`
+      "[Stripe][createOrRetrieveStripeCustomer] Creating new Stripe customer " +
+      `for UID: ${uid}, Email: ${email}.`
     );
     try {
       const stripeInstance = getStripeInstance();
@@ -210,13 +207,13 @@ export const createOrRetrieveStripeCustomer = onCall(
       });
 
       logger.info(
-        `[Stripe][createOrRetrieveStripeCustomer] Created Stripe Customer ` +
-          `${customer.id} for UID ${uid}.`
+        "[Stripe][createOrRetrieveStripeCustomer] Created Stripe Customer " +
+        `${customer.id} for UID ${uid}.`
       );
       await userRef.set({stripeCustomerId: customer.id}, {merge: true});
       logger.info(
-        `[Stripe][createOrRetrieveStripeCustomer] Updated Firestore user ` +
-          `${uid} with new Stripe Customer ID ${customer.id}.`
+        "[Stripe][createOrRetrieveStripeCustomer] Updated Firestore user " +
+        `${uid} with new Stripe Customer ID ${customer.id}.`
       );
       logger.info(
         "[Stripe][createOrRetrieveStripeCustomer] " +
@@ -228,8 +225,8 @@ export const createOrRetrieveStripeCustomer = onCall(
       const specificMessage = stripeErr instanceof Error ?
         stripeErr.message : String(stripeErr);
       const logMessage =
-        "[Stripe][createOrRetrieveStripeCustomer] Stripe API error " +
-        `creating customer for UID ${uid}: ${specificMessage}`;
+        "[Stripe][createOrRetrieveStripeCustomer] Stripe API error creating " +
+        `customer for UID ${uid}: ${specificMessage}`;
       logger.error(logMessage, stripeErr);
       throw new HttpsError(
         "internal",
@@ -245,7 +242,7 @@ interface CreateSetupIntentData {
 
 /**
  * Creates a Stripe SetupIntent for saving card details for future payments.
- * @param {onCall.Request<CreateSetupIntentData>} request - Firebase onCall request.
+ * @param {object} request - Firebase onCall request with data.
  * @return {Promise<{clientSecret: string}>} SetupIntent's client secret.
  * @throws {HttpsError} If errors occur.
  */
@@ -254,6 +251,7 @@ export const createStripeSetupIntent = onCall(
     secrets: [stripeSecretKey],
     region: "us-central1",
     timeoutSeconds: 60,
+    invoker: "public", // DIAGNOSTIC: Allow unauthenticated to bypass 403
   },
   async (request) => {
     // VERY EARLY LOG
@@ -265,9 +263,7 @@ export const createStripeSetupIntent = onCall(
     );
 
     if (!request.auth) {
-      logger.warn(
-        "[Stripe][createStripeSetupIntent] Unauthenticated request."
-      );
+      logger.warn("[Stripe][createStripeSetupIntent] Unauthenticated request.");
       throw new HttpsError(
         "unauthenticated",
         "Authentication required to create a SetupIntent."
@@ -291,8 +287,8 @@ export const createStripeSetupIntent = onCall(
     if (!customerId || typeof customerId !== "string") {
       logger.error(
         "[Stripe][createStripeSetupIntent] Invalid or missing customerId " +
-          `in SetupIntent request. CustomerId: ${customerId}, ` +
-          `Type: ${typeof customerId}`
+        `in SetupIntent request. CustomerId: ${customerId}, ` +
+        `Type: ${typeof customerId}`
       );
       throw new HttpsError(
         "invalid-argument",
@@ -302,7 +298,7 @@ export const createStripeSetupIntent = onCall(
 
     logger.info(
       "[Stripe][createStripeSetupIntent] Creating SetupIntent for Customer " +
-        `ID: ${customerId}.`
+      `ID: ${customerId}.`
     );
     try {
       const stripeInstance = getStripeInstance();
@@ -314,13 +310,13 @@ export const createStripeSetupIntent = onCall(
 
       logger.info(
         "[Stripe][createStripeSetupIntent] Created SetupIntent " +
-          `${setupIntent.id} for customer ${customerId}.`
+        `${setupIntent.id} for customer ${customerId}.`
       );
 
       if (!setupIntent.client_secret) {
         logger.error(
           `[Stripe][createStripeSetupIntent] SetupIntent ${setupIntent.id} ` +
-            "is missing client_secret. This is unexpected."
+          "is missing client_secret. This is unexpected."
         );
         throw new HttpsError(
           "internal",
@@ -330,7 +326,7 @@ export const createStripeSetupIntent = onCall(
 
       logger.info(
         "[Stripe][createStripeSetupIntent] Returning client_secret for " +
-          `SetupIntent ${setupIntent.id}.`
+        `SetupIntent ${setupIntent.id}.`
       );
       logger.info(
         "[Stripe][createStripeSetupIntent] Function finished successfully."
