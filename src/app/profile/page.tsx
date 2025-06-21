@@ -86,6 +86,7 @@ function ProfilePageInternal() {
   
   const [isTestingFunction, setIsTestingFunction] = useState(false);
   const [showAddPaymentForm, setShowAddPaymentForm] = useState(false);
+  const [paymentListKey, setPaymentListKey] = useState(0); // Key to force re-render
 
   const handleTestAuthFunction = useCallback(async () => {
     setIsTestingFunction(true);
@@ -261,13 +262,16 @@ function ProfilePageInternal() {
               {showAddPaymentForm ? (
                 <Elements stripe={stripePromise}>
                   <AddPaymentMethodForm
-                    onPaymentMethodAdded={() => setShowAddPaymentForm(false)}
+                    onPaymentMethodAdded={() => {
+                      setShowAddPaymentForm(false);
+                      setPaymentListKey(k => k + 1); // Increment key to force remount
+                    }}
                     onCancel={() => setShowAddPaymentForm(false)}
                   />
                 </Elements>
               ) : (
                 <>
-                  <PaymentMethodsList />
+                  <PaymentMethodsList key={paymentListKey} />
                   <Button
                     variant="outline"
                     className="mt-4 w-full"
@@ -616,3 +620,5 @@ export default function ProfilePage() {
     </Suspense>
   );
 }
+
+    
