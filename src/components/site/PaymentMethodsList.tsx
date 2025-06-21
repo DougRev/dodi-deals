@@ -4,7 +4,6 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, CreditCard, Trash2, Star } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { UserPaymentMethod } from '@/lib/types';
@@ -17,6 +16,7 @@ export function PaymentMethodsList() {
   const [paymentMethods, setPaymentMethods] = useState<UserPaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchPaymentMethods() {
@@ -46,8 +46,23 @@ export function PaymentMethodsList() {
   }, [user?.stripeCustomerId]);
 
   const handleDeletePaymentMethod = async (pmId: string) => {
-    // TODO: Implement Firebase Function to detach payment method from Stripe customer
-    toast({ title: "Action Required", description: `Delete functionality for payment method ${pmId} is not yet implemented.`});
+    setDeletingId(pmId);
+    setError(null);
+    try {
+        const functions = getFunctions(firebaseApp, 'us-central1');
+        const detachStripePaymentMethod = httpsCallable(functions, 'detachStripePaymentMethod');
+        await detachStripePaymentMethod({ paymentMethodId: pmId });
+
+        setPaymentMethods(prev => prev.filter(pm => pm.id !== pmId));
+        toast({ title: "Card Deleted", description: "Your payment method has been successfully removed." });
+
+    } catch (err: any) {
+        console.error("Error deleting payment method:", err);
+        setError(err.message || "Failed to delete payment method.");
+        toast({ title: "Error", description: "Could not delete your card.", variant: "destructive" });
+    } finally {
+        setDeletingId(null);
+    }
   };
 
   const handleSetDefaultPaymentMethod = async (pmId: string) => {
@@ -98,12 +113,12 @@ export function PaymentMethodsList() {
                   <Star className="h-3 w-3 mr-1 text-yellow-500 fill-yellow-400"/> Default
                 </Badge>
               ) : (
-                <Button variant="ghost" size="sm" onClick={() => handleSetDefaultPaymentMethod(pm.id)} title="Set as default">
+                <Button variant="ghost" size="sm" onClick={() => handleSetDefaultPaymentMethod(pm.id)} title="Set as default" disabled={!!deletingId}>
                   <Star className="h-5 w-5 text-muted-foreground hover:text-yellow-500"/>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(pm.id)} className="text-destructive h-8 w-8" title="Delete card">
-                <Trash2 className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(pm.id)} className="text-destructive h-8 w-8" title="Delete card" disabled={deletingId === pm.id || !!deletingId}>
+                 {deletingId === pm.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </Button>
             </div>
           </div>

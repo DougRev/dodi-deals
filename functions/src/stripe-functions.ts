@@ -1,4 +1,3 @@
-
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import {defineSecret} from "firebase-functions/params";
@@ -205,6 +204,61 @@ export const listStripePaymentMethods = onCall(
         err
       );
       throw new HttpsError("internal", "Failed to retrieve payment methods.");
+    }
+  }
+);
+
+/**
+ * Detaches a Stripe PaymentMethod from its customer.
+ */
+export const detachStripePaymentMethod = onCall(
+  {secrets: [stripeSecretKey], cors: true},
+  async (request) => {
+    logger.info("[detachStripePaymentMethod] Function execution STARTED.");
+
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Authentication is required to delete a payment method."
+      );
+    }
+
+    const {paymentMethodId} = request.data;
+    if (!paymentMethodId || typeof paymentMethodId !== "string") {
+      throw new HttpsError(
+        "invalid-argument",
+        "A valid PaymentMethod ID is required."
+      );
+    }
+
+    try {
+      const stripe = initializeStripe();
+      const detachedPaymentMethod = await stripe.paymentMethods.detach(
+        paymentMethodId
+      );
+
+      logger.info(
+        `[detachStripePaymentMethod] Successfully detached payment method ` +
+        `${detachedPaymentMethod.id} for user ${request.auth.uid}.`
+      );
+
+      return {success: true, id: detachedPaymentMethod.id};
+    } catch (error) {
+      const err = error as Stripe.StripeError;
+      logger.error(
+        "[detachStripePaymentMethod] Error detaching payment method " +
+        `${paymentMethodId}:`,
+        err
+      );
+      // It's possible the PM is already detached.
+      if (err.code === "payment_method_already_detached") {
+        logger.warn(
+          `[detachStripePaymentMethod] PM ${paymentMethodId} ` +
+          "was already detached."
+        );
+        return {success: true, id: paymentMethodId, message: "Already detached."};
+      }
+      throw new HttpsError("internal", "Failed to detach payment method.");
     }
   }
 );
