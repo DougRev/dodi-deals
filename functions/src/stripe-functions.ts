@@ -126,7 +126,7 @@ export const createOrRetrieveStripeCustomer = onCall(
       const specificMessage =
         dbErr instanceof Error ? dbErr.message : String(dbErr);
       const logMessage =
-        `[Stripe][createOrRetrieveStripeCustomer] Firestore error getting ` +
+        "[Stripe][createOrRetrieveStripeCustomer] Firestore error getting " +
         `user ${uid}: ${specificMessage}`;
       logger.error(logMessage, dbErr);
       throw new HttpsError(
@@ -137,7 +137,7 @@ export const createOrRetrieveStripeCustomer = onCall(
 
     if (!userSnap.exists) {
       logger.error(
-        `[Stripe][createOrRetrieveStripeCustomer] User document for UID ` +
+        "[Stripe][createOrRetrieveStripeCustomer] User document for UID " +
           `${uid} not found in Firestore.`
       );
       throw new HttpsError(
@@ -156,14 +156,14 @@ export const createOrRetrieveStripeCustomer = onCall(
 
     if (existingStripeCustomerId) {
       logger.info(
-        `[Stripe][createOrRetrieveStripeCustomer] Found existing Stripe ` +
+        "[Stripe][createOrRetrieveStripeCustomer] Found existing Stripe " +
           `Customer ID: ${existingStripeCustomerId} for user ${uid}. ` +
-          `Verifying...`
+          "Verifying..."
       );
       try {
         const stripeInstance = getStripeInstance();
         logger.info(
-          `[Stripe][createOrRetrieveStripeCustomer] Attempting to retrieve ` +
+          "[Stripe][createOrRetrieveStripeCustomer] Attempting to retrieve " +
             `customer ${existingStripeCustomerId} from Stripe.`
         );
         const customer = await stripeInstance.customers.retrieve(
@@ -176,25 +176,23 @@ export const createOrRetrieveStripeCustomer = onCall(
 
         if (customer && !customer.deleted) {
           logger.info(
-            `[Stripe][createOrRetrieveStripeCustomer] Verified Stripe ` +
+            "[Stripe][createOrRetrieveStripeCustomer] Verified Stripe " +
             `Customer ID ${existingStripeCustomerId}. Returning existing ID.`
           );
           return {customerId: existingStripeCustomerId};
         }
         logger.warn(
-          `[Stripe][createOrRetrieveStripeCustomer] Stripe Customer ID ` +
+          "[Stripe][createOrRetrieveStripeCustomer] Stripe Customer ID " +
             `${existingStripeCustomerId} was deleted in Stripe or invalid. ` +
-            `A new one will be created.`
+            "A new one will be created."
         );
       } catch (verificationError: unknown) {
-        const errorMsg =
-          verificationError instanceof Error ?
-            verificationError.message :
-            String(verificationError);
+        const errorMsg = verificationError instanceof Error ?
+          verificationError.message : String(verificationError);
         logger.warn(
-          `[Stripe][createOrRetrieveStripeCustomer] Error verifying ` +
-            `existing Stripe ID ${existingStripeCustomerId}: ` +
-            `${errorMsg.substring(0, 100)}. A new one will be created.`
+          "[Stripe][createOrRetrieveStripeCustomer] Error verifying " +
+          `existing Stripe ID ${existingStripeCustomerId}: ` +
+          `${errorMsg.substring(0, 100)}. A new one will be created.`
         );
       }
     }
@@ -227,10 +225,10 @@ export const createOrRetrieveStripeCustomer = onCall(
       logger.info("--------------------------------------------------");
       return {customerId: customer.id};
     } catch (stripeErr: unknown) {
-      const specificMessage =
-        stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+      const specificMessage = stripeErr instanceof Error ?
+        stripeErr.message : String(stripeErr);
       const logMessage =
-        `[Stripe][createOrRetrieveStripeCustomer] Stripe API error ` +
+        "[Stripe][createOrRetrieveStripeCustomer] Stripe API error " +
         `creating customer for UID ${uid}: ${specificMessage}`;
       logger.error(logMessage, stripeErr);
       throw new HttpsError(
@@ -292,7 +290,7 @@ export const createStripeSetupIntent = onCall(
 
     if (!customerId || typeof customerId !== "string") {
       logger.error(
-        `[Stripe][createStripeSetupIntent] Invalid or missing customerId ` +
+        "[Stripe][createStripeSetupIntent] Invalid or missing customerId " +
           `in SetupIntent request. CustomerId: ${customerId}, ` +
           `Type: ${typeof customerId}`
       );
@@ -303,7 +301,7 @@ export const createStripeSetupIntent = onCall(
     }
 
     logger.info(
-      `[Stripe][createStripeSetupIntent] Creating SetupIntent for Customer ` +
+      "[Stripe][createStripeSetupIntent] Creating SetupIntent for Customer " +
         `ID: ${customerId}.`
     );
     try {
@@ -315,7 +313,7 @@ export const createStripeSetupIntent = onCall(
       });
 
       logger.info(
-        `[Stripe][createStripeSetupIntent] Created SetupIntent ` +
+        "[Stripe][createStripeSetupIntent] Created SetupIntent " +
           `${setupIntent.id} for customer ${customerId}.`
       );
 
@@ -331,7 +329,7 @@ export const createStripeSetupIntent = onCall(
       }
 
       logger.info(
-        `[Stripe][createStripeSetupIntent] Returning client_secret for ` +
+        "[Stripe][createStripeSetupIntent] Returning client_secret for " +
           `SetupIntent ${setupIntent.id}.`
       );
       logger.info(
@@ -343,7 +341,7 @@ export const createStripeSetupIntent = onCall(
       const specificMessage =
         stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
       const logMessage =
-        `[Stripe][createStripeSetupIntent] Stripe API error creating ` +
+        "[Stripe][createStripeSetupIntent] Stripe API error creating " +
         `SetupIntent for customer ${customerId}: ${specificMessage}`;
       logger.error(logMessage, stripeErr);
       throw new HttpsError(
@@ -353,6 +351,3 @@ export const createStripeSetupIntent = onCall(
     }
   }
 );
-
-// Ensure there's a blank line at the end if your linter expects it
-// (or remove this comment if it doesn't)
