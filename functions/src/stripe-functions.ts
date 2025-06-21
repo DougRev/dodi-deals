@@ -56,7 +56,7 @@ function getStripeInstance(): Stripe {
 
 /**
  * Creates or retrieves a Stripe Customer for an authenticated Firebase user.
- * @param {object} request - The Firebase onCall request object.
+ * @param {object} request The Firebase onCall request object.
  * @return {Promise<{customerId: string}>} A promise that resolves with the
  *   Stripe Customer ID.
  * @throws {HttpsError} Throws HttpsError on errors.
@@ -66,7 +66,6 @@ export const createOrRetrieveStripeCustomer = onCall(
     secrets: [stripeSecretKey],
     region: "us-central1",
     timeoutSeconds: 60,
-    invoker: "public", // DIAGNOSTIC: Allow unauthenticated to bypass 403
   },
   async (request) => {
     // VERY EARLY LOG
@@ -183,9 +182,11 @@ export const createOrRetrieveStripeCustomer = onCall(
           `${existingStripeCustomerId} was deleted in Stripe or invalid. ` +
           "A new one will be created."
         );
-      } catch (verificationError: unknown) {
-        const errorMsg = verificationError instanceof Error ?
-          verificationError.message : String(verificationError);
+      } catch (verificationError) {
+        const errorMsg =
+          verificationError instanceof Error ?
+            verificationError.message :
+            String(verificationError);
         logger.warn(
           "[Stripe][createOrRetrieveStripeCustomer] Error verifying " +
           `existing Stripe ID ${existingStripeCustomerId}: ` +
@@ -221,9 +222,11 @@ export const createOrRetrieveStripeCustomer = onCall(
       );
       logger.info("--------------------------------------------------");
       return {customerId: customer.id};
-    } catch (stripeErr: unknown) {
-      const specificMessage = stripeErr instanceof Error ?
-        stripeErr.message : String(stripeErr);
+    } catch (stripeErr) {
+      const specificMessage =
+        stripeErr instanceof Error ?
+          stripeErr.message :
+          String(stripeErr);
       const logMessage =
         "[Stripe][createOrRetrieveStripeCustomer] Stripe API error creating " +
         `customer for UID ${uid}: ${specificMessage}`;
@@ -242,7 +245,7 @@ interface CreateSetupIntentData {
 
 /**
  * Creates a Stripe SetupIntent for saving card details for future payments.
- * @param {object} request - Firebase onCall request with data.
+ * @param {object} request Firebase onCall request with data.
  * @return {Promise<{clientSecret: string}>} SetupIntent's client secret.
  * @throws {HttpsError} If errors occur.
  */
@@ -251,7 +254,6 @@ export const createStripeSetupIntent = onCall(
     secrets: [stripeSecretKey],
     region: "us-central1",
     timeoutSeconds: 60,
-    invoker: "public", // DIAGNOSTIC: Allow unauthenticated to bypass 403
   },
   async (request) => {
     // VERY EARLY LOG
@@ -333,9 +335,11 @@ export const createStripeSetupIntent = onCall(
       );
       logger.info("--------------------------------------------------");
       return {clientSecret: setupIntent.client_secret};
-    } catch (stripeErr: unknown) {
+    } catch (stripeErr) {
       const specificMessage =
-        stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+        stripeErr instanceof Error ?
+          stripeErr.message :
+          String(stripeErr);
       const logMessage =
         "[Stripe][createStripeSetupIntent] Stripe API error creating " +
         `SetupIntent for customer ${customerId}: ${specificMessage}`;
