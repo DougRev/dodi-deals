@@ -1,19 +1,10 @@
 
+// This ensures the admin SDK is initialized before any function code runs.
+import "./firebase-admin-init";
 import * as logger from "firebase-functions/logger";
-import * as admin from "firebase-admin";
-// Use v2 onRequest handler
 import {onRequest} from "firebase-functions/v2/https";
 
-// Initialize Firebase Admin SDK *ONCE*
-// Guard ensures initializeApp() runs only if no default app exists.
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-  logger.info("Firebase Admin SDK initialized in functions/src/index.ts");
-} else {
-  logger.info("Firebase Admin SDK already initialized, using existing app.");
-}
-
-// Export the new test function
+// Export functions from other files to be deployed
 export * from "./test-function";
 export * from "./stripe-functions";
 

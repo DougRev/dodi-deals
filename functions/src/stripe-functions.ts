@@ -1,12 +1,11 @@
 
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import * as admin from "firebase-admin";
 import {defineSecret} from "firebase-functions/params";
 import Stripe from "stripe";
+import {db} from "./firebase-admin-init"; // Import the initialized db instance
 
 // Define the Stripe secret key using Firebase's defineSecret function.
-// This tells Firebase to load the value from Cloud Secret Manager.
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 
 // Helper function to initialize Stripe, ensuring the secret key is loaded.
@@ -14,8 +13,8 @@ const initializeStripe = () => {
   const key = stripeSecretKey.value();
   if (!key) {
     logger.error(
-      "[Stripe] CRITICAL: Stripe secret key is not available." +
-      "Ensure STRIPE_SECRET_KEY is set in your secrets.",
+      "[Stripe] CRITICAL: Stripe secret key is not available. Ensure " +
+      "STRIPE_SECRET_KEY is set in your secrets.",
       {structuredData: true}
     );
     throw new HttpsError(
@@ -34,11 +33,10 @@ const initializeStripe = () => {
  * or retrieves the existing one.
  */
 export const createOrRetrieveStripeCustomer = onCall(
-  {secrets: [stripeSecretKey]}, // Make the secret available to this function
+  {secrets: [stripeSecretKey]},
   async (request) => {
     logger.info(
-      "[createOrRetrieveStripeCustomer] Function execution STARTED.",
-      {structuredData: true}
+      "[createOrRetrieveStripeCustomer] Function execution STARTED."
     );
 
     if (!request.auth) {
@@ -48,7 +46,7 @@ export const createOrRetrieveStripeCustomer = onCall(
       );
     }
     const uid = request.auth.uid;
-    const userRef = admin.firestore().collection("users").doc(uid);
+    const userRef = db.collection("users").doc(uid);
 
     try {
       const userDoc = await userRef.get();
@@ -57,16 +55,14 @@ export const createOrRetrieveStripeCustomer = onCall(
       if (userData?.stripeCustomerId) {
         logger.info(
           `[createOrRetrieveStripeCustomer] Found existing Stripe ` +
-          `customer ID for user ${uid}: ${userData.stripeCustomerId}`,
-          {structuredData: true}
+          `customer ID for user ${uid}: ${userData.stripeCustomerId}`
         );
         return {customerId: userData.stripeCustomerId};
       }
 
       logger.info(
         `[createOrRetrieveStripeCustomer] No Stripe customer ID found for ` +
-        `user ${uid}. Creating a new one.`,
-        {structuredData: true}
+        `user ${uid}. Creating a new one.`
       );
 
       const stripe = initializeStripe();
@@ -80,8 +76,7 @@ export const createOrRetrieveStripeCustomer = onCall(
 
       logger.info(
         `[createOrRetrieveStripeCustomer] Successfully created and ` +
-        `saved new Stripe customer ID for user ${uid}: ${customer.id}`,
-        {structuredData: true}
+        `saved new Stripe customer ID for user ${uid}: ${customer.id}`
       );
 
       return {customerId: customer.id};
@@ -101,11 +96,9 @@ export const createOrRetrieveStripeCustomer = onCall(
  * future use.
  */
 export const createStripeSetupIntent = onCall(
-  {secrets: [stripeSecretKey]}, // Make the secret available
+  {secrets: [stripeSecretKey]},
   async (request) => {
-    logger.info("[createStripeSetupIntent] Function execution STARTED.",
-      {structuredData: true}
-    );
+    logger.info("[createStripeSetupIntent] Function execution STARTED.");
 
     if (!request.auth) {
       throw new HttpsError(
@@ -131,8 +124,7 @@ export const createStripeSetupIntent = onCall(
 
       logger.info(
         `[createStripeSetupIntent] Successfully created SetupIntent for ` +
-        `customer ${customerId}.`,
-        {structuredData: true}
+        `customer ${customerId}.`
       );
 
       return {clientSecret: setupIntent.client_secret};
