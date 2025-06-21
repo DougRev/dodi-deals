@@ -2,7 +2,7 @@
 // This ensures the admin SDK is initialized before any function code runs.
 import "./firebase-admin-init";
 import * as logger from "firebase-functions/logger";
-import {onRequest} from "firebase-functions/v2/https";
+import {onRequest} from "firebase-functions/v2/httpshttps";
 
 // Export functions from other files to be deployed
 export * from "./test-function";
@@ -15,4 +15,3 @@ export const helloWorld = onRequest((request, response) => {
   });
   response.send("Hello from Dodi Deals Firebase v2 Functions!");
 });
- 
