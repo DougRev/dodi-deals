@@ -2,7 +2,7 @@
 // This ensures the admin SDK is initialized before any function code runs.
 import "./firebase-admin-init";
 import * as logger from "firebase-functions/logger";
-import {onRequest} from "firebase-functions/v2/httpshttps";
+import {onRequest} from "firebase-functions/v2/https";
 
 // Export functions from other files to be deployed
 export * from "./test-function";

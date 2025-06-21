@@ -79,9 +79,10 @@ export const createOrRetrieveStripeCustomer = onCall(
 
       return {customerId: customer.id};
     } catch (error) {
+      const err = error as Error;
       logger.error(
         `[createOrRetrieveStripeCustomer] Error processing for user ${uid}:`,
-        error
+        err
       );
       throw new HttpsError("internal", "Failed to process Stripe customer.");
     }
@@ -127,10 +128,11 @@ export const createStripeSetupIntent = onCall(
 
       return {clientSecret: setupIntent.client_secret};
     } catch (error) {
+      const err = error as Error;
       logger.error(
         "[createStripeSetupIntent] Error creating SetupIntent for " +
         `customer ${customerId}:`,
-        error
+        err
       );
       throw new HttpsError("internal", "Failed to create Stripe SetupIntent.");
     }
@@ -196,10 +198,11 @@ export const listStripePaymentMethods = onCall(
 
       return {paymentMethods: formattedPaymentMethods};
     } catch (error) {
+      const err = error as Error;
       logger.error(
         "[listStripePaymentMethods] Error listing payment methods for " +
         `customer ${customerId}:`,
-        error
+        err
       );
       throw new HttpsError("internal", "Failed to retrieve payment methods.");
     }

@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import type { UserPaymentMethod } from '@/lib/types';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
+import { Badge } from '@/components/ui/badge';
 
 export function PaymentMethodsList() {
   const { user } = useAppContext();
@@ -110,5 +111,3 @@ export function PaymentMethodsList() {
     </div>
   );
 }
-
-    
