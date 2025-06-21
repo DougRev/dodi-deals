@@ -15,5 +15,4 @@ export const helloWorld = onRequest((request, response) => {
   });
   response.send("Hello from Dodi Deals Firebase v2 Functions!");
 });
-
-    
+ 
