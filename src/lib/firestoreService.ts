@@ -174,6 +174,110 @@ export async function deleteProduct(productId: string): Promise<void> {
   }
 }
 
+export async function updateProductStockForStoreByManager(
+  productId: string,
+  storeId: string,
+  stockUpdate: { stock?: number; totalStockInGrams?: number },
+  managerId: string
+): Promise<void> {
+  const functionName = 'updateProductStockForStoreByManager (Transactional)';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Product: ${productId}, Store: ${storeId}, Update: ${JSON.stringify(stockUpdate)}, Manager: ${managerId}`);
+
+  const userRef = adminDb!.collection('users').doc(managerId);
+  const productRef = adminDb!.collection('products').doc(productId);
+
+  try {
+    await adminDb!.runTransaction(async (transaction) => {
+      const managerDoc = await transaction.get(userRef);
+      if (!managerDoc.exists || managerDoc.data()?.storeRole !== 'Manager' || managerDoc.data()?.assignedStoreId !== storeId) {
+        throw new Error('User is not an authorized manager for this store.');
+      }
+
+      const productDoc = await transaction.get(productRef);
+      if (!productDoc.exists) {
+        throw new Error('Product not found.');
+      }
+
+      const productData = productDoc.data() as Product;
+      const availabilityIndex = productData.availability.findIndex(a => a.storeId === storeId);
+      if (availabilityIndex === -1) {
+        throw new Error('Product is not configured for this store.');
+      }
+
+      const newAvailability = [...productData.availability];
+      if (stockUpdate.stock !== undefined) {
+        newAvailability[availabilityIndex].stock = stockUpdate.stock;
+      }
+      if (stockUpdate.totalStockInGrams !== undefined) {
+        newAvailability[availabilityIndex].totalStockInGrams = stockUpdate.totalStockInGrams;
+      }
+      
+      transaction.update(productRef, { availability: newAvailability });
+    });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Stock updated successfully for product ${productId} in store ${storeId}.`);
+  } catch (error: any) {
+    console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed:`, error);
+    throw error;
+  }
+}
+
+export async function addProductByManager(
+  productCoreData: Omit<Product, 'id' | 'availability' | 'isFeatured'>,
+  availabilityData: StoreAvailability,
+  managerId: string
+): Promise<string> {
+  const functionName = 'addProductByManager';
+  ensureAdminDbInitialized(functionName);
+  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Manager ${managerId} adding product: ${productCoreData.name}`);
+
+  const userRef = adminDb!.collection('users').doc(managerId);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists || userDoc.data()?.storeRole !== 'Manager' || userDoc.data()?.assignedStoreId !== availabilityData.storeId) {
+    throw new Error('User is not an authorized manager for this store.');
+  }
+
+  const productsColRef = adminDb!.collection('products');
+  
+  const existingProductQuery = await productsColRef
+    .where('name', '==', productCoreData.name)
+    .where('brand', '==', productCoreData.brand)
+    .limit(1)
+    .get();
+
+  if (!existingProductQuery.empty) {
+    const existingProductDoc = existingProductQuery.docs[0];
+    const existingProductData = existingProductDoc.data() as Product;
+    
+    const storeAlreadyExists = existingProductData.availability.some(a => a.storeId === availabilityData.storeId);
+    if (storeAlreadyExists) {
+        throw new Error(`Product "${productCoreData.name}" by "${productCoreData.brand}" already exists and is configured for your store.`);
+    }
+
+    const updatedAvailability = [...existingProductData.availability, availabilityData];
+    await existingProductDoc.ref.update({ availability: updatedAvailability });
+    console.log(`[firestoreService][AdminSDK][${functionName}] Added new availability for existing product ${existingProductDoc.id} for store ${availabilityData.storeId}`);
+    return existingProductDoc.id;
+
+  } else {
+    const newProductData: Omit<Product, 'id'> = {
+      ...productCoreData,
+      isFeatured: false, 
+      availability: [availabilityData]
+    };
+    try {
+      const docRef = await productsColRef.add(newProductData);
+      console.log(`[firestoreService][AdminSDK][${functionName}] New product added with ID: ${docRef.id}`);
+      return docRef.id;
+    } catch (error) {
+      console.error(`[firestoreService][AdminSDK][${functionName}] Error adding new product:`, error);
+      throw error;
+    }
+  }
+}
+
 export async function getAllUsers(): Promise<User[]> {
   const functionName = 'getAllUsers';
   ensureAdminDbInitialized(functionName);
