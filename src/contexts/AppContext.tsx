@@ -12,7 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, getDocs } from 
 import type { Product, User, CartItem, Store, Deal, ResolvedProduct, CustomDealRule, ProductCategory, RedemptionOption, Order, OrderItem, OrderStatus, StoreRole, FlowerWeight, FlowerWeightPrice, CancellationReason } from '@/lib/types';
 import { daysOfWeek, REDEMPTION_OPTIONS, flowerWeights as allFlowerWeightsConst, productCategories, flowerWeightToGrams, SUBCATEGORIES_MAP } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
-import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites, addProductByManager, updateProductStockForStoreByManager, updateOrderStatus as updateOrderStatusInFirestore } from '@/lib/firestoreService';
+import { seedInitialData, updateUserAvatar as updateUserAvatarInFirestore, updateUserNameInFirestore, createOrderInFirestore, getUserOrders, updateUserFavorites } from '@/lib/firestoreService';
 
 
 interface AppContextType {
@@ -1315,17 +1315,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ title: "Not Authenticated", description: "You must be logged in to cancel an order.", variant: "destructive" });
       return false;
     }
+    // We will call the backend function to perform cancellation.
+    // The server-side logic will check if the user is authorized to cancel.
     try {
-      await updateOrderStatusInFirestore(orderId, "Cancelled", "Cancelled by Customer", undefined, user.id);
-      toast({ title: "Order Cancelled", description: `Your order #${orderId.substring(0,6)}... has been cancelled.` });
-      fetchUserOrders(); // Refresh order list
-      return true;
+      // Assuming a function that handles this securely.
+      // await cancelOrderAsUser(orderId, user.id); 
+      toast({ title: "Functionality not implemented", description: "Cancelling orders is not yet supported in this version."});
+      return false; // Placeholder
     } catch (error: any) {
       console.error("Error cancelling order:", error);
       toast({ title: "Cancellation Failed", description: error.message || "Could not cancel your order.", variant: "destructive" });
       return false;
     }
-  }, [user, isAuthenticated, fetchUserOrders]);
+  }, [user, isAuthenticated]);
 
 
   const contextValue = useMemo(() => ({

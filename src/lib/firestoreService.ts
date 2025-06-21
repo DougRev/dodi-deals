@@ -1,7 +1,7 @@
 
 'use server';
 
-import { adminDb, adminInitializationError, adminAuth as firebaseAdminAuthModule } from '@/lib/firebaseAdmin';
+import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
 import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData, ProductCategory, StoreSalesReport, SalesReportDataItem, GlobalSalesReport, Store } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
@@ -144,62 +144,6 @@ export async function addProduct(productData: Omit<Product, 'id'>): Promise<stri
   }
 }
 
-export async function addProductByManager(
-  productCoreData: Pick<ProductFormData, 'name' | 'description' | 'brand' | 'category' | 'baseImageUrl' | 'dataAiHint'>,
-  managerStoreAvailabilityData: StoreAvailability, 
-  managerUserId: string
-): Promise<string> {
-  const functionName = 'addProductByManager';
-  ensureAdminDbInitialized(functionName);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Start. Manager: ${managerUserId}, Product Name: ${productCoreData.name}`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Received productCoreData:`, JSON.stringify(productCoreData, null, 2));
-  console.log(`[firestoreService][AdminSDK][${functionName}] Received managerStoreAvailabilityData:`, JSON.stringify(managerStoreAvailabilityData, null, 2));
-
-
-  const managerUserRef = adminDb!.collection('users').doc(managerUserId);
-  try {
-    const managerDoc = await managerUserRef.get();
-    if (!managerDoc.exists) {
-      console.error(`[firestoreService][AdminSDK][${functionName}] Error: Manager user ${managerUserId} does not exist.`);
-      throw new Error("Manager user performing action does not exist.");
-    }
-    const managerData = managerDoc.data() as User;
-    console.log(`[firestoreService][AdminSDK][${functionName}] Manager data retrieved:`, JSON.stringify(managerData, null, 2));
-
-    if (managerData.storeRole !== 'Manager' || !managerData.assignedStoreId) {
-      console.error(`[firestoreService][AdminSDK][${functionName}] Error: User ${managerUserId} is not a manager or not assigned to a store. Role: ${managerData.storeRole}, Store ID: ${managerData.assignedStoreId}`);
-      throw new Error("User is not a manager or not assigned to a store.");
-    }
-    if (managerData.assignedStoreId !== managerStoreAvailabilityData.storeId) {
-      console.error(`[firestoreService][AdminSDK][${functionName}] Error: Manager ${managerUserId} attempting to add product to store ${managerStoreAvailabilityData.storeId} but is assigned to ${managerData.assignedStoreId}.`);
-      throw new Error("Manager attempting to add product to a store they are not assigned to.");
-    }
-    console.log(`[firestoreService][AdminSDK][${functionName}] Manager permission checks passed.`);
-
-    let finalProductCoreData = { ...productCoreData };
-    if (finalProductCoreData.category === 'Flower' && finalProductCoreData.brand !== 'Dodi Hemp') {
-        console.warn(`[firestoreService][AdminSDK][${functionName}] Overriding brand to 'Dodi Hemp' for Flower product.`);
-        finalProductCoreData.brand = 'Dodi Hemp';
-    }
-    
-    const newProductData: Omit<Product, 'id'> = {
-      ...finalProductCoreData,
-      isFeatured: false, 
-      availability: [managerStoreAvailabilityData], 
-    };
-    console.log(`[firestoreService][AdminSDK][${functionName}] Final newProductData to be added:`, JSON.stringify(newProductData, null, 2));
-
-    const productsColRef = adminDb!.collection('products');
-    const docRef = await productsColRef.add(newProductData);
-    console.log(`[firestoreService][AdminSDK][${functionName}] Product added successfully by manager ${managerUserId} with ID: ${docRef.id}`);
-    return docRef.id;
-  } catch (error: any) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error adding product by manager ${managerUserId} for product ${productCoreData.name}:`, error.message, error.stack);
-    throw error; 
-  }
-}
-
-
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<void> {
   const functionName = 'updateProduct';
   ensureAdminDbInitialized(functionName);
@@ -262,102 +206,50 @@ export async function updateUserConfiguration(
     isAdmin?: boolean;
     assignedStoreId?: string | null;
     storeRole?: StoreRole | null;
-  },
-  callingUserId: string 
+  }
 ): Promise<void> {
   const functionName = 'updateUserConfiguration';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Target User: ${targetUserId}, Updates: ${JSON.stringify(updates)}, Caller: ${callingUserId}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Target User: ${targetUserId}, Updates: ${JSON.stringify(updates)}`);
 
-  const callingUserRef = adminDb!.collection('users').doc(callingUserId);
   const targetUserRef = adminDb!.collection('users').doc(targetUserId);
-
-  const callingUserDoc = await callingUserRef.get();
-  if (!callingUserDoc.exists) {
-    throw new Error("Calling user performing update does not exist.");
-  }
-  const callingUserData = callingUserDoc.data() as User;
-
-  const targetUserDoc = await targetUserRef.get();
-  if (!targetUserDoc.exists) {
-    throw new Error("Target user to be updated does not exist.");
-  }
-  const targetUserData = targetUserDoc.data() as User;
-
   const updatePayload: { [key: string]: any } = {};
-  let canProceed = false;
 
-  if (callingUserData.isAdmin) {
-    canProceed = true;
-    if (typeof updates.isAdmin === 'boolean') {
-      updatePayload.isAdmin = updates.isAdmin;
-      if (updatePayload.isAdmin) { 
-        updatePayload.assignedStoreId = null;
-        updatePayload.storeRole = null;
-      }
-    }
-    if (!updatePayload.isAdmin) {
-      if (updates.assignedStoreId !== undefined) {
-        updatePayload.assignedStoreId = updates.assignedStoreId;
-      }
-      if (updatePayload.assignedStoreId === null) { 
-        updatePayload.storeRole = null;
-      } else if (updates.storeRole !== undefined) { 
-        updatePayload.storeRole = updates.storeRole;
-      } else if (updatePayload.assignedStoreId && targetUserData.storeRole === null) { 
-        updatePayload.storeRole = 'Employee'; 
-      }
+  if (typeof updates.isAdmin === 'boolean') {
+    updatePayload.isAdmin = updates.isAdmin;
+    if (updatePayload.isAdmin) {
+      updatePayload.assignedStoreId = null;
+      updatePayload.storeRole = null;
     }
   }
-  else if (callingUserData.storeRole === 'Manager' && callingUserData.assignedStoreId) {
-    if (targetUserData.isAdmin) {
-      throw new Error("Managers cannot modify Admin users.");
-    }
-    if (updates.isAdmin === true) {
-      throw new Error("Managers cannot grant Admin status.");
-    }
-    if (updates.storeRole && updates.storeRole !== 'Employee') {
-      throw new Error("Managers can only assign the 'Employee' role.");
-    }
 
-    if (updates.assignedStoreId === callingUserData.assignedStoreId && updates.storeRole === 'Employee') {
-      if (targetUserData.assignedStoreId === null || targetUserData.assignedStoreId === callingUserData.assignedStoreId) {
-        canProceed = true;
-        updatePayload.assignedStoreId = callingUserData.assignedStoreId;
-        updatePayload.storeRole = 'Employee';
-        updatePayload.isAdmin = false; 
-      } else {
-        throw new Error("Managers can only assign employees to their own store if the user is unassigned or already part of their store.");
-      }
-    }
-    else if (updates.assignedStoreId === null && targetUserData.assignedStoreId === callingUserData.assignedStoreId && targetUserData.storeRole === 'Employee') {
-        canProceed = true;
-        updatePayload.assignedStoreId = null;
-        updatePayload.storeRole = null;
-        updatePayload.isAdmin = false;
-    }
-    else {
-      throw new Error("Manager permission denied for this user update operation. Ensure you are assigning an 'Employee' to your own store or removing an existing employee from your store.");
-    }
-  } else {
-    throw new Error("Permission denied. Only Admins or authorized Managers can update user configurations.");
+  if (updates.assignedStoreId !== undefined) {
+    updatePayload.assignedStoreId = updates.assignedStoreId;
+  }
+  
+  if (updates.storeRole !== undefined) {
+    updatePayload.storeRole = updates.storeRole;
+  }
+  
+  if (updates.assignedStoreId === null) {
+      updatePayload.storeRole = null;
   }
 
-  if (!canProceed || Object.keys(updatePayload).length === 0) {
-    console.log(`[firestoreService][AdminSDK][${functionName}] No valid updates to perform for user ${targetUserId} by caller ${callingUserId}. Update payload: ${JSON.stringify(updatePayload)}`);
+
+  if (Object.keys(updatePayload).length === 0) {
+    console.log(`[firestoreService][AdminSDK][${functionName}] No valid updates to perform.`);
     return;
   }
 
   try {
     await targetUserRef.update(updatePayload);
-    console.log(`[firestoreService][AdminSDK][${functionName}] User ${targetUserId} configuration updated successfully by ${callingUserId} with:`, updatePayload);
+    console.log(`[firestoreService][AdminSDK][${functionName}] User ${targetUserId} configuration updated successfully with:`, updatePayload);
   } catch (error) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user configuration for ${targetUserId} by ${callingUserId}:`, error);
+    console.error(`[firestoreService][AdminSDK][${functionName}] Error updating user configuration for ${targetUserId}:`, error);
     throw error;
   }
 }
-
 
 export async function updateUserNameInFirestore(userId: string, newName: string): Promise<void> {
   const functionName = 'updateUserNameInFirestore';
@@ -553,66 +445,26 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
   }
 }
 
-export async function updateOrderStatus(
-    orderId: string,
-    newStatus: OrderStatus,
-    cancellationReason?: CancellationReason,
-    cancellationDescription?: string,
-    callingUserId?: string // Added to verify customer cancellations
-): Promise<void> {
+export async function updateOrderStatus(orderId: string, newStatus: OrderStatus, cancellationReason?: CancellationReason, cancellationDescription?: string): Promise<void> {
   const functionName = 'updateOrderStatus (Transactional)';
   ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Order: ${orderId}, NewStatus: ${newStatus}, Reason: ${cancellationReason}, Desc: ${cancellationDescription}, Caller: ${callingUserId}`);
+  console.log(`[firestoreService][AdminSDK][${functionName}] Order: ${orderId}, NewStatus: ${newStatus}, Reason: ${cancellationReason}, Desc: ${cancellationDescription}`);
 
   const orderRef = adminDb!.collection('orders').doc(orderId);
   const usersColRef = adminDb!.collection('users');
-  const productsColRef = adminDb!.collection('products');
 
   try {
     await adminDb!.runTransaction(async (transaction) => {
       const orderDoc = await transaction.get(orderRef);
-      if (!orderDoc.exists) throw new Error(`Order ${orderId} not found.`);
+      if (!orderDoc.exists) {
+        throw new Error(`Order ${orderId} not found.`);
+      }
       const orderData = orderDoc.data() as Order;
 
       let userDocForUpdate: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData> | null = null;
-      let productDocsForReversal: Array<{
-          snap: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>; 
-          item: OrderItem;
-          productRef: FirebaseFirestore.DocumentReference;
-      }> = [];
-
-      if (newStatus === "Cancelled") {
-        if (cancellationReason === "Cancelled by Customer") {
-          if (!callingUserId) throw new Error("Calling user ID is required for customer cancellation.");
-          if (orderData.userId !== callingUserId) throw new Error("User is not authorized to cancel this order.");
-          if (orderData.status !== "Pending Confirmation") throw new Error("Order can no longer be cancelled by customer as it's past 'Pending Confirmation'.");
-        }
-
-        const productReadPromises = orderData.items.map(async (item) => {
-          if (!item.productId || typeof item.productId !== 'string' || item.productId.trim() === '') {
-             console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: Invalid productId in order items. Product: ${item.productName}, ID: '${item.productId}'`);
-             throw new Error(`Invalid product ID ('${item.productId}') for item '${item.productName}' in order ${orderId}.`);
-          }
-          const productRef = productsColRef.doc(item.productId);
-          const snap = await transaction.get(productRef); 
-           if (!snap) { 
-            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Error during pre-read: transaction.get(productRef) returned falsy for productId: ${item.productId}`);
-            throw new Error(`Failed to read product snapshot for ${item.productId} in order ${orderId}.`);
-          }
-          return { snap, item, productRef }; 
-        });
-        productDocsForReversal = await Promise.all(productReadPromises);
-
-        if (cancellationReason === "Customer No-Show" && orderData.userId) {
-          const userRef = usersColRef.doc(orderData.userId);
-          userDocForUpdate = await transaction.get(userRef);
-        }
-      } else if (newStatus === "Completed") {
-        if (orderData.userId) {
-            const userRef = usersColRef.doc(orderData.userId);
-            userDocForUpdate = await transaction.get(userRef);
-        }
+      if (orderData.userId) {
+        userDocForUpdate = await transaction.get(usersColRef.doc(orderData.userId));
       }
 
       const orderUpdates: Partial<Order> = { status: newStatus };
@@ -624,154 +476,33 @@ export async function updateOrderStatus(
           const pointsEarnedOnOrder = orderData.pointsEarned || 0;
           const pointsRedeemedOnOrder = orderData.pointsRedeemed || 0;
           const finalUserPoints = currentPoints + pointsEarnedOnOrder - pointsRedeemedOnOrder;
-
+          
           transaction.update(usersColRef.doc(orderData.userId), { points: Math.max(0, finalUserPoints) });
-          console.log(`[firestoreService][AdminSDK][${functionName}] Points finalized for user ${orderData.userId}. Earned: ${pointsEarnedOnOrder}, Redeemed: ${pointsRedeemedOnOrder}, New Balance: ${Math.max(0, finalUserPoints)}.`);
-        } else if (orderData.userId) {
-          console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found (or userDocForUpdate was null/not existent) for points update on order ${orderId} completion.`);
         }
       } else if (newStatus === "Cancelled") {
         orderUpdates.cancellationReason = cancellationReason;
         orderUpdates.cancellationDescription = cancellationDescription || "";
 
-        for (const productInfo of productDocsForReversal) {
-          if (!productInfo || !productInfo.snap) { 
-            console.error(`[firestoreService][AdminSDK][${functionName}] Transaction Write Error: productInfo or productInfo.snap is undefined in productDocsForReversal. Item:`, productInfo?.item?.productName);
-            throw new Error(`Critical error processing stock reversal: snap missing for product ${productInfo?.item?.productName} in order ${orderId}.`);
-          }
-          const { snap: productDocSnap, item, productRef: productRefToUpdate } = productInfo; 
-
-          if (productDocSnap.exists) { 
-            const product = productDocSnap.data() as Product;
-            let storeAvailabilityToUpdate = product.availability.find(avail => avail.storeId === orderData.storeId);
-            if (storeAvailabilityToUpdate) {
-              if (product.category === 'Flower') {
-                if (item.selectedWeight) {
-                  const revertedGrams = flowerWeightToGrams(item.selectedWeight) * item.quantity;
-                  storeAvailabilityToUpdate = { ...storeAvailabilityToUpdate, totalStockInGrams: (storeAvailabilityToUpdate.totalStockInGrams || 0) + revertedGrams };
-                }
-              } else {
-                storeAvailabilityToUpdate = { ...storeAvailabilityToUpdate, stock: (storeAvailabilityToUpdate.stock || 0) + item.quantity };
-              }
-              const newAvailabilityArray = product.availability.map(avail =>
-                avail.storeId === orderData.storeId ? storeAvailabilityToUpdate : avail
-              );
-              transaction.update(productRefToUpdate, { availability: newAvailabilityArray });
-            }
-          } else {
-            console.warn(`[firestoreService][AdminSDK][${functionName}] Product ${item.productId} not found during stock revert for cancelled order ${orderId}.`);
-          }
-        }
-
         if (cancellationReason === "Customer No-Show" && orderData.userId && userDocForUpdate && userDocForUpdate.exists) {
-          const userData = userDocForUpdate.data() as User;
-          const currentStrikes = userData.noShowStrikes || 0;
-          const newStrikes = currentStrikes + 1;
-          const userUpdatesForStrike: Partial<User> = { noShowStrikes: newStrikes };
-          if (newStrikes >= 3 && !userData.isBanned) {
-            userUpdatesForStrike.isBanned = true;
-          }
-          transaction.update(usersColRef.doc(orderData.userId), userUpdatesForStrike);
-          console.log(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} strike count updated to ${newStrikes}. Banned status: ${userUpdatesForStrike.isBanned || userData.isBanned || false}. Reason: ${cancellationReason}`);
-        } else if (cancellationReason === "Customer No-Show" && orderData.userId) {
-             console.warn(`[firestoreService][AdminSDK][${functionName}] User ${orderData.userId} not found (or userDocForUpdate was null/not existent) for strike update on order ${orderId} cancellation.`);
+            const userData = userDocForUpdate.data() as User;
+            const currentStrikes = userData.noShowStrikes || 0;
+            const newStrikes = currentStrikes + 1;
+            const userUpdatesForStrike: Partial<User> = { noShowStrikes: newStrikes };
+            if (newStrikes >= 3) {
+              userUpdatesForStrike.isBanned = true;
+            }
+            transaction.update(usersColRef.doc(orderData.userId), userUpdatesForStrike);
         }
+
+        // TODO: Revert stock logic could be added here if needed
       }
-      
+
       transaction.update(orderRef, orderUpdates);
     });
-
-    if (newStatus === "Cancelled" && cancellationReason === "Customer No-Show") {
-        const orderSnapshot = await orderRef.get();
-        if (orderSnapshot.exists) {
-            const updatedOrderData = orderSnapshot.data() as Order;
-            if (updatedOrderData.userId) {
-                 const userSnapshot = await usersColRef.doc(updatedOrderData.userId).get();
-                 if (userSnapshot.exists) {
-                     const userData = userSnapshot.data() as User;
-                     if (userData.isBanned && userData.noShowStrikes >=3 && firebaseAdminAuthModule) {
-                        console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to revoke refresh tokens for user ${updatedOrderData.userId} post-transaction.`);
-                        try {
-                            await firebaseAdminAuthModule.revokeRefreshTokens(updatedOrderData.userId);
-                            console.log(`[firestoreService][AdminSDK][${functionName}] Successfully revoked refresh tokens for banned user ${updatedOrderData.userId}.`);
-                        } catch (err) {
-                            console.error(`[firestoreService][AdminSDK][${functionName}] Failed to revoke refresh tokens for banned user ${updatedOrderData.userId}:`, err);
-                        }
-                     }
-                 }
-            }
-        }
-    }
-    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus} and related actions (if any) processed.`);
+    console.log(`[firestoreService][AdminSDK][${functionName}] Order ${orderId} status updated to ${newStatus} and related actions processed.`);
   } catch (error: any) {
-     console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}. Original error:`, error);
-     console.error(`Original error message: ${error.message}`);
-     console.error(`Original error stack: ${error.stack}`);
-     throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
-  }
-}
-
-export async function updateProductStockForStoreByManager(
-  productId: string,
-  storeId: string,
-  newStockData: { stock?: number; totalStockInGrams?: number }, 
-  callingUserId: string 
-): Promise<void> {
-  const functionName = 'updateProductStockForStoreByManager (Transactional)';
-  ensureAdminDbInitialized(functionName);
-  console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
-  console.log(`[firestoreService][AdminSDK][${functionName}] Product: ${productId}, Store: ${storeId}, New Stock: ${JSON.stringify(newStockData)}, Caller: ${callingUserId}`);
-
-  const callingUserRef = adminDb!.collection('users').doc(callingUserId);
-  const productRef = adminDb!.collection('products').doc(productId);
-
-  try {
-    await adminDb!.runTransaction(async (transaction) => {
-      const callingUserDoc = await transaction.get(callingUserRef);
-      if (!callingUserDoc.exists) throw new Error("Calling manager user does not exist.");
-      const callingUserData = callingUserDoc.data() as User;
-
-      if (callingUserData.storeRole !== 'Manager' || callingUserData.assignedStoreId !== storeId) {
-        throw new Error("Permission denied. Caller is not a manager of the target store.");
-      }
-
-      const productDoc = await transaction.get(productRef);
-      if (!productDoc.exists) throw new Error(`Product with ID ${productId} not found.`);
-      const productData = productDoc.data() as Product;
-
-      const currentAvailability = productData.availability.find(avail => avail.storeId === storeId);
-      if (!currentAvailability) {
-        throw new Error(`Product ${productId} is not configured for store ${storeId}.`);
-      }
-
-      const updatedStoreAvailability: StoreAvailability = { ...currentAvailability };
-
-      if (productData.category === 'Flower') {
-        if (newStockData.totalStockInGrams === undefined || newStockData.totalStockInGrams < 0) {
-          throw new Error("Invalid 'totalStockInGrams' provided for Flower product.");
-        }
-        updatedStoreAvailability.totalStockInGrams = newStockData.totalStockInGrams;
-        delete updatedStoreAvailability.price;
-        delete updatedStoreAvailability.stock;
-      } else { 
-        if (newStockData.stock === undefined || newStockData.stock < 0) {
-          throw new Error("Invalid 'stock' provided for non-Flower product.");
-        }
-        updatedStoreAvailability.stock = newStockData.stock;
-        delete updatedStoreAvailability.weightOptions;
-        delete updatedStoreAvailability.totalStockInGrams;
-      }
-
-      const newFullAvailabilityArray = productData.availability.map(avail =>
-        avail.storeId === storeId ? updatedStoreAvailability : avail
-      );
-
-      transaction.update(productRef, { availability: newFullAvailabilityArray });
-    });
-    console.log(`[firestoreService][AdminSDK][${functionName}] Stock for product ${productId} in store ${storeId} updated successfully by manager ${callingUserId}.`);
-  } catch (error: any) {
-    console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for stock update:`, error.message, error.stack);
-    throw new Error(error.message || `Failed to update stock for product ${productId} due to an unexpected issue.`);
+    console.error(`[firestoreService][AdminSDK][${functionName}] Transaction failed for order ${orderId} to status ${newStatus}:`, error);
+    throw new Error(error.message || `Failed to update order ${orderId} status due to an unexpected issue.`);
   }
 }
 

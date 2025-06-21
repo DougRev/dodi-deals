@@ -283,7 +283,7 @@ export interface User {
   isBanned: boolean;
   createdAt: string;
   favoriteProductIds?: string[];
-  stripeCustomerId?: string; // Added for Stripe
+  stripeCustomerId?: string;
 }
 
 export interface UserPaymentMethod {
@@ -384,5 +384,3 @@ export interface GlobalSalesReport {
   topPerformingStores: SalesReportDataItem[]; // id = storeId, name = storeName, revenueGenerated = store's total revenue
   reportGeneratedAt: string;
 }
-
-    
