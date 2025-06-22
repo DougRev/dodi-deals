@@ -1,7 +1,7 @@
 
 'use server';
 
-import { adminDb, adminInitializationError } from '@/lib/firebaseAdmin';
+import { adminDb } from '@/lib/firebaseAdmin';
 import type { Product, User, Order, StoreFormData, StoreRole, StoreAvailability, OrderItem, OrderStatus, FlowerWeight, CancellationReason, ProductFormData, ProductCategory, StoreSalesReport, SalesReportDataItem, GlobalSalesReport, Store } from '@/lib/types';
 import { initialStores as initialStoresSeedData } from '@/data/stores';
 import { initialProducts as initialProductsSeedData } from '@/data/products';
@@ -11,35 +11,16 @@ import { flowerWeightToGrams, productCategories } from '@/lib/types';
 import type { FirebaseFirestore } from 'firebase-admin/firestore';
 
 
-function ensureAdminDbInitialized(callingFunctionName: string) {
-  if (adminInitializationError) {
-    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK failed to initialize: ${adminInitializationError.message}. Check server startup logs for errors from 'firebaseAdmin.ts'.`;
-    console.error(errorMessage);
-    throw new Error(errorMessage);
-  }
-  if (!adminDb) {
-    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK (adminDb) is null or undefined after initialization attempt. This indicates a critical failure in 'firebaseAdmin.ts'. Check server logs.`;
-    console.error(errorMessage);
-    throw new Error(errorMessage);
-  }
-  if (typeof adminDb.collection !== 'function' || typeof adminDb.doc !== 'function') {
-    const errorMessage = `[firestoreService][AdminSDK][${callingFunctionName}] Firebase Admin SDK (adminDb) is defined but appears to be an invalid Firestore instance (missing essential methods like .collection() or .doc()). This suggests a problem with the 'firebase-admin' module or the admin app instance. Check server logs for 'firebaseAdmin.ts' output. AdminDb type: ${typeof adminDb}, AdminDb value: ${String(adminDb).substring(0,100)}`;
-    console.error(errorMessage);
-    throw new Error(errorMessage);
-  }
-}
-
 export async function seedInitialData() {
   const functionName = 'seedInitialData';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Seeding initial data if collections are empty.`);
 
   try {
-    const storesCollectionRef = adminDb!.collection('stores');
+    const storesCollectionRef = adminDb.collection('stores');
     const storesSnapshot = await storesCollectionRef.get();
     if (storesSnapshot.empty) {
-      const batch = adminDb!.batch();
+      const batch = adminDb.batch();
       initialStoresSeedData.forEach(store => {
         const docRef = storesCollectionRef.doc(store.id);
         batch.set(docRef, store);
@@ -50,10 +31,10 @@ export async function seedInitialData() {
       console.log(`[firestoreService][AdminSDK][${functionName}] Stores collection is not empty. Skipping seed.`);
     }
 
-    const productsCollectionRef = adminDb!.collection('products');
+    const productsCollectionRef = adminDb.collection('products');
     const productsSnapshot = await productsCollectionRef.get();
     if (productsSnapshot.empty) {
-      const batch = adminDb!.batch();
+      const batch = adminDb.batch();
       initialProductsSeedData.forEach(product => {
         const docRef = productsCollectionRef.doc(product.id);
         batch.set(docRef, product);
@@ -72,11 +53,10 @@ export async function seedInitialData() {
 
 export async function addStore(storeData: StoreFormData): Promise<string> {
   const functionName = 'addStore';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to add store:`, storeData.name);
 
-  const storesColRef = adminDb!.collection('stores');
+  const storesColRef = adminDb.collection('stores');
   const q = storesColRef.where("name", "==", storeData.name);
 
   try {
@@ -98,11 +78,10 @@ export async function addStore(storeData: StoreFormData): Promise<string> {
 
 export async function updateStore(storeId: string, storeData: Partial<StoreFormData>): Promise<void> {
   const functionName = 'updateStore';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called for ID: ${storeId} with data:`, JSON.stringify(storeData));
 
-  const storeRef = adminDb!.collection('stores').doc(storeId);
+  const storeRef = adminDb.collection('stores').doc(storeId);
   try {
     await storeRef.update(storeData);
     console.log(`[firestoreService][AdminSDK][${functionName}] Store ${storeId} updated successfully.`);
@@ -114,11 +93,10 @@ export async function updateStore(storeId: string, storeData: Partial<StoreFormD
 
 export async function deleteStore(storeId: string): Promise<void> {
   const functionName = 'deleteStore';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called for ID: ${storeId}`);
 
-  const storeRef = adminDb!.collection('stores').doc(storeId);
+  const storeRef = adminDb.collection('stores').doc(storeId);
   try {
     await storeRef.delete();
     console.log(`[firestoreService][AdminSDK][${functionName}] Store ${storeId} deleted successfully.`);
@@ -130,11 +108,10 @@ export async function deleteStore(storeId: string): Promise<void> {
 
 export async function addProduct(productData: Omit<Product, 'id'>): Promise<string> {
   const functionName = 'addProduct';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called with data:`, productData);
 
-  const productsColRef = adminDb!.collection('products');
+  const productsColRef = adminDb.collection('products');
   try {
     const docRef = await productsColRef.add(productData);
     return docRef.id;
@@ -146,11 +123,10 @@ export async function addProduct(productData: Omit<Product, 'id'>): Promise<stri
 
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<void> {
   const functionName = 'updateProduct';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called with id and data:`, productId, productData);
 
-  const productRef = adminDb!.collection('products').doc(productId);
+  const productRef = adminDb.collection('products').doc(productId);
   try {
     await productRef.update(productData);
   } catch (error) {
@@ -161,11 +137,10 @@ export async function updateProduct(productId: string, productData: Partial<Prod
 
 export async function deleteProduct(productId: string): Promise<void> {
   const functionName = 'deleteProduct';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called with id:`, productId);
 
-  const productRef = adminDb!.collection('products').doc(productId);
+  const productRef = adminDb.collection('products').doc(productId);
   try {
     await productRef.delete();
   } catch (error) {
@@ -181,15 +156,14 @@ export async function updateProductStockForStoreByManager(
   managerId: string
 ): Promise<void> {
   const functionName = 'updateProductStockForStoreByManager (Transactional)';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Product: ${productId}, Store: ${storeId}, Update: ${JSON.stringify(stockUpdate)}, Manager: ${managerId}`);
 
-  const userRef = adminDb!.collection('users').doc(managerId);
-  const productRef = adminDb!.collection('products').doc(productId);
+  const userRef = adminDb.collection('users').doc(managerId);
+  const productRef = adminDb.collection('products').doc(productId);
 
   try {
-    await adminDb!.runTransaction(async (transaction) => {
+    await adminDb.runTransaction(async (transaction) => {
       const managerDoc = await transaction.get(userRef);
       if (!managerDoc.exists || managerDoc.data()?.storeRole !== 'Manager' || managerDoc.data()?.assignedStoreId !== storeId) {
         throw new Error('User is not an authorized manager for this store.');
@@ -229,17 +203,16 @@ export async function addProductByManager(
   managerId: string
 ): Promise<string> {
   const functionName = 'addProductByManager';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Manager ${managerId} adding product: ${productCoreData.name}`);
 
-  const userRef = adminDb!.collection('users').doc(managerId);
+  const userRef = adminDb.collection('users').doc(managerId);
   const userDoc = await userRef.get();
   if (!userDoc.exists || userDoc.data()?.storeRole !== 'Manager' || userDoc.data()?.assignedStoreId !== availabilityData.storeId) {
     throw new Error('User is not an authorized manager for this store.');
   }
 
-  const productsColRef = adminDb!.collection('products');
+  const productsColRef = adminDb.collection('products');
   
   const existingProductQuery = await productsColRef
     .where('name', '==', productCoreData.name)
@@ -280,10 +253,9 @@ export async function addProductByManager(
 
 export async function getAllUsers(): Promise<User[]> {
   const functionName = 'getAllUsers';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
 
-  const usersColRef = adminDb!.collection('users');
+  const usersColRef = adminDb.collection('users');
   try {
     const snapshot = await usersColRef.get();
     return snapshot.docs.map(docSnap => {
@@ -313,11 +285,10 @@ export async function updateUserConfiguration(
   }
 ): Promise<void> {
   const functionName = 'updateUserConfiguration';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Target User: ${targetUserId}, Updates: ${JSON.stringify(updates)}`);
 
-  const targetUserRef = adminDb!.collection('users').doc(targetUserId);
+  const targetUserRef = adminDb.collection('users').doc(targetUserId);
   const updatePayload: { [key: string]: any } = {};
 
   if (typeof updates.isAdmin === 'boolean') {
@@ -357,11 +328,10 @@ export async function updateUserConfiguration(
 
 export async function updateUserNameInFirestore(userId: string, newName: string): Promise<void> {
   const functionName = 'updateUserNameInFirestore';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Updating name for userId: ${userId} to: ${newName}`);
 
-  const userRef = adminDb!.collection('users').doc(userId);
+  const userRef = adminDb.collection('users').doc(userId);
   try {
     await userRef.update({ name: newName });
     console.log(`[firestoreService][AdminSDK][${functionName}] User name updated successfully for ${userId}.`);
@@ -373,11 +343,10 @@ export async function updateUserNameInFirestore(userId: string, newName: string)
 
 export async function updateUserAvatar(userId: string, avatarUrl: string): Promise<void> {
   const functionName = 'updateUserAvatar';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Called for userId:`, userId, 'with avatarUrl:', avatarUrl);
 
-  const userRef = adminDb!.collection('users').doc(userId);
+  const userRef = adminDb.collection('users').doc(userId);
   try {
     await userRef.update({ avatarUrl: avatarUrl });
     console.log(`[firestoreService][AdminSDK][${functionName}] User avatar updated successfully for ${userId}.`);
@@ -389,11 +358,10 @@ export async function updateUserAvatar(userId: string, avatarUrl: string): Promi
 
 export async function updateUserFavorites(userId: string, favoriteProductIds: string[]): Promise<void> {
   const functionName = 'updateUserFavorites';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Updating favorites for userId: ${userId} to:`, favoriteProductIds);
 
-  const userRef = adminDb!.collection('users').doc(userId);
+  const userRef = adminDb.collection('users').doc(userId);
   try {
     await userRef.update({ favoriteProductIds: favoriteProductIds });
     console.log(`[firestoreService][AdminSDK][${functionName}] User favorites updated successfully for ${userId}.`);
@@ -408,7 +376,6 @@ export async function createOrderInFirestore(
   orderData: Omit<Order, 'id' | 'orderDate' | 'status'> & { pointsEarned: number }
 ): Promise<{orderId: string }> {
   const functionName = 'createOrderInFirestore (Transactional)';
-  ensureAdminDbInitialized(functionName);
 
   const fullOrderData: Omit<Order, 'id'> = {
     ...orderData,
@@ -417,11 +384,11 @@ export async function createOrderInFirestore(
   };
   console.log(`[firestoreService][AdminSDK][${functionName}] Attempting to create order:`, JSON.stringify(fullOrderData));
 
-  const ordersColRef = adminDb!.collection('orders');
-  const productsColRef = adminDb!.collection('products');
+  const ordersColRef = adminDb.collection('orders');
+  const productsColRef = adminDb.collection('products');
 
   try {
-    const orderId = await adminDb!.runTransaction(async (transaction) => {
+    const orderId = await adminDb.runTransaction(async (transaction) => {
       const productUpdates: { ref: FirebaseFirestore.DocumentReference; newAvailability: StoreAvailability[] }[] = [];
 
       for (const item of fullOrderData.items) {
@@ -490,11 +457,10 @@ export async function createOrderInFirestore(
 
 export async function getUserOrders(userId: string): Promise<Order[]> {
   const functionName = 'getUserOrders';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Fetching orders for userId: ${userId}`);
 
-  const ordersColRef = adminDb!.collection('orders');
+  const ordersColRef = adminDb.collection('orders');
   try {
     const snapshot = await ordersColRef
       .where('userId', '==', userId)
@@ -519,11 +485,10 @@ export async function getUserOrders(userId: string): Promise<Order[]> {
 
 export async function getStoreOrdersByStatus(storeId: string, statuses: OrderStatus[]): Promise<Order[]> {
   const functionName = 'getStoreOrdersByStatus';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Fetching orders for storeId: ${storeId} with statuses: ${statuses.join(', ')}`);
 
-  const ordersColRef = adminDb!.collection('orders');
+  const ordersColRef = adminDb.collection('orders');
   try {
     const snapshot = await ordersColRef
       .where('storeId', '==', storeId)
@@ -551,15 +516,14 @@ export async function getStoreOrdersByStatus(storeId: string, statuses: OrderSta
 
 export async function updateOrderStatus(orderId: string, newStatus: OrderStatus, cancellationReason?: CancellationReason, cancellationDescription?: string): Promise<void> {
   const functionName = 'updateOrderStatus (Transactional)';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Order: ${orderId}, NewStatus: ${newStatus}, Reason: ${cancellationReason}, Desc: ${cancellationDescription}`);
 
-  const orderRef = adminDb!.collection('orders').doc(orderId);
-  const usersColRef = adminDb!.collection('users');
+  const orderRef = adminDb.collection('orders').doc(orderId);
+  const usersColRef = adminDb.collection('users');
 
   try {
-    await adminDb!.runTransaction(async (transaction) => {
+    await adminDb.runTransaction(async (transaction) => {
       const orderDoc = await transaction.get(orderRef);
       if (!orderDoc.exists) {
         throw new Error(`Order ${orderId} not found.`);
@@ -612,13 +576,12 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus,
 
 export async function getStoreSalesReport(storeId: string): Promise<StoreSalesReport> {
   const functionName = 'getStoreSalesReport';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Generating report for storeId: ${storeId}`);
 
   let storeName = 'Unknown Store';
   try {
-    const storeDoc = await adminDb!.collection('stores').doc(storeId).get();
+    const storeDoc = await adminDb.collection('stores').doc(storeId).get();
     if (storeDoc.exists) {
       storeName = (storeDoc.data() as StoreFormData).name;
     }
@@ -627,14 +590,14 @@ export async function getStoreSalesReport(storeId: string): Promise<StoreSalesRe
   }
 
 
-  const productsSnapshot = await adminDb!.collection('products').get();
+  const productsSnapshot = await adminDb.collection('products').get();
   const productDetailsMap = new Map<string, { name: string, category: ProductCategory }>();
   productsSnapshot.forEach(doc => {
     const data = doc.data() as Product;
     productDetailsMap.set(doc.id, { name: data.name, category: data.category });
   });
 
-  const ordersColRef = adminDb!.collection('orders');
+  const ordersColRef = adminDb.collection('orders');
   const completedOrdersSnapshot = await ordersColRef
     .where('storeId', '==', storeId)
     .where('status', '==', 'Completed')
@@ -701,25 +664,24 @@ export async function getStoreSalesReport(storeId: string): Promise<StoreSalesRe
 
 export async function getGlobalSalesReport(): Promise<GlobalSalesReport> {
   const functionName = 'getGlobalSalesReport';
-  ensureAdminDbInitialized(functionName);
   console.log(`--- Server Action (Admin SDK): ${functionName} ---`);
   console.log(`[firestoreService][AdminSDK][${functionName}] Generating global sales report.`);
 
-  const productsSnapshot = await adminDb!.collection('products').get();
+  const productsSnapshot = await adminDb.collection('products').get();
   const productDetailsMap = new Map<string, { name: string, category: ProductCategory }>();
   productsSnapshot.forEach(doc => {
     const data = doc.data() as Product;
     productDetailsMap.set(doc.id, { name: data.name, category: data.category });
   });
 
-  const storesSnapshot = await adminDb!.collection('stores').get();
+  const storesSnapshot = await adminDb.collection('stores').get();
   const storeDetailsMap = new Map<string, { name: string }>();
   storesSnapshot.forEach(doc => {
     const data = doc.data() as Store;
     storeDetailsMap.set(doc.id, { name: data.name });
   });
 
-  const ordersColRef = adminDb!.collection('orders');
+  const ordersColRef = adminDb.collection('orders');
   const completedOrdersSnapshot = await ordersColRef
     .where('status', '==', 'Completed')
     .get();
