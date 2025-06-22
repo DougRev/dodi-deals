@@ -177,51 +177,50 @@ export default function ManagerOrdersPage() {
   
   const renderOrderActions = (order: Order) => {
     if (updatingOrderId === order.id) {
-      return (
-        <div className="flex items-center justify-center h-10">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        </div>
-      );
+        return (
+            <div className="flex items-center justify-center h-10">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+        );
     }
 
-    switch (order.status) {
-      case "Pending Confirmation":
-      case "Preparing":
-      case "Ready for Pickup":
+    const canBeRefunded = order.status === 'Completed' && !!order.stripePaymentIntentId;
+    const isActivelyCancellable = ['Pending Confirmation', 'Preparing', 'Ready for Pickup'].includes(order.status);
+    const canBeAdvanced = getNextStatusOptions(order.status).length > 0;
+    const isArchived = ['Cancelled', 'Refunded'].includes(order.status);
+
+    if (canBeRefunded) {
+        return (
+            <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
+                <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
+            </Button>
+        );
+    }
+    
+    if (canBeAdvanced || isActivelyCancellable) {
         return (
           <div className="flex flex-col sm:flex-row gap-2">
-            {getNextStatusOptions(order.status).map(nextStatus => (
+            {canBeAdvanced && getNextStatusOptions(order.status).map(nextStatus => (
               <Button key={nextStatus} size="sm" variant="default" onClick={() => handleStatusChange(order.id, nextStatus)} className="flex-1">
-                {nextStatus === "Preparing" ? "Accept & Prepare" :
+                 {nextStatus === "Preparing" ? "Accept & Prepare" :
                   nextStatus === "Ready for Pickup" ? "Mark Ready" :
                   nextStatus === "Completed" ? "Mark Completed" :
                   `Set to ${nextStatus}`}
               </Button>
             ))}
-            <Button size="sm" variant="destructive" onClick={() => openCancelDialog(order)} className="flex-1">
+            {isActivelyCancellable && <Button size="sm" variant="destructive" onClick={() => openCancelDialog(order)} className="flex-1">
               Cancel Order
-            </Button>
+            </Button>}
           </div>
         );
-
-      case "Completed":
-        // Explicitly check for a non-empty string.
-        if (typeof order.stripePaymentIntentId === 'string' && order.stripePaymentIntentId.length > 0) {
-          return (
-            <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
-              <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
-            </Button>
-          );
-        }
-        return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-
-      case "Cancelled":
-      case "Refunded":
-        return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-
-      default:
-        return null;
     }
+
+    // This handles Completed (not-paid), Cancelled, and Refunded statuses
+    if (isArchived || order.status === 'Completed') {
+         return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
+    }
+    
+    return null;
   };
 
 
