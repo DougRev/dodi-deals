@@ -176,49 +176,50 @@ export default function ManagerOrdersPage() {
   
   const renderOrderActions = (order: Order) => {
     if (updatingOrderId === order.id) {
-        return (
-            <div className="flex items-center justify-center h-10">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
-        );
+      return (
+        <div className="flex items-center justify-center h-10">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      );
     }
-
+  
     switch (order.status) {
-        case "Pending Confirmation":
-        case "Preparing":
-        case "Ready for Pickup":
-            return (
-                <div className="flex flex-col sm:flex-row gap-2">
-                    {getNextStatusOptions(order.status).map(nextStatus => (
-                        <Button key={nextStatus} size="sm" variant="default" onClick={() => handleStatusChange(order.id, nextStatus)} className="flex-1">
-                            {nextStatus === "Preparing" ? "Accept & Prepare" :
-                             nextStatus === "Ready for Pickup" ? "Mark Ready" :
-                             nextStatus === "Completed" ? "Mark Completed" :
-                             `Set to ${nextStatus}`}
-                        </Button>
-                    ))}
-                    <Button size="sm" variant="destructive" onClick={() => openCancelDialog(order)} className="flex-1">
-                        Cancel Order
-                    </Button>
-                </div>
-            );
-
-        case "Completed":
-            if (order.stripePaymentIntentId) {
-                return (
-                    <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
-                        <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
-                    </Button>
-                );
-            }
-            return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-
-        case "Cancelled":
-        case "Refunded":
-            return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-
-        default:
-            return null;
+      case "Pending Confirmation":
+      case "Preparing":
+      case "Ready for Pickup":
+        return (
+          <div className="flex flex-col sm:flex-row gap-2">
+            {getNextStatusOptions(order.status).map(nextStatus => (
+              <Button key={nextStatus} size="sm" variant="default" onClick={() => handleStatusChange(order.id, nextStatus)} className="flex-1">
+                {nextStatus === "Preparing" ? "Accept & Prepare" :
+                  nextStatus === "Ready for Pickup" ? "Mark Ready" :
+                  nextStatus === "Completed" ? "Mark Completed" :
+                  `Set to ${nextStatus}`}
+              </Button>
+            ))}
+            <Button size="sm" variant="destructive" onClick={() => openCancelDialog(order)} className="flex-1">
+              Cancel Order
+            </Button>
+          </div>
+        );
+  
+      case "Completed":
+        if (order.stripePaymentIntentId) { // Check if it was paid via Stripe
+          return (
+            <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
+              <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
+            </Button>
+          );
+        }
+        // If it's complete but not paid via Stripe, then no actions.
+        return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
+  
+      case "Cancelled":
+      case "Refunded":
+        return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
+  
+      default:
+        return null;
     }
   };
 
