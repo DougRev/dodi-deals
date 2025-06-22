@@ -18,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2, Package, AlertTriangle, CheckCircle, Hourglass, ShoppingBasket, ListOrdered, UserX, FileText, Edit2, RotateCcw } from 'lucide-react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
+import { Separator } from '@/components/ui/separator';
 
 
 // Updated status groupings
@@ -182,7 +183,7 @@ export default function ManagerOrdersPage() {
         </div>
       );
     }
-  
+
     switch (order.status) {
       case "Pending Confirmation":
       case "Preparing":
@@ -202,22 +203,22 @@ export default function ManagerOrdersPage() {
             </Button>
           </div>
         );
-  
+
       case "Completed":
-        if (order.stripePaymentIntentId) { // Check if it was paid via Stripe
+        // Explicitly check for a non-empty string.
+        if (typeof order.stripePaymentIntentId === 'string' && order.stripePaymentIntentId.length > 0) {
           return (
             <Button size="sm" variant="destructive" onClick={() => openRefundDialog(order)} className="flex-1">
               <RotateCcw className="mr-2 h-4 w-4" /> Refund Order
             </Button>
           );
         }
-        // If it's complete but not paid via Stripe, then no actions.
         return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-  
+
       case "Cancelled":
       case "Refunded":
         return <p className="text-sm text-muted-foreground italic mt-2">No further actions available for this order status.</p>;
-  
+
       default:
         return null;
     }
@@ -280,8 +281,8 @@ export default function ManagerOrdersPage() {
               </AccordionTrigger>
               <AccordionContent className="p-4 border-t border-border bg-background rounded-b-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="text-md font-semibold mb-2 text-primary">Items ({order.items.length})</h4>
+                  <div className="space-y-2">
+                    <h4 className="text-md font-semibold text-primary">Items ({order.items.length})</h4>
                     <ul className="space-y-1 text-sm max-h-40 overflow-y-auto">
                       {order.items.map((item, index) => (
                         <li key={`${order.id}-item-${index}`} className="flex justify-between p-1.5 bg-muted/50 rounded">
@@ -290,22 +291,35 @@ export default function ManagerOrdersPage() {
                         </li>
                       ))}
                     </ul>
-                     <div className="mt-2 text-xs text-muted-foreground">
-                        Subtotal: ${order.subtotal.toFixed(2)}
-                        {order.discountApplied && order.discountApplied > 0 && (
-                            <span> | Discount: -${order.discountApplied.toFixed(2)} ({order.pointsRedeemed} pts)</span>
-                        )}
-                    </div>
+                     <Separator />
+                     <div className="text-sm space-y-1">
+                        <div className="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span>${order.subtotal.toFixed(2)}</span>
+                        </div>
+                         {order.discountApplied && order.discountApplied > 0 && (
+                            <div className="flex justify-between text-green-600">
+                                <span>Discount:</span>
+                                <span>-${order.discountApplied.toFixed(2)}</span>
+                            </div>
+                         )}
+                         <div className="flex justify-between font-bold">
+                            <span>Total Paid:</span>
+                            <span>${order.finalTotal.toFixed(2)}</span>
+                        </div>
+                     </div>
                      {order.pointsEarned && order.pointsEarned > 0 && order.status === "Completed" && (
-                        <p className="text-xs text-green-600">Points Earned: {order.pointsEarned}</p>
+                        <p className="text-xs text-green-600 text-right">Points Earned: {order.pointsEarned}</p>
                     )}
                   </div>
-                  <div>
-                    <h4 className="text-md font-semibold mb-2 text-primary">Actions</h4>
+                  <div className="space-y-3">
+                    <h4 className="text-md font-semibold text-primary">Actions</h4>
                     {renderOrderActions(order)}
-                    <p className="text-xs text-muted-foreground mt-3">
-                        Pickup Instructions: {order.pickupInstructions}
-                    </p>
+                    <div className="text-xs text-muted-foreground p-2 bg-muted/50 rounded-md">
+                        <p className="font-medium">Pickup Instructions:</p>
+                        <p>{order.pickupInstructions}</p>
+                    </div>
+
                     {order.status === "Cancelled" && order.cancellationReason && (
                       <div className="mt-3 p-2 bg-destructive/10 rounded-md">
                         <p className="text-xs font-semibold text-destructive flex items-center">
